@@ -320,6 +320,7 @@ enum {
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
   EM_LOONGARCH = 258,     // LoongArch
+  EM_PS2VPU = 9483,
 };
 
 // Object file classes.
@@ -690,6 +691,12 @@ enum {
 // ELF Relocation type for Sparc.
 enum {
 #include "ELFRelocs/Sparc.def"
+};
+
+
+// ELF Relocation type for PS2VPU.
+enum {
+#include "ELFRelocs/PS2VPU.def"
 };
 
 // AMDGPU specific e_flags.

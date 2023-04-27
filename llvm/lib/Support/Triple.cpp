@@ -82,6 +82,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case x86:            return "i386";
   case x86_64:         return "x86_64";
   case xcore:          return "xcore";
+  case ps2vpu:         return "ps2vpu";
   }
 
   llvm_unreachable("Invalid ArchType!");
@@ -511,6 +512,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("loongarch32", Triple::loongarch32)
     .Case("loongarch64", Triple::loongarch64)
     .Case("dxil", Triple::dxil)
+    .Case("ps2vpu", Triple::ps2vpu)
     .Default(Triple::UnknownArch);
 
   // Some architectures require special parsing logic just to compute the
@@ -838,6 +840,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::thumbeb:
   case Triple::ve:
   case Triple::xcore:
+  case Triple::ps2vpu:
     return Triple::ELF;
 
   case Triple::ppc64:
@@ -1382,6 +1385,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
 
   case llvm::Triple::avr:
   case llvm::Triple::msp430:
+  case llvm::Triple::ps2vpu:
     return 16;
 
   case llvm::Triple::aarch64_32:

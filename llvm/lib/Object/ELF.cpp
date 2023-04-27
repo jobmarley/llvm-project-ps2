@@ -173,6 +173,13 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       break;
     }
     break;
+  case ELF::EM_PS2VPU:
+    switch (Type) {
+#include "llvm/BinaryFormat/ELFRelocs/PS2VPU.def"
+    default:
+      break;
+    }
+    break;
   default:
     break;
   }
