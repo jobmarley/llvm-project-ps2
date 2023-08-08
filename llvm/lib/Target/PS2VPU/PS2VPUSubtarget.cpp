@@ -62,7 +62,7 @@ int PS2VPUSubtarget::getAdjustedFrameSize(int frameSize) const {
   //  // is required by the ABI.
   //  frameSize = alignTo(frameSize, 8);
   //}
-  frameSize = alignTo(frameSize, 8);
+  frameSize = alignTo(frameSize, 16);
   return frameSize;
 }
 

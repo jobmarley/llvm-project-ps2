@@ -55,8 +55,7 @@ private:
 
   // Emits code for adjusting SP in function prologue/epilogue.
   void emitSPAdjustment(MachineFunction &MF, MachineBasicBlock &MBB,
-                        MachineBasicBlock::iterator MBBI, int NumBytes,
-                        unsigned ADDrr, unsigned ADDri) const;
+                        MachineBasicBlock::iterator MBBI, int NumBytes) const;
 };
 
 } // namespace llvm

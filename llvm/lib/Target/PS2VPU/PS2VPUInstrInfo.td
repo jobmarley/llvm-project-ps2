@@ -66,9 +66,26 @@ include "ps2vpuInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+def simm5  : PatLeaf<(imm), [{ return isInt<5>(N->getSExtValue()); }]>;
+
 def simm11  : PatLeaf<(imm), [{ return isInt<11>(N->getSExtValue()); }]>;
 
 def simm13  : PatLeaf<(imm), [{ return isInt<13>(N->getSExtValue()); }]>;
+
+// negative immediate 16
+def nimm16  : PatLeaf<(imm), [{ return isInt<16>(N->getSExtValue()) && N->getSExtValue() < 0; }]>;
+// positive immediate 16
+def pimm16  : PatLeaf<(imm), [{ return isInt<16>(N->getSExtValue()) && N->getSExtValue() >= 0; }]>;
+
+def IMMNEG : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant((unsigned)-N->getSExtValue(), SDLoc(N),
+                                   MVT::i16);
+}]>;
+
+//def VECTORFIELDADDR : PatLeaf<(imm), [{
+//  return CurDAG->getTargetConstant(N->getSExtValue(), SDLoc(N),
+//                                   MVT::i16);
+//}]>;
 
 def LO10 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant((unsigned)N->getZExtValue() & 1023, SDLoc(N),
@@ -198,6 +215,16 @@ def simm13Op : Operand<i32> {
   let EncoderMethod = "getSImm13OpValue";
 }
 
+//def PS2VPUVectorFieldAsmOperand : AsmOperandClass {
+//  let Name = "VectorField";
+//  let ParserMethod = "parseVectorField";
+//}
+//
+//def VectorField : Operand<i32> {
+//  let PrintMethod = "printVectorField";
+//  let ParserMatchClass = PS2VPUVectorFieldAsmOperand;
+//}
+
 // Operand for printing out a condition code.
 let PrintMethod = "printCCOperand" in
   def CCOp : Operand<i32>;
@@ -265,7 +292,7 @@ def tailcall      : SDNode<"SPISD::TAIL_CALL", SDT_SPCall,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
 
-def SDT_SPRet     : SDTypeProfile<0, 1, [SDTCisVT<0, i32>]>;
+def SDT_SPRet     : SDTypeProfile<0, 1, [SDTCisVT<0, i16>]>;
 def retflag       : SDNode<"SPISD::RET_FLAG", SDT_SPRet,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
@@ -446,8 +473,41 @@ def CPCC_012 : CPCC_VAL<47>;  // 0 or 1 or 2
 // Instructions
 //===----------------------------------------------------------------------===//
 
-def Br : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
-                    "b $imm11", []>;
+def Bi : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
+                    "B $imm11", []>;
+
+let isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in {
+  def Jr : Lower7InstPS2VPU<0b0100100, (outs), (ins IntRegs:$r),
+                    "JR $r", [(retflag i16:$r)]>;
+}
+
+//def ILWri : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins MEMri:$addr),
+//                    "ILW $dst, [$addr]", []>;
+//def ISWri : Lower7InstPS2VPU<0b0000101, (outs), (ins VectorField:$dest, IntRegs:$it, MEMri:$addr),
+//                    "ISW$dest $it, $addr", [(store IntRegs:$it, VECTORFIELDADDR (VectorField:$dest, ADDRri:$addr))]>;
+
+def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
+                    "IADD $id, $is, $it", []>;
+
+def IADDri : Lower5InstPS2VPU<0b110010, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm5),
+                    "IADDI $it, $is, $imm5", [(set IntRegs:$it, (add IntRegs:$is, i16:$imm5))]>;
+
+def IADDUri : Lower8InstPS2VPU<0b001000, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
+                    "IADDIU $it, $is, $imm15", [(set IntRegs:$it, (add IntRegs:$is, i16:$imm15))]>;
+
+
+def ISUBrr : Lower1InstPS2VPU<0b110001, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
+                    "IADD $id, $is, $it", []>;
+                    
+def ISUBUri : Lower8InstPS2VPU<0b001001, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
+                    "ISUBIU $it, $is, $imm15", []>;
+
+                    
+def IORrr : Lower1InstPS2VPU<0b110101, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
+                    "IOR $id, $is, $it", [(set IntRegs:$id, (or IntRegs:$is, IntRegs:$it))]>;
+
+//def ISWri : Lower7InstPS2VPU<0b0000101, (outs IntRegs:$dst), (ins IntRegs:$src, brtarget:$imm11),
+//                    "ILW $dst, $imm11 ( $src )", []>;
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
@@ -1733,18 +1793,26 @@ def Br : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
 ////===----------------------------------------------------------------------===//
 //// Non-Instruction Patterns
 ////===----------------------------------------------------------------------===//
-//
-//// Zero immediate.
-//def : Pat<(i32 0),
-//          (ORrr (i32 G0), (i32 G0))>;
-//// Small immediates.
-//def : Pat<(i32 simm13:$val),
-//          (ORri (i32 G0), imm:$val)>;
+
+// Zero immediate.
+def : Pat<(i16 0),
+          (IORrr (i16 VI0), (i16 VI0))>;
+
+// Small immediates.
+def : Pat<(i16 simm5:$val),
+          (IADDri (i16 VI0), (imm:$val))>;
+          
+def : Pat<(i16 pimm16:$val),
+          (IADDUri (i16 VI0), imm:$val)>;
+          
+def : Pat<(i16 nimm16:$val),
+          (ISUBUri (i16 VI0), (IMMNEG imm:$val))>;
+
 //// Arbitrary immediates.
 //def : Pat<(i32 imm:$val),
 //          (ORri (SETHIi (HI22 imm:$val)), (LO10 imm:$val))>;
-//
-//
+
+
 //// Global addresses, constant pool entries
 //let Predicates = [Is32Bit] in {
 //

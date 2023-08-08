@@ -85,6 +85,8 @@ class PS2VPUAsmParser : public MCTargetAsmParser {
 
   OperandMatchResultTy parseMembarTag(OperandVector &Operands);
 
+  OperandMatchResultTy parseVectorField(OperandVector &Operands);
+
   template <TailRelocKind Kind>
   OperandMatchResultTy parseTailRelocSym(OperandVector &Operands);
 
@@ -978,6 +980,54 @@ OperandMatchResultTy PS2VPUAsmParser::parseMembarTag(OperandVector &Operands) {
     if (getLexer().getKind() == AsmToken::Pipe)
       Parser.Lex(); // Eat the '|'.
   }
+
+  EVal = MCConstantExpr::create(ImmVal, getContext());
+  SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+  Operands.push_back(PS2VPUOperand::CreateImm(EVal, S, E));
+  return MatchOperand_Success;
+}
+
+OperandMatchResultTy PS2VPUAsmParser::parseVectorField(OperandVector &Operands) {
+  SMLoc S = Parser.getTok().getLoc();
+  const MCExpr *EVal;
+  int64_t ImmVal = 0;
+
+  SMLoc TagStart = getLexer().getLoc();
+  Parser.Lex(); // Eat the '.'.
+  if (getLexer().getKind() != AsmToken::Dot) {
+    Error(TagStart, "unknown vector field");
+    return MatchOperand_ParseFail;
+  }
+
+  llvm::StringRef s = Parser.getTok().getString();
+  if (s.size() > 4) {
+    Error(TagStart, "unknown vector field");
+    return MatchOperand_ParseFail;
+  }
+  for (size_t i = 0; i < s.size(); ++i) {
+    char c = s[i];
+    int v = 0;
+    switch (c) {
+    case 'x':
+      v = 0;
+      break;
+    case 'y':
+      v = 1;
+      break;
+    case 'z':
+      v = 2;
+      break;
+    case 'w':
+      v = 3;
+      break;
+    default:
+      Error(TagStart, "unknown vector field");
+      return MatchOperand_ParseFail;
+    }
+    ImmVal |= ((v << 1) | 1) << i * 3;
+  }
+
+  Parser.Lex(); // Eat the identifier token.
 
   EVal = MCConstantExpr::create(ImmVal, getContext());
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);

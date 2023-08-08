@@ -67,36 +67,36 @@ public:
   ///// computeKnownBitsForTargetNode - Determine which of the bits specified
   ///// in Mask are known to be either zero or one and return them in the
   ///// KnownZero/KnownOne bitsets.
-  //void computeKnownBitsForTargetNode(const SDValue Op, KnownBits &Known,
-  //                                   const APInt &DemandedElts,
-  //                                   const SelectionDAG &DAG,
-  //                                   unsigned Depth = 0) const override;
+  void computeKnownBitsForTargetNode(const SDValue Op, KnownBits &Known,
+                                     const APInt &DemandedElts,
+                                     const SelectionDAG &DAG,
+                                     unsigned Depth = 0) const override;
 
-  //MachineBasicBlock *
-  //EmitInstrWithCustomInserter(MachineInstr &MI,
-  //                            MachineBasicBlock *MBB) const override;
+  MachineBasicBlock *
+  EmitInstrWithCustomInserter(MachineInstr &MI,
+                              MachineBasicBlock *MBB) const override;
 
-  //const char *getTargetNodeName(unsigned Opcode) const override;
+  const char *getTargetNodeName(unsigned Opcode) const override;
 
-  //ConstraintType getConstraintType(StringRef Constraint) const override;
-  //ConstraintWeight
-  //getSingleConstraintMatchWeight(AsmOperandInfo &info,
-  //                               const char *constraint) const override;
-  //void LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint,
-  //                                  std::vector<SDValue> &Ops,
-  //                                  SelectionDAG &DAG) const override;
+  /*ConstraintType getConstraintType(StringRef Constraint) const override;*/
+  /*ConstraintWeight
+  getSingleConstraintMatchWeight(AsmOperandInfo &info,
+                                 const char *constraint) const override;*/
+  /*void LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint,
+                                    std::vector<SDValue> &Ops,
+                                    SelectionDAG &DAG) const override;*/
 
-  //std::pair<unsigned, const TargetRegisterClass *>
-  //getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-  //                             StringRef Constraint, MVT VT) const override;
+  /*std::pair<unsigned, const TargetRegisterClass *>
+  getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
+                               StringRef Constraint, MVT VT) const override;*/
 
-  //bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
-  //MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
-  //  return MVT::i32;
-  //}
+  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
+  MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
+    return MVT::i32;
+  }
 
-  //Register getRegisterByName(const char *RegName, LLT VT,
-  //                           const MachineFunction &MF) const override;
+  Register getRegisterByName(const char *RegName, LLT VT,
+                             const MachineFunction &MF) const override;
 
   ///// If a physical register, this returns the register that receives the
   ///// exception address on entry to an EH pad.
@@ -105,20 +105,20 @@ public:
   //  return SP::I0;
   //}
 
-  ///// If a physical register, this returns the register that receives the
-  ///// exception typeid on entry to a landing pad.
+  /////// If a physical register, this returns the register that receives the
+  /////// exception typeid on entry to a landing pad.
   //Register
   //getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
   //  return SP::I1;
   //}
 
   ///// Override to support customized stack guard loading.
-  //bool useLoadStackGuardNode() const override;
-  //void insertSSPDeclarations(Module &M) const override;
+  /*bool useLoadStackGuardNode() const override;
+  void insertSSPDeclarations(Module &M) const override;*/
 
   ///// getSetCCResultType - Return the ISD::SETCC ValueType
-  //EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
-  //                       EVT VT) const override;
+  EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
+                         EVT VT) const override;
 
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
                                bool isVarArg,
@@ -136,10 +136,10 @@ public:
   //                                const SDLoc &dl, SelectionDAG &DAG,
   //                                SmallVectorImpl<SDValue> &InVals) const;
 
-  //SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
-  //                  SmallVectorImpl<SDValue> &InVals) const override;
-  //SDValue LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
-  //                     SmallVectorImpl<SDValue> &InVals) const;
+  SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
+                    SmallVectorImpl<SDValue> &InVals) const override;
+  SDValue LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
+                       SmallVectorImpl<SDValue> &InVals) const;
   //SDValue LowerCall_64(TargetLowering::CallLoweringInfo &CLI,
   //                     SmallVectorImpl<SDValue> &InVals) const;
 
@@ -151,10 +151,10 @@ public:
                          const SmallVectorImpl<ISD::OutputArg> &Outs,
                          const SmallVectorImpl<SDValue> &OutVals,
                          const SDLoc &DL, SelectionDAG &DAG) const;
-  SDValue LowerReturn_64(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
-                         const SmallVectorImpl<ISD::OutputArg> &Outs,
-                         const SmallVectorImpl<SDValue> &OutVals,
-                         const SDLoc &DL, SelectionDAG &DAG) const;
+  //SDValue LowerReturn_64(SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
+  //                       const SmallVectorImpl<ISD::OutputArg> &Outs,
+  //                       const SmallVectorImpl<SDValue> &OutVals,
+  //                       const SDLoc &DL, SelectionDAG &DAG) const;
 
   //SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   //SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -177,32 +177,32 @@ public:
 
   //SDValue PerformBITCASTCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
-  //SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
-  //                               SelectionDAG &DAG) const;
+  SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
+                                 SelectionDAG &DAG) const;
 
-  //SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
-  //bool IsEligibleForTailCallOptimization(CCState &CCInfo, CallLoweringInfo &CLI,
-  //                                       MachineFunction &MF) const;
+  bool IsEligibleForTailCallOptimization(CCState &CCInfo, CallLoweringInfo &CLI,
+                                         MachineFunction &MF) const;
 
-  //bool ShouldShrinkFPConstant(EVT VT) const override {
-  //  // Do not shrink FP constpool if VT == MVT::f128.
-  //  // (ldd, call _Q_fdtoq) is more expensive than two ldds.
-  //  return VT != MVT::f128;
-  //}
+  bool ShouldShrinkFPConstant(EVT VT) const override {
+    // Do not shrink FP constpool if VT == MVT::f128.
+    // (ldd, call _Q_fdtoq) is more expensive than two ldds.
+    return VT != MVT::f128;
+  }
 
-  //bool shouldInsertFencesForAtomic(const Instruction *I) const override {
-  //  // FIXME: We insert fences for each atomics and generate
-  //  // sub-optimal code for PSO/TSO. (Approximately nobody uses any
-  //  // mode but TSO, which makes this even more silly)
-  //  return true;
-  //}
+  bool shouldInsertFencesForAtomic(const Instruction *I) const override {
+    // FIXME: We insert fences for each atomics and generate
+    // sub-optimal code for PSO/TSO. (Approximately nobody uses any
+    // mode but TSO, which makes this even more silly)
+    return true;
+  }
 
-  //AtomicExpansionKind
-  //shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
+  AtomicExpansionKind
+  shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
-  //void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
-  //                        SelectionDAG &DAG) const override;
+  void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
+                          SelectionDAG &DAG) const override;
 
   //MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
   //                                  unsigned BROpcode) const;

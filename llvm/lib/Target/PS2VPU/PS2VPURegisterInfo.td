@@ -478,7 +478,7 @@ def P : PS2VPU_FP32Reg<135, "P">, DwarfRegNum<[151]>;
 // This register class should not be used to hold i64 values, use the I64Regs
 // register class for that. The i64 type is included here to allow i64 patterns
 // using the integer instructions.
-def IntRegs : RegisterClass<"PS2VPUNS", [i16], 16,
+def IntRegs : RegisterClass<"PS2VPUNS", [i16], 4,
                             (add (sequence "VI%u", 0, 15))>;
 
 // Should be in the same order as IntRegs.

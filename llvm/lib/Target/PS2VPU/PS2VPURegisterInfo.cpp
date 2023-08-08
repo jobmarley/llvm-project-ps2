@@ -21,9 +21,9 @@ using namespace llvm;
 static cl::opt<bool>
     ReserveAppRegisters("PS2VPU-reserve-app-registers", cl::Hidden,
                         cl::init(false),
-                        cl::desc("Reserve application registers (%g2-%g4)"));
+                        cl::desc("Reserve application registers (%VI2-%VI4)"));
 
-PS2VPURegisterInfo::PS2VPURegisterInfo() : PS2VPUGenRegisterInfo(/*SP::O7*/0) {}
+PS2VPURegisterInfo::PS2VPURegisterInfo() : PS2VPUGenRegisterInfo(PS2VPUNS::VI15) {}
 
 const MCPhysReg *
 PS2VPURegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
@@ -45,7 +45,8 @@ BitVector PS2VPURegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   const PS2VPUSubtarget &Subtarget = MF.getSubtarget<PS2VPUSubtarget>();
    // FIXME: G1 reserved for now for large imm generation by frame code.
-  Reserved.set(PS2VPUNS::VI1);
+  Reserved.set(PS2VPUNS::VI0);
+  Reserved.set(PS2VPUNS::VI6);
 
    // G1-G4 can be used in applications.
    if (ReserveAppRegisters) {
@@ -112,18 +113,18 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
   // Replace frame index with a frame pointer reference.
-  //if (Offset >= -4096 && Offset <= 4095) {
-  //  // If the offset is small enough to fit in the immediate field, directly
-  //  // encode it.
-  //  MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
-  //  MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
-  //  return;
-  //}
+  if (Offset >= -4096 && Offset <= 4095) {
+    // If the offset is small enough to fit in the immediate field, directly
+    // encode it.
+    MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
+    MI.getOperand(FIOperandNum + 1).ChangeToImmediate(Offset);
+    return;
+  }
 
-  //const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-  //// FIXME: it would be better to scavenge a register here instead of
-  //// reserving G1 all of the time.
+  // FIXME: it would be better to scavenge a register here instead of
+  // reserving G1 all of the time.
   //if (Offset >= 0) {
   //  // Emit nonnegaive immediates with sethi + or.
   //  // sethi %hi(Offset), %g1
@@ -142,11 +143,11 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   //  return;
   //}
 
-  // Emit Negative numbers with sethi + xor
-  // sethi %hix(Offset), %g1
-  // xor  %g1, %lox(offset), %g1
-  // add %g1, %fp, %g1
-  // Insert: G1 + 0 into the user.
+  //// Emit Negative numbers with sethi + xor
+  //// sethi %hix(Offset), %g1
+  //// xor  %g1, %lox(offset), %g1
+  //// add %g1, %fp, %g1
+  //// Insert: G1 + 0 into the user.
   //BuildMI(*MI.getParent(), II, dl, TII.get(SP::SETHIi), SP::G1)
   //    .addImm(HIX22(Offset));
   //BuildMI(*MI.getParent(), II, dl, TII.get(SP::XORri), SP::G1)
@@ -164,7 +165,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 void PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                             int SPAdj, unsigned FIOperandNum,
                                             RegScavenger *RS) const {
-  /*assert(SPAdj == 0 && "Unexpected");
+  assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
   DebugLoc dl = MI.getDebugLoc();
@@ -179,7 +180,7 @@ void PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
 
-  if (!Subtarget.isV9() || !Subtarget.hasHardQuad()) {
+  /*if (!Subtarget.isV9() || !Subtarget.hasHardQuad()) {
     if (MI.getOpcode() == SP::STQFri) {
       const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
       Register SrcReg = MI.getOperand(2).getReg();
@@ -208,9 +209,9 @@ void PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       MI.getOperand(0).setReg(DestOddReg);
       Offset += 8;
     }
-  }
+  }*/
 
-  replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);*/
+  replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
 }
 
 Register PS2VPURegisterInfo::getFrameRegister(const MachineFunction &MF) const {

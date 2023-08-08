@@ -47,6 +47,15 @@ class Lower1InstPS2VPU<bits<6> op2Val, dag outs, dag ins, string asmstr, list<da
              InstrItinClass itin = NoItinerary>
    : InstSP<outs, ins, asmstr, pattern, itin> {
   bits<6> op2 = op2Val;
+  bits<4> dest = 0;
+  bits<5> it = 0;
+  bits<5> is = 0;
+  bits<5> id = 0;
+  let lowerOP = 0b1000000;
+  let Inst{24-21} = dest;
+  let Inst{20-16} = it;
+  let Inst{15-11} = is;
+  let Inst{10-6} = id;
   let Inst{5-0} = op2Val;
 }
 
@@ -59,12 +68,46 @@ class Lower3InstPS2VPU<bits<11> op2Val, dag outs, dag ins, string asmstr, list<d
   let Inst{10-6} = op2{10-6};
 }
 
+class Lower5InstPS2VPU<bits<6> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : InstSP<outs, ins, asmstr, pattern, itin> {
+  bits<5> it = 0;
+  bits<5> is = 0;
+  let lowerOP = 0b1000000;
+  bits<5> imm5 = 0;
+  bits<6> op2 = op2Val;
+  let Inst{24-21} = 0;
+  let Inst{20-16} = it;
+  let Inst{15-11} = is;
+  let Inst{10-6} = imm5;
+  let Inst{5-0} = op2;
+}
+
 class Lower7InstPS2VPU<bits<7> lowerOpVal, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
    : InstSP<outs, ins, asmstr, pattern, itin> {
+  bits<4> dest = 0;
+  bits<5> it = 0;
+  bits<5> is = 0;
   let lowerOP = lowerOpVal;
-  bits<11> imm11;
+  bits<11> imm11 = 0;
+  let Inst{24-21} = dest;
+  let Inst{20-16} = it;
+  let Inst{15-11} = is;
   let Inst{10-0} = imm11;
+}
+
+class Lower8InstPS2VPU<bits<6> lowerOpVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : InstSP<outs, ins, asmstr, pattern, itin> {
+  bits<5> it = 0;
+  bits<5> is = 0;
+  bits<15> imm15 = 0;
+  let lowerOP = {0, lowerOpVal};
+  let Inst{24-21} = imm15{14-11};
+  let Inst{20-16} = it;
+  let Inst{15-11} = is;
+  let Inst{10-0} = imm15{10-0};
 }
 
 //class Lower4InstPS2VPU<dag outs, dag ins, string asmstr, list<dag> pattern,

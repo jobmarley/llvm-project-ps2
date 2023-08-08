@@ -78,7 +78,7 @@ bool PS2VPUDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
     Base = CurDAG->getTargetFrameIndex(
         FIN->getIndex(), TLI->getPointerTy(CurDAG->getDataLayout()));
-    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
     return true;
   }
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
@@ -98,11 +98,11 @@ bool PS2VPUDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
           Base = Addr.getOperand(0);
         }
         Offset = CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr),
-                                           MVT::i32);
+                                           MVT::i16);
         return true;
       }
     }
-    if (Addr.getOperand(0).getOpcode() == SPISD::Lo) {
+    /*if (Addr.getOperand(0).getOpcode() == SPISD::Lo) {
       Base = Addr.getOperand(1);
       Offset = Addr.getOperand(0).getOperand(0);
       return true;
@@ -111,10 +111,10 @@ bool PS2VPUDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
       Base = Addr.getOperand(0);
       Offset = Addr.getOperand(1).getOperand(0);
       return true;
-    }
+    }*/
   }
   Base = Addr;
-  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
 }
 

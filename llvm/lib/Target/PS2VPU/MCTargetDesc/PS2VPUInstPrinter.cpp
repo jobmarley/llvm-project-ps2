@@ -252,3 +252,20 @@ void PS2VPUInstPrinter::printMembarTag(const MCInst *MI, int opNum,
     }
   }
 }
+
+void PS2VPUInstPrinter::printVectorField(const MCInst *MI, int opNum,
+                                       const MCSubtargetInfo &STI,
+                                       raw_ostream &O) {
+
+  unsigned Imm = MI->getOperand(opNum).getImm();
+
+  O << ".";
+  for (int i = 0; i < 4; ++i)
+  {
+    if ((Imm >> i * 3) & 1)
+    {
+      int s = (Imm >> (i * 3 + 1)) & 3;
+      O << "xyzw"[s];
+    }
+  }
+}
