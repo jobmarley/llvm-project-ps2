@@ -31,6 +31,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+
+#define DEBUG_TYPE "baba"
 using namespace llvm;
 //
 ////===----------------------------------------------------------------------===//
@@ -282,7 +284,7 @@ PS2VPUTargetLowering::LowerReturn_32(SDValue Chain, CallingConv::ID CallConv,
   if (Flag.getNode())
     RetOps.push_back(Flag);
 
-  return DAG.getNode(SPISD::RET_FLAG, DL, MVT::Other, RetOps);
+  return DAG.getNode(PS2VPUISD::RET_FLAG, DL, MVT::Other, RetOps);
 }
 
 //// Lower return values for the 64-bit ABI.
@@ -1012,10 +1014,10 @@ PS2VPUTargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
 
   if (isTailCall) {
     DAG.getMachineFunction().getFrameInfo().setHasTailCall();
-    return DAG.getNode(SPISD::TAIL_CALL, dl, MVT::Other, Ops);
+    return DAG.getNode(PS2VPUISD::TAIL_CALL, dl, MVT::Other, Ops);
   }
 
-  Chain = DAG.getNode(SPISD::CALL, dl, NodeTys, Ops);
+  Chain = DAG.getNode(PS2VPUISD::CALL, dl, NodeTys, Ops);
   InFlag = Chain.getValue(1);
 
   Chain = DAG.getCALLSEQ_END(Chain, ArgsSize, 0, InFlag, dl);
@@ -1104,32 +1106,32 @@ PS2VPUTargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
 //
 ///// IntCondCCodeToICC - Convert a DAG integer condition code to a PS2VPU ICC
 ///// condition.
-//static SPCC::CondCodes IntCondCCodeToICC(ISD::CondCode CC) {
-//  switch (CC) {
-//  default:
-//    llvm_unreachable("Unknown integer condition code!");
-//  case ISD::SETEQ:
-//    return SPCC::ICC_E;
-//  case ISD::SETNE:
-//    return SPCC::ICC_NE;
-//  case ISD::SETLT:
-//    return SPCC::ICC_L;
-//  case ISD::SETGT:
-//    return SPCC::ICC_G;
-//  case ISD::SETLE:
-//    return SPCC::ICC_LE;
-//  case ISD::SETGE:
-//    return SPCC::ICC_GE;
-//  case ISD::SETULT:
-//    return SPCC::ICC_CS;
-//  case ISD::SETULE:
-//    return SPCC::ICC_LEU;
-//  case ISD::SETUGT:
-//    return SPCC::ICC_GU;
-//  case ISD::SETUGE:
-//    return SPCC::ICC_CC;
-//  }
-//}
+static PS2VPUNS::CondCodes IntCondCCodeToICC(ISD::CondCode CC) {
+  switch (CC) {
+  default:
+    llvm_unreachable("Unknown integer condition code!");
+  case ISD::SETEQ:
+    return PS2VPUNS::ICC_E;
+  case ISD::SETNE:
+    return PS2VPUNS::ICC_NE;
+  case ISD::SETLT:
+    return PS2VPUNS::ICC_L;
+  case ISD::SETGT:
+    return PS2VPUNS::ICC_G;
+  case ISD::SETLE:
+    return PS2VPUNS::ICC_LE;
+  case ISD::SETGE:
+    return PS2VPUNS::ICC_GE;
+  case ISD::SETULT:
+    return PS2VPUNS::ICC_CS;
+  case ISD::SETULE:
+    return PS2VPUNS::ICC_LEU;
+  case ISD::SETUGT:
+    return PS2VPUNS::ICC_GU;
+  case ISD::SETUGE:
+    return PS2VPUNS::ICC_CC;
+  }
+}
 //
 ///// FPCondCCodeToFCC - Convert a DAG floatingp oint condition code to a PS2VPU
 ///// FCC condition.
@@ -1202,9 +1204,9 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //  // class, as well. This is modeled in LLVM as a 2-vector of i32.
   //  addRegisterClass(MVT::v2i32, &SP::IntPairRegClass);
 
-   /*  for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
+   for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
       setOperationAction(Op, MVT::i32, Expand);
-    }*/
+    }
 
   //  // ...but almost all operations must be expanded, so set that as
   //  // the default.
@@ -1247,8 +1249,10 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //}
 
   //// PS2VPU doesn't have i1 sign extending load
-  //for (MVT VT : MVT::integer_valuetypes())
-  //  setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
+    for (MVT VT : MVT::integer_valuetypes()) {
+      for (MVT VT2 : MVT::integer_valuetypes())
+        setLoadExtAction(ISD::SEXTLOAD, VT, VT2, Expand);
+    }
 
   //// Turn FP truncstore into trunc + store.
   //setTruncStoreAction(MVT::f32, MVT::f16, Expand);
@@ -1261,13 +1265,18 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //// Custom legalize GlobalAddress nodes into LO/HI parts.
   //setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   //setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
-  //setOperationAction(ISD::ConstantPool, PtrVT, Custom);
+  setOperationAction(ISD::ConstantPool, PtrVT, Custom);
   //setOperationAction(ISD::BlockAddress, PtrVT, Custom);
 
   //// PS2VPU doesn't have sext_inreg, replace them with shl/sra
   //setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Expand);
   //setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Expand);
   //setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1, Expand);
+    for (MVT VT : MVT::integer_valuetypes()) {
+      setOperationAction(ISD::SRA, VT, Custom);
+      setOperationAction(ISD::SIGN_EXTEND_INREG, VT, Expand);
+      setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
+    }
 
   //// PS2VPU has no REM or DIVREM operations.
   //setOperationAction(ISD::UREM, MVT::i32, Expand);
@@ -1307,29 +1316,32 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //setOperationAction(ISD::BITCAST, MVT::i32, Expand);
 
   //// PS2VPU has no select or setcc: expand to SELECT_CC.
-  //setOperationAction(ISD::SELECT, MVT::i32, Expand);
-  //setOperationAction(ISD::SELECT, MVT::f32, Expand);
-  //setOperationAction(ISD::SELECT, MVT::f64, Expand);
-  //setOperationAction(ISD::SELECT, MVT::f128, Expand);
+  setOperationAction(ISD::SELECT, MVT::i16, Expand);
+  setOperationAction(ISD::SELECT, MVT::i32, Expand);
+  setOperationAction(ISD::SELECT, MVT::f32, Expand);
+  setOperationAction(ISD::SELECT, MVT::f64, Expand);
+  setOperationAction(ISD::SELECT, MVT::f128, Expand);
 
-  //setOperationAction(ISD::SETCC, MVT::i32, Expand);
-  //setOperationAction(ISD::SETCC, MVT::f32, Expand);
-  //setOperationAction(ISD::SETCC, MVT::f64, Expand);
-  //setOperationAction(ISD::SETCC, MVT::f128, Expand);
+  setOperationAction(ISD::SETCC, MVT::i16, Legal);
+  setOperationAction(ISD::SETCC, MVT::i32, Expand);
+  setOperationAction(ISD::SETCC, MVT::f32, Expand);
+  setOperationAction(ISD::SETCC, MVT::f64, Expand);
+  setOperationAction(ISD::SETCC, MVT::f128, Expand);
 
   //// PS2VPU doesn't have BRCOND either, it has BR_CC.
-  //setOperationAction(ISD::BRCOND, MVT::Other, Expand);
-  //setOperationAction(ISD::BRIND, MVT::Other, Expand);
-  //setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+  setOperationAction(ISD::BRIND, MVT::Other, Expand);
+  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+  setOperationAction(ISD::BR_CC, MVT::i16, Custom);
   //setOperationAction(ISD::BR_CC, MVT::i32, Custom);
   //setOperationAction(ISD::BR_CC, MVT::f32, Custom);
   //setOperationAction(ISD::BR_CC, MVT::f64, Custom);
   //setOperationAction(ISD::BR_CC, MVT::f128, Custom);
 
-  //setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
-  //setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
-  //setOperationAction(ISD::SELECT_CC, MVT::f64, Custom);
-  //setOperationAction(ISD::SELECT_CC, MVT::f128, Custom);
+  /*setOperationAction(ISD::SELECT_CC, MVT::i32, Custom);
+  setOperationAction(ISD::SELECT_CC, MVT::f32, Custom);
+  setOperationAction(ISD::SELECT_CC, MVT::f64, Custom);
+  setOperationAction(ISD::SELECT_CC, MVT::f128, Custom);*/
 
   //setOperationAction(ISD::ADDC, MVT::i32, Custom);
   //setOperationAction(ISD::ADDE, MVT::i32, Custom);
@@ -1588,13 +1600,13 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //// Custom combine bitcast between f64 and v2i32
   //if (!Subtarget->is64Bit())
   //  setTargetDAGCombine(ISD::BITCAST);
-
+  setTargetDAGCombine(ISD::SIGN_EXTEND);
   //if (Subtarget->hasLeonCycleCounter())
   //  setOperationAction(ISD::READCYCLECOUNTER, MVT::i64, Custom);
 
   //setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  setMinFunctionAlignment(Align(4));
+  setMinFunctionAlignment(Align(8));
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }
@@ -1604,55 +1616,55 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
 //}
 //
 const char *PS2VPUTargetLowering::getTargetNodeName(unsigned Opcode) const {
-  switch ((SPISD::NodeType)Opcode) {
-  case SPISD::FIRST_NUMBER:
+  switch ((PS2VPUISD::NodeType)Opcode) {
+  case PS2VPUISD::FIRST_NUMBER:
     break;
-  case SPISD::CMPICC:
-    return "SPISD::CMPICC";
-  case SPISD::CMPFCC:
-    return "SPISD::CMPFCC";
-  case SPISD::BRICC:
-    return "SPISD::BRICC";
-  case SPISD::BRXCC:
-    return "SPISD::BRXCC";
-  case SPISD::BRFCC:
-    return "SPISD::BRFCC";
-  case SPISD::SELECT_ICC:
-    return "SPISD::SELECT_ICC";
-  case SPISD::SELECT_XCC:
-    return "SPISD::SELECT_XCC";
-  case SPISD::SELECT_FCC:
-    return "SPISD::SELECT_FCC";
-  case SPISD::Hi:
-    return "SPISD::Hi";
-  case SPISD::Lo:
-    return "SPISD::Lo";
-  case SPISD::FTOI:
-    return "SPISD::FTOI";
-  case SPISD::ITOF:
-    return "SPISD::ITOF";
-  case SPISD::FTOX:
-    return "SPISD::FTOX";
-  case SPISD::XTOF:
-    return "SPISD::XTOF";
-  case SPISD::CALL:
-    return "SPISD::CALL";
-  case SPISD::RET_FLAG:
-    return "SPISD::RET_FLAG";
-  case SPISD::GLOBAL_BASE_REG:
-    return "SPISD::GLOBAL_BASE_REG";
-  case SPISD::FLUSHW:
-    return "SPISD::FLUSHW";
-  case SPISD::TLS_ADD:
-    return "SPISD::TLS_ADD";
-  case SPISD::TLS_LD:
-    return "SPISD::TLS_LD";
-  case SPISD::TLS_CALL:
-    return "SPISD::TLS_CALL";
-  case SPISD::TAIL_CALL:
-    return "SPISD::TAIL_CALL";
-  case SPISD::LOAD_GDOP:
-    return "SPISD::LOAD_GDOP";
+  case PS2VPUISD::CMPICC:
+    return "PS2VPUISD::CMPICC";
+  case PS2VPUISD::CMPFCC:
+    return "PS2VPUISD::CMPFCC";
+  case PS2VPUISD::BRICC:
+    return "PS2VPUISD::BRICC";
+  case PS2VPUISD::BRXCC:
+    return "PS2VPUISD::BRXCC";
+  case PS2VPUISD::BRFCC:
+    return "PS2VPUISD::BRFCC";
+  case PS2VPUISD::SELECT_ICC:
+    return "PS2VPUISD::SELECT_ICC";
+  case PS2VPUISD::SELECT_XCC:
+    return "PS2VPUISD::SELECT_XCC";
+  case PS2VPUISD::SELECT_FCC:
+    return "PS2VPUISD::SELECT_FCC";
+  case PS2VPUISD::Hi:
+    return "PS2VPUISD::Hi";
+  case PS2VPUISD::Lo:
+    return "PS2VPUISD::Lo";
+  case PS2VPUISD::FTOI:
+    return "PS2VPUISD::FTOI";
+  case PS2VPUISD::ITOF:
+    return "PS2VPUISD::ITOF";
+  case PS2VPUISD::FTOX:
+    return "PS2VPUISD::FTOX";
+  case PS2VPUISD::XTOF:
+    return "PS2VPUISD::XTOF";
+  case PS2VPUISD::CALL:
+    return "PS2VPUISD::CALL";
+  case PS2VPUISD::RET_FLAG:
+    return "PS2VPUISD::RET_FLAG";
+  case PS2VPUISD::GLOBAL_BASE_REG:
+    return "PS2VPUISD::GLOBAL_BASE_REG";
+  case PS2VPUISD::FLUSHW:
+    return "PS2VPUISD::FLUSHW";
+  case PS2VPUISD::TLS_ADD:
+    return "PS2VPUISD::TLS_ADD";
+  case PS2VPUISD::TLS_LD:
+    return "PS2VPUISD::TLS_LD";
+  case PS2VPUISD::TLS_CALL:
+    return "PS2VPUISD::TLS_CALL";
+  case PS2VPUISD::TAIL_CALL:
+    return "PS2VPUISD::TAIL_CALL";
+  case PS2VPUISD::LOAD_GDOP:
+    return "PS2VPUISD::LOAD_GDOP";
   }
   return nullptr;
 }
@@ -1676,9 +1688,9 @@ void PS2VPUTargetLowering::computeKnownBitsForTargetNode(
   switch (Op.getOpcode()) {
   default:
     break;
-  case SPISD::SELECT_ICC:
-  case SPISD::SELECT_XCC:
-  case SPISD::SELECT_FCC:
+  case PS2VPUISD::SELECT_ICC:
+  case PS2VPUISD::SELECT_XCC:
+  case PS2VPUISD::SELECT_FCC:
     Known = DAG.computeKnownBits(Op.getOperand(1), Depth + 1);
     Known2 = DAG.computeKnownBits(Op.getOperand(0), Depth + 1);
 
@@ -1705,7 +1717,7 @@ void PS2VPUTargetLowering::computeKnownBitsForTargetNode(
 //    RHS = CMPCC.getOperand(1);
 //  }
 //}
-//
+
 //// Convert to a target node and set target flags.
 //SDValue PS2VPUTargetLowering::withTargetFlags(SDValue Op, unsigned TF,
 //                                             SelectionDAG &DAG) const {
@@ -2240,46 +2252,77 @@ void PS2VPUTargetLowering::computeKnownBitsForTargetNode(
 //                                                : RTLIB::UINTTOFP_I64_F128),
 //                         1);
 //}
-//
-//static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG,
-//                          const PS2VPUTargetLowering &TLI, bool hasHardQuad) {
-//  SDValue Chain = Op.getOperand(0);
-//  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
-//  SDValue LHS = Op.getOperand(2);
-//  SDValue RHS = Op.getOperand(3);
-//  SDValue Dest = Op.getOperand(4);
-//  SDLoc dl(Op);
-//  unsigned Opc, SPCC = ~0U;
-//
-//  // If this is a br_cc of a "setcc", and if the setcc got lowered into
-//  // an CMP[IF]CC/SELECT_[IF]CC pair, find the original compared values.
-//  LookThroughSetCC(LHS, RHS, CC, SPCC);
-//
-//  // Get the condition flag.
-//  SDValue CompareFlag;
-//  if (LHS.getValueType().isInteger()) {
-//    CompareFlag = DAG.getNode(SPISD::CMPICC, dl, MVT::Glue, LHS, RHS);
-//    if (SPCC == ~0U)
-//      SPCC = IntCondCCodeToICC(CC);
-//    // 32-bit compares use the icc flags, 64-bit uses the xcc flags.
-//    Opc = LHS.getValueType() == MVT::i32 ? SPISD::BRICC : SPISD::BRXCC;
-//  } else {
-//    if (!hasHardQuad && LHS.getValueType() == MVT::f128) {
-//      if (SPCC == ~0U)
-//        SPCC = FPCondCCodeToFCC(CC);
-//      CompareFlag = TLI.LowerF128Compare(LHS, RHS, SPCC, dl, DAG);
-//      Opc = SPISD::BRICC;
-//    } else {
-//      CompareFlag = DAG.getNode(SPISD::CMPFCC, dl, MVT::Glue, LHS, RHS);
-//      if (SPCC == ~0U)
-//        SPCC = FPCondCCodeToFCC(CC);
-//      Opc = SPISD::BRFCC;
-//    }
-//  }
-//  return DAG.getNode(Opc, dl, MVT::Other, Chain, Dest,
-//                     DAG.getConstant(SPCC, dl, MVT::i32), CompareFlag);
-//}
-//
+
+static SDValue LowerBR_CC(SDValue Op, SelectionDAG &DAG,
+                          const PS2VPUTargetLowering &TLI) {
+  SDValue Chain = Op.getOperand(0);
+  ISD::CondCode CC = cast<CondCodeSDNode>(Op.getOperand(1))->get();
+  SDValue LHS = Op.getOperand(2);
+  SDValue RHS = Op.getOperand(3);
+  SDValue Dest = Op.getOperand(4);
+  SDLoc dl(Op);
+  unsigned Opc, SPCC = ~0U;
+
+  // If this is a br_cc of a "setcc", and if the setcc got lowered into
+  // an CMP[IF]CC/SELECT_[IF]CC pair, find the original compared values.
+  //LookThroughSetCC(LHS, RHS, CC, SPCC);
+
+  // Get the condition flag.
+  //SDValue CompareFlag;
+  //if (LHS.getValueType().isInteger()) {
+  //  CompareFlag = DAG.getNode(SPISD::CMPICC, dl, MVT::Glue, LHS, RHS);
+  //  if (SPCC == ~0U)
+  //    SPCC = IntCondCCodeToICC(CC);
+  //  // 32-bit compares use the icc flags, 64-bit uses the xcc flags.
+  //  Opc = LHS.getValueType() == MVT::i32 ? SPISD::BRICC : SPISD::BRXCC;
+  //} else {
+  //  if (!hasHardQuad && LHS.getValueType() == MVT::f128) {
+  //    if (SPCC == ~0U)
+  //      SPCC = FPCondCCodeToFCC(CC);
+  //    CompareFlag = TLI.LowerF128Compare(LHS, RHS, SPCC, dl, DAG);
+  //    Opc = SPISD::BRICC;
+  //  } else {
+  //    CompareFlag = DAG.getNode(SPISD::CMPFCC, dl, MVT::Glue, LHS, RHS);
+  //    if (SPCC == ~0U)
+  //      SPCC = FPCondCCodeToFCC(CC);
+  //    Opc = SPISD::BRFCC;
+  //  }
+  //}
+  /*switch (CC)
+  {
+  case ISD::CondCode::SETLT:
+  case ISD::CondCode::SETLE:
+  case ISD::CondCode::SETGT:
+  case ISD::CondCode::SETGE:
+  {
+    SDValue newLHS = DAG.getNode(ISD::SUB, dl, LHS.getValueType(), LHS, RHS);
+    SDValue newRHS = DAG.getConstant(0, dl, LHS.getValueType());
+    return DAG.getNode(PS2VPUISD::BRCCZ, dl, MVT::Other, Chain, Op.getOperand(1),
+                       newLHS, newRHS, Dest);
+  }
+  default:
+    break;
+  }
+  return SDValue();*/
+
+  switch (CC) {
+  case ISD::CondCode::SETLT:
+  case ISD::CondCode::SETLE:
+  case ISD::CondCode::SETGT:
+  case ISD::CondCode::SETGE: {
+      // we don't lower for SETEQ or SETNE (ideally not when RHS is 0 either but whatever)
+    return DAG.getNode(PS2VPUISD::BRICC, dl, MVT::Other, Chain,
+                       DAG.getConstant(IntCondCCodeToICC(CC), dl, MVT::i16),
+                       LHS, RHS, Dest);
+  }
+  default:
+    break;
+  }
+  return Op;
+  //DAG.getNode(Opc, dl, MVT::Other, Chain, Dest,
+    //                 DAG.getConstant(SPCC, dl, MVT::i32), CompareFlag);
+}
+
 //static SDValue LowerSELECT_CC(SDValue Op, SelectionDAG &DAG,
 //                              const PS2VPUTargetLowering &TLI,
 //                              bool hasHardQuad) {
@@ -2814,7 +2857,7 @@ void PS2VPUTargetLowering::computeKnownBitsForTargetNode(
 //  }
 //  }
 //}
-//
+
 SDValue PS2VPUTargetLowering::LowerOperation(SDValue Op,
                                             SelectionDAG &DAG) const {
 
@@ -2825,7 +2868,8 @@ SDValue PS2VPUTargetLowering::LowerOperation(SDValue Op,
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Should not custom lower this!");
-
+  case ISD::BR_CC:
+    return LowerBR_CC(Op, DAG, *this);
   /*case ISD::RETURNADDR:
     return LowerRETURNADDR(Op, DAG, *this, Subtarget);
   case ISD::FRAMEADDR:
@@ -2928,12 +2972,249 @@ SDValue PS2VPUTargetLowering::PerformDAGCombine(SDNode *N,
   return SDValue();
 }
 
+PS2VPUNS::CondCodes invertCC(PS2VPUNS::CondCodes cc) {
+  switch (cc) {
+  case PS2VPUNS::CondCodes::ICC_G:
+    return PS2VPUNS::CondCodes::ICC_L;
+  case PS2VPUNS::CondCodes::ICC_GE:
+    return PS2VPUNS::CondCodes::ICC_LE;
+  case PS2VPUNS::CondCodes::ICC_L:
+    return PS2VPUNS::CondCodes::ICC_G;
+  case PS2VPUNS::CondCodes::ICC_LE:
+    return PS2VPUNS::CondCodes::ICC_GE;
+  default:
+    return cc;
+  }
+}
+ MachineBasicBlock *
+ PS2VPUTargetLowering::expandBrCCPseudo(MachineInstr &MI, MachineBasicBlock *BB) const {
+   const TargetInstrInfo &TII = *Subtarget->getInstrInfo();
+   DebugLoc dl = MI.getDebugLoc();
+   PS2VPUNS::CondCodes CC = (PS2VPUNS::CondCodes)MI.getOperand(0).getImm();
+
+   auto LHS = MI.getOperand(1);
+   auto RHS = MI.getOperand(2);
+
+   auto TargetBB = MI.getOperand(3).getMBB();
+
+   if (LHS.isImm() && RHS.isReg())
+   {
+    std::swap(LHS, RHS);
+    CC = invertCC(CC);
+   }
+
+
+   unsigned opcode = 0;
+   switch (CC) {
+   case PS2VPUNS::CondCodes::ICC_E:
+    opcode = PS2VPUNS::IBEQ;
+    break;
+   case PS2VPUNS::CondCodes::ICC_G:
+    opcode = PS2VPUNS::IBGTZ;
+    break;
+   case PS2VPUNS::CondCodes::ICC_GE:
+    opcode = PS2VPUNS::IBGEZ;
+    break;
+   case PS2VPUNS::CondCodes::ICC_L:
+    opcode = PS2VPUNS::IBLTZ;
+    break;
+   case PS2VPUNS::CondCodes::ICC_LE:
+    opcode = PS2VPUNS::IBLEZ;
+    break;
+   case PS2VPUNS::CondCodes::ICC_NE:
+    opcode = PS2VPUNS::IBNE;
+    break;
+   default:
+    llvm_unreachable("unknown condition code");
+   }
+
+
+   MachineBasicBlock *NewMBB = BB;
+
+   if (LHS.isReg() && RHS.isReg()) {
+    //  // We produce the following control flow:
+    //  //                ThisMBB
+    //  //           /               \
+    //  //     ALessMBB              IfFalseMBB
+    //  //      /     \               /      \
+    //  //  TrueMBB   SubMBB    FalseMBB    SubMBB
+    const BasicBlock *LLVM_BB = BB->getBasicBlock();
+    MachineFunction::iterator It = ++BB->getIterator();
+    MachineBasicBlock *ThisMBB = BB;
+    MachineFunction *F = BB->getParent();
+
+    MachineBasicBlock *TrueMBB = TargetBB;
+    MachineBasicBlock *ALessMBB = F->CreateMachineBasicBlock(LLVM_BB);
+    MachineBasicBlock *FalseMBB = F->CreateMachineBasicBlock(LLVM_BB);
+    MachineBasicBlock *SubMBB = F->CreateMachineBasicBlock(LLVM_BB);
+    F->insert(It, ALessMBB);
+    F->insert(It, FalseMBB);
+    F->insert(It, SubMBB);
+
+    NewMBB = SubMBB;
+
+    bool isLesser =
+        (CC == PS2VPUNS::CondCodes::ICC_L || CC == PS2VPUNS::CondCodes::ICC_LE);
+
+    // Transfer the remainder of ThisMBB and its successor edges to SinkMBB.
+    FalseMBB->splice(FalseMBB->begin(), ThisMBB,
+                    std::next(MachineBasicBlock::iterator(MI)), ThisMBB->end());
+    FalseMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
+
+
+    BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBLTZ))
+        .addReg(LHS.getReg())
+        .addMBB(ALessMBB);
+    ThisMBB->addSuccessor(ALessMBB);
+
+    // A Less
+    BuildMI(ALessMBB, dl, TII.get(PS2VPUNS::IBGEZ))
+        .addReg(RHS.getReg())
+        .addMBB(isLesser ? TrueMBB : FalseMBB);
+    BuildMI(ALessMBB, dl, TII.get(PS2VPUNS::Bi)).addMBB(SubMBB);
+    ALessMBB->addSuccessor(isLesser ? TrueMBB : FalseMBB);
+    ALessMBB->addSuccessor(SubMBB);
+
+    // A GreaterEq
+    BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBLTZ))
+        .addReg(RHS.getReg())
+        .addMBB(isLesser ? FalseMBB : TrueMBB);
+    ThisMBB->addSuccessor(isLesser ? FalseMBB : TrueMBB);
+    BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::Bi)).addMBB(SubMBB);
+    ThisMBB->addSuccessor(SubMBB);
+
+    // Sub
+    llvm::Register dest =
+        F->getRegInfo().createVirtualRegister(&PS2VPUNS::IntRegsRegClass);
+    BuildMI(SubMBB, dl, TII.get(PS2VPUNS::ISUBrr), dest)
+        .addReg(LHS.getReg())
+        .addReg(RHS.getReg());
+    BuildMI(SubMBB, dl, TII.get(opcode)).addReg(dest).addMBB(TrueMBB);
+    BuildMI(SubMBB, dl, TII.get(PS2VPUNS::Bi)).addMBB(FalseMBB);
+    SubMBB->addSuccessor(TrueMBB);
+    SubMBB->addSuccessor(FalseMBB);
+
+   } else if (LHS.isReg() && RHS.isImm()) {
+    int64_t imm = RHS.getImm();
+    if (imm == 0) {
+        BuildMI(BB, dl, TII.get(opcode)).addReg(LHS.getReg()).addMBB(TargetBB);
+    } else if (imm > 0) {
+        const BasicBlock *LLVM_BB = BB->getBasicBlock();
+        MachineFunction::iterator It = ++BB->getIterator();
+        MachineBasicBlock *ThisMBB = BB;
+        MachineFunction *F = BB->getParent();
+
+        switch (CC) {
+        case PS2VPUNS::CondCodes::ICC_LE:
+        case PS2VPUNS::CondCodes::ICC_L: {
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBLTZ))
+            .addReg(LHS.getReg())
+            .addMBB(TargetBB);
+        llvm::Register dest =
+            F->getRegInfo().createVirtualRegister(&PS2VPUNS::IntRegsRegClass);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::ISUBUri), dest)
+            .addReg(LHS.getReg())
+            .addImm(imm);
+        BuildMI(ThisMBB, dl, TII.get(opcode))
+            .addReg(dest)
+            .addMBB(TargetBB);
+        }
+        break;
+        case PS2VPUNS::CondCodes::ICC_GE:
+        case PS2VPUNS::CondCodes::ICC_G: {
+        MachineBasicBlock *SinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+        F->insert(It, SinkMBB);
+        SinkMBB->splice(SinkMBB->begin(), ThisMBB,
+                        std::next(MachineBasicBlock::iterator(MI)),
+                        ThisMBB->end());
+        SinkMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
+        ThisMBB->addSuccessor(SinkMBB);
+        ThisMBB->addSuccessor(TargetBB);
+
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBLTZ))
+            .addReg(LHS.getReg())
+            .addMBB(SinkMBB);
+        llvm::Register dest =
+            F->getRegInfo().createVirtualRegister(&PS2VPUNS::IntRegsRegClass);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::ISUBUri), dest)
+            .addReg(LHS.getReg())
+            .addImm(imm);
+        BuildMI(ThisMBB, dl, TII.get(opcode))
+            .addReg(dest)
+            .addMBB(TargetBB);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::Bi))
+            .addMBB(SinkMBB);
+
+        NewMBB = SinkMBB;
+        /*LLVM_DEBUG(dbgs() << "*** My function lala ***\n");
+        LLVM_DEBUG(F->print(dbgs()));*/
+        } break;
+        default:
+        llvm_unreachable("unexpected condition code");
+        }
+    } else if (imm < 0) {
+        const BasicBlock *LLVM_BB = BB->getBasicBlock();
+        MachineFunction::iterator It = ++BB->getIterator();
+        MachineBasicBlock *ThisMBB = BB;
+        MachineFunction *F = BB->getParent();
+
+        switch (CC) {
+        case PS2VPUNS::CondCodes::ICC_LE:
+        case PS2VPUNS::CondCodes::ICC_L: {
+        MachineBasicBlock *SinkMBB = F->CreateMachineBasicBlock(LLVM_BB);
+        F->insert(It, SinkMBB);
+        SinkMBB->splice(SinkMBB->begin(), ThisMBB,
+                        std::next(MachineBasicBlock::iterator(MI)),
+                        ThisMBB->end());
+        SinkMBB->transferSuccessorsAndUpdatePHIs(ThisMBB);
+        ThisMBB->addSuccessor(SinkMBB);
+        ThisMBB->addSuccessor(TargetBB);
+
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBGTZ))
+            .addReg(LHS.getReg())
+            .addMBB(SinkMBB);
+        llvm::Register dest =
+            F->getRegInfo().createVirtualRegister(&PS2VPUNS::IntRegsRegClass);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::ISUBUri), dest)
+            .addReg(LHS.getReg())
+            .addImm(imm);
+        BuildMI(ThisMBB, dl, TII.get(opcode)).addReg(dest).addMBB(TargetBB);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::Bi)).addMBB(SinkMBB);
+
+        NewMBB = SinkMBB;
+        } break;
+        case PS2VPUNS::CondCodes::ICC_GE:
+        case PS2VPUNS::CondCodes::ICC_G: {
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::IBGTZ))
+            .addReg(LHS.getReg())
+            .addMBB(TargetBB);
+        llvm::Register dest =
+            F->getRegInfo().createVirtualRegister(&PS2VPUNS::IntRegsRegClass);
+        BuildMI(ThisMBB, dl, TII.get(PS2VPUNS::ISUBUri), dest)
+            .addReg(LHS.getReg())
+            .addImm(imm);
+        BuildMI(ThisMBB, dl, TII.get(opcode)).addReg(dest).addMBB(TargetBB);
+        
+        } break;
+        default:
+        llvm_unreachable("unexpected condition code");
+        }
+    }
+   }
+
+   MI.eraseFromParent(); // The pseudo instruction is gone now.
+   return NewMBB;
+ }
+
 MachineBasicBlock *
 PS2VPUTargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
                                                  MachineBasicBlock *BB) const {
   switch (MI.getOpcode()) {
   default:
     llvm_unreachable("Unknown SELECT_CC!");
+  case PS2VPUNS::BR_CC_PSEUDOrr:
+  case PS2VPUNS::BR_CC_PSEUDOri:
+    return expandBrCCPseudo(MI, BB);
   /*case SP::SELECT_CC_Int_ICC:
   case SP::SELECT_CC_FP_ICC:
   case SP::SELECT_CC_DFP_ICC:

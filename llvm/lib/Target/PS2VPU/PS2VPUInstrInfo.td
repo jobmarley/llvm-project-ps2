@@ -254,23 +254,23 @@ SDTypeProfile<1, 2, [SDTCisPtrTy<0>, SDTCisPtrTy<1>]>;
 def SDTSPloadgdop :
 SDTypeProfile<1, 2, [SDTCisPtrTy<0>, SDTCisPtrTy<1>]>;
 
-def SPcmpicc : SDNode<"SPISD::CMPICC", SDTSPcmpicc, [SDNPOutGlue]>;
-def SPcmpfcc : SDNode<"SPISD::CMPFCC", SDTSPcmpfcc, [SDNPOutGlue]>;
-def SPbricc : SDNode<"SPISD::BRICC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
-def SPbrxcc : SDNode<"SPISD::BRXCC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
-def SPbrfcc : SDNode<"SPISD::BRFCC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
+def SPcmpicc : SDNode<"PS2VPUISD::CMPICC", SDTSPcmpicc, [SDNPOutGlue]>;
+def SPcmpfcc : SDNode<"PS2VPUISD::CMPFCC", SDTSPcmpfcc, [SDNPOutGlue]>;
+def SPbricc : SDNode<"PS2VPUISD::BRICC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
+def SPbrxcc : SDNode<"PS2VPUISD::BRXCC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
+def SPbrfcc : SDNode<"PS2VPUISD::BRFCC", SDTSPbrcc, [SDNPHasChain, SDNPInGlue]>;
 
-def SPhi    : SDNode<"SPISD::Hi", SDTIntUnaryOp>;
-def SPlo    : SDNode<"SPISD::Lo", SDTIntUnaryOp>;
+def SPhi    : SDNode<"PS2VPUISD::Hi", SDTIntUnaryOp>;
+def SPlo    : SDNode<"PS2VPUISD::Lo", SDTIntUnaryOp>;
 
-def SPftoi  : SDNode<"SPISD::FTOI", SDTSPFTOI>;
-def SPitof  : SDNode<"SPISD::ITOF", SDTSPITOF>;
-def SPftox  : SDNode<"SPISD::FTOX", SDTSPFTOX>;
-def SPxtof  : SDNode<"SPISD::XTOF", SDTSPXTOF>;
+def SPftoi  : SDNode<"PS2VPUISD::FTOI", SDTSPFTOI>;
+def SPitof  : SDNode<"PS2VPUISD::ITOF", SDTSPITOF>;
+def SPftox  : SDNode<"PS2VPUISD::FTOX", SDTSPFTOX>;
+def SPxtof  : SDNode<"PS2VPUISD::XTOF", SDTSPXTOF>;
 
-def SPselecticc : SDNode<"SPISD::SELECT_ICC", SDTSPselectcc, [SDNPInGlue]>;
-def SPselectxcc : SDNode<"SPISD::SELECT_XCC", SDTSPselectcc, [SDNPInGlue]>;
-def SPselectfcc : SDNode<"SPISD::SELECT_FCC", SDTSPselectcc, [SDNPInGlue]>;
+def SPselecticc : SDNode<"PS2VPUISD::SELECT_ICC", SDTSPselectcc, [SDNPInGlue]>;
+def SPselectxcc : SDNode<"PS2VPUISD::SELECT_XCC", SDTSPselectcc, [SDNPInGlue]>;
+def SPselectfcc : SDNode<"PS2VPUISD::SELECT_FCC", SDTSPselectcc, [SDNPInGlue]>;
 
 //  These are target-independent nodes, but have target-specific formats.
 def SDT_SPCallSeqStart : SDCallSeqStart<[ SDTCisVT<0, i32>,
@@ -284,32 +284,35 @@ def callseq_end   : SDNode<"ISD::CALLSEQ_END",   SDT_SPCallSeqEnd,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
 def SDT_SPCall    : SDTypeProfile<0, -1, [SDTCisVT<0, i32>]>;
-def call          : SDNode<"SPISD::CALL", SDT_SPCall,
+def call          : SDNode<"PS2VPUISD::CALL", SDT_SPCall,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
 
-def tailcall      : SDNode<"SPISD::TAIL_CALL", SDT_SPCall,
+def tailcall      : SDNode<"PS2VPUISD::TAIL_CALL", SDT_SPCall,
                            [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                             SDNPVariadic]>;
 
 def SDT_SPRet     : SDTypeProfile<0, 1, [SDTCisVT<0, i16>]>;
-def retflag       : SDNode<"SPISD::RET_FLAG", SDT_SPRet,
+def retflag       : SDNode<"PS2VPUISD::RET_FLAG", SDT_SPRet,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
-def flushw        : SDNode<"SPISD::FLUSHW", SDTNone,
+def flushw        : SDNode<"PS2VPUISD::FLUSHW", SDTNone,
                            [SDNPHasChain, SDNPSideEffect, SDNPMayStore]>;
 
-def tlsadd        : SDNode<"SPISD::TLS_ADD", SDTSPtlsadd>;
-def tlsld         : SDNode<"SPISD::TLS_LD",  SDTSPtlsld>;
-def tlscall       : SDNode<"SPISD::TLS_CALL", SDT_SPCall,
+def tlsadd        : SDNode<"PS2VPUISD::TLS_ADD", SDTSPtlsadd>;
+def tlsld         : SDNode<"PS2VPUISD::TLS_LD",  SDTSPtlsld>;
+def tlscall       : SDNode<"PS2VPUISD::TLS_CALL", SDT_SPCall,
                             [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                              SDNPVariadic]>;
 
-def load_gdop : SDNode<"SPISD::LOAD_GDOP",  SDTSPloadgdop>;
+def load_gdop : SDNode<"PS2VPUISD::LOAD_GDOP",  SDTSPloadgdop>;
 
 def getPCX        : Operand<iPTR> {
   let PrintMethod = "printGetPCX";
 }
+
+def SDTPS2VPUbricc : SDTypeProfile<0, 4, [SDTCisInt<0>, SDTCisVT<1, i16>, SDTCisVT<2, i16>, SDTCisVT<3, OtherVT>]>;
+def PS2VPUbricc : SDNode<"PS2VPUISD::BRICC", SDTPS2VPUbricc, [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue]>;
 
 //===----------------------------------------------------------------------===//
 // PS2VPU Flag Conditions
@@ -473,41 +476,81 @@ def CPCC_012 : CPCC_VAL<47>;  // 0 or 1 or 2
 // Instructions
 //===----------------------------------------------------------------------===//
 
-def Bi : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
-                    "B $imm11", []>;
 
 let isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in {
   def Jr : Lower7InstPS2VPU<0b0100100, (outs), (ins IntRegs:$r),
                     "JR $r", [(retflag i16:$r)]>;
 }
 
-//def ILWri : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins MEMri:$addr),
-//                    "ILW $dst, [$addr]", []>;
-//def ISWri : Lower7InstPS2VPU<0b0000101, (outs), (ins VectorField:$dest, IntRegs:$it, MEMri:$addr),
-//                    "ISW$dest $it, $addr", [(store IntRegs:$it, VECTORFIELDADDR (VectorField:$dest, ADDRri:$addr))]>;
+
+let isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
+{
+  def Bi : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
+                      "B $imm11", [(br bb:$imm11)]>;
+                      
+  def IBEQ : Lower7InstPS2VPU<0b0101000, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
+                    "IBEQ $it, $is, $imm11", [(brcc SETEQ, IntRegs:$it, IntRegs:$is, bb:$imm11)]>;
+
+  def IBNE : Lower7InstPS2VPU<0b0101001, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
+                    "IBNE $it, $is, $imm11", [(brcc SETNE, IntRegs:$it, IntRegs:$is, bb:$imm11)]>;
+                    
+  def IBLTZ : Lower7InstPS2VPU<0b0101100, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBLTZ $it, $imm11", [(brcc SETLT, IntRegs:$it, 0, bb:$imm11)]>;
+
+  def IBLEZ : Lower7InstPS2VPU<0b0101110, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBLEZ $it, $imm11", [(brcc SETLE, IntRegs:$it, 0, bb:$imm11)]>;
+                    
+  def IBGTZ : Lower7InstPS2VPU<0b0101101, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBGTZ $it, $imm11", [(brcc SETGT, IntRegs:$it, 0, bb:$imm11)]>;
+
+  def IBGEZ : Lower7InstPS2VPU<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)]>;
+}
+def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins MEMri:$addr),
+                    "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))]>;
+
+def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, MEMri:$addr),
+                    "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)]>;
 
 def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
-                    "IADD $id, $is, $it", []>;
+                    "IADD $id, $is, $it", [(set IntRegs:$id, (add IntRegs:$is, IntRegs:$it))]>;
 
 def IADDri : Lower5InstPS2VPU<0b110010, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm5),
-                    "IADDI $it, $is, $imm5", [(set IntRegs:$it, (add IntRegs:$is, i16:$imm5))]>;
+                    "IADDI $it, $is, $imm5", [(set IntRegs:$it, (add IntRegs:$is, (i16 simm5:$imm5)))]>;
 
 def IADDUri : Lower8InstPS2VPU<0b001000, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
-                    "IADDIU $it, $is, $imm15", [(set IntRegs:$it, (add IntRegs:$is, i16:$imm15))]>;
+                    "IADDIU $it, $is, $imm15", [(set IntRegs:$it, (add IntRegs:$is, imm:$imm15))]>;
 
 
 def ISUBrr : Lower1InstPS2VPU<0b110001, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
-                    "IADD $id, $is, $it", []>;
+                    "ISUB $id, $is, $it", [(set IntRegs:$id, (sub IntRegs:$is, IntRegs:$it))]>;
                     
 def ISUBUri : Lower8InstPS2VPU<0b001001, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
-                    "ISUBIU $it, $is, $imm15", []>;
+                    "ISUBIU $it, $is, $imm15", [(set IntRegs:$it, (sub IntRegs:$is, imm:$imm15))]>;
 
                     
 def IORrr : Lower1InstPS2VPU<0b110101, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
                     "IOR $id, $is, $it", [(set IntRegs:$id, (or IntRegs:$is, IntRegs:$it))]>;
 
-//def ISWri : Lower7InstPS2VPU<0b0000101, (outs IntRegs:$dst), (ins IntRegs:$src, brtarget:$imm11),
-//                    "ILW $dst, $imm11 ( $src )", []>;
+//// Pseudo instructions.
+class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
+   : InstSP<outs, ins, asmstr, pattern> {
+  let isCodeGenOnly = 1;
+  let isPseudo = 1;
+}
+let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
+{
+  def BR_CC_PSEUDOrr
+   : Pseudo<(outs), (ins i16imm:$a, IntRegs:$b, IntRegs:$c, brtarget:$d),
+            "; BR_CC_PSEUDO PSEUDO!",
+            //[(PS2VPUbrccz cond:$a, Any:$b, Any:$c, bb:$d)]>;
+            [(PS2VPUbricc (i16 imm:$a), IntRegs:$b, IntRegs:$c, bb:$d)]>;
+  def BR_CC_PSEUDOri
+   : Pseudo<(outs), (ins i16imm:$a, IntRegs:$b, i16imm:$c, brtarget:$d),
+            "; BR_CC_PSEUDO PSEUDO!",
+            //[(PS2VPUbrccz cond:$a, Any:$b, Any:$c, bb:$d)]>;
+            [(PS2VPUbricc (i16 imm:$a), IntRegs:$b, imm:$c, bb:$d)]>;
+}
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>

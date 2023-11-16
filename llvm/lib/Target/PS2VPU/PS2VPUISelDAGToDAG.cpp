@@ -130,8 +130,8 @@ bool PS2VPUDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
       if (isInt<13>(CN->getSExtValue()))
         return false; // Let the reg+imm pattern catch this!
-    if (Addr.getOperand(0).getOpcode() == SPISD::Lo ||
-        Addr.getOperand(1).getOpcode() == SPISD::Lo)
+    if (Addr.getOperand(0).getOpcode() == PS2VPUISD::Lo ||
+        Addr.getOperand(1).getOpcode() == PS2VPUISD::Lo)
       return false; // Let the reg+imm pattern catch this!
     R1 = Addr.getOperand(0);
     R2 = Addr.getOperand(1);

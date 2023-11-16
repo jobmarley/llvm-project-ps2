@@ -37,7 +37,7 @@ static std::string computeDataLayout(const Triple &T) {
   /*if (is64Bit)
     Ret += "-S128";
   else*/
-    Ret += "-S16";
+    Ret += "-S64";
 
   return Ret;
 }

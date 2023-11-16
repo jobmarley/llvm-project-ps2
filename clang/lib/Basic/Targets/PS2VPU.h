@@ -26,17 +26,39 @@ class LLVM_LIBRARY_VISIBILITY PS2VPUTargetInfo : public TargetInfo {
 public:
   PS2VPUTargetInfo(const llvm::Triple &Triple, const TargetOptions &)
       : TargetInfo(Triple) {
-    resetDataLayout("e-m:e-p:16:16-f128:128-n16-S16");
-    // NetBSD / OpenBSD use long (same as llvm default); everyone else uses int.
-    switch (getTriple().getOS()) {
-    default:
-      SizeType = UnsignedInt;
-      IntPtrType = SignedInt;
-      PtrDiffType = SignedInt;
-      break;
-    }
-    MaxAtomicPromoteWidth = 32;
-    MaxAtomicInlineWidth = 32;
+      // Not sure about that, it might cause issues when mixing code.
+      // Lets start like that for now cause int16 is the only supported natively
+    TLSSupported = false;
+    PointerWidth = 16;
+    PointerAlign = 32;
+    IntWidth = 16;
+    IntAlign = 32;
+    LongWidth = 32;
+    LongAlign = 32;
+    LongLongWidth = 64;
+    LongLongAlign = 64;
+    SuitableAlign = 32;
+    DefaultAlignForAttributeAligned = 32;
+    HalfWidth = 16;
+    HalfAlign = 32;
+    FloatWidth = 32;
+    FloatAlign = 32;
+    DoubleWidth = 32;
+    DoubleAlign = 32;
+    DoubleFormat = &llvm::APFloat::IEEEsingle();
+    LongDoubleWidth = 32;
+    LongDoubleAlign = 8;
+    LongDoubleFormat = &llvm::APFloat::IEEEsingle();
+    SizeType = UnsignedInt;
+    PtrDiffType = SignedInt;
+    IntPtrType = SignedInt;
+    Char16Type = UnsignedInt;
+    WIntType = SignedInt;
+    Int16Type = SignedInt;
+    Char32Type = UnsignedLong;
+    SigAtomicType = SignedChar;
+    ProgramAddrSpace = 1;
+    resetDataLayout("e-m:e-p:16:16-f128:128-n16-S64");
   }
 
   int getEHDataRegisterNumber(unsigned RegNo) const override {

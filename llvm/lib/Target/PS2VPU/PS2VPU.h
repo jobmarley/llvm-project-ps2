@@ -35,24 +35,24 @@ void LowerPS2VPUMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
 namespace llvm {
 // Enums corresponding to PS2VPU condition codes, both icc's and fcc's.  These
 // values must be kept in sync with the ones in the .td file.
-//namespace PS2VPUNS {
-//enum CondCodes {
-//  ICC_A = 8,    // Always
-//  ICC_N = 0,    // Never
-//  ICC_NE = 9,   // Not Equal
-//  ICC_E = 1,    // Equal
-//  ICC_G = 10,   // Greater
-//  ICC_LE = 2,   // Less or Equal
-//  ICC_GE = 11,  // Greater or Equal
-//  ICC_L = 3,    // Less
-//  ICC_GU = 12,  // Greater Unsigned
-//  ICC_LEU = 4,  // Less or Equal Unsigned
-//  ICC_CC = 13,  // Carry Clear/Great or Equal Unsigned
-//  ICC_CS = 5,   // Carry Set/Less Unsigned
-//  ICC_POS = 14, // Positive
-//  ICC_NEG = 6,  // Negative
-//  ICC_VC = 15,  // Overflow Clear
-//  ICC_VS = 7,   // Overflow Set
+namespace PS2VPUNS {
+enum CondCodes {
+  ICC_A = 8,    // Always
+  ICC_N = 0,    // Never
+  ICC_NE = 9,   // Not Equal
+  ICC_E = 1,    // Equal
+  ICC_G = 10,   // Greater
+  ICC_LE = 2,   // Less or Equal
+  ICC_GE = 11,  // Greater or Equal
+  ICC_L = 3,    // Less
+  ICC_GU = 12,  // Greater Unsigned
+  ICC_LEU = 4,  // Less or Equal Unsigned
+  ICC_CC = 13,  // Carry Clear/Great or Equal Unsigned
+  ICC_CS = 5,   // Carry Set/Less Unsigned
+  ICC_POS = 14, // Positive
+  ICC_NEG = 6,  // Negative
+  ICC_VC = 15,  // Overflow Clear
+  ICC_VS = 7,   // Overflow Set
 //
 //  FCC_A = 8 + 16,    // Always
 //  FCC_N = 0 + 16,    // Never
@@ -87,8 +87,8 @@ namespace llvm {
 //  CPCC_01 = 13 + 32,
 //  CPCC_013 = 14 + 32,
 //  CPCC_012 = 15 + 32
-//};
-//}
+};
+}
 
 //inline static const char *PS2VPUCondCodeToString(SPCC::CondCodes CC) {
 //  switch (CC) {

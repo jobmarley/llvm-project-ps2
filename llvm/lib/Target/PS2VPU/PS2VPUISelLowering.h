@@ -20,7 +20,7 @@
 namespace llvm {
 class PS2VPUSubtarget;
 
-namespace SPISD {
+namespace PS2VPUISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   CMPICC,     // Compare two GPR operands, set icc+xcc.
@@ -175,6 +175,8 @@ public:
 
   //SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
 
+  SDValue LowerSRA(SDValue Op, SelectionDAG &DAG) const;
+
   //SDValue PerformBITCASTCombine(SDNode *N, DAGCombinerInfo &DCI) const;
 
   SDValue bitcastConstantFPToInt(ConstantFPSDNode *C, const SDLoc &DL,
@@ -204,6 +206,8 @@ public:
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;
 
+   MachineBasicBlock *expandBrCCPseudo(
+      MachineInstr &MI, MachineBasicBlock *BB) const;
   //MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
   //                                  unsigned BROpcode) const;
 };
