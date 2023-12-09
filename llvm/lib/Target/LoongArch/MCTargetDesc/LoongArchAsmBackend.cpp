@@ -17,14 +17,14 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCELFObjectWriter.h"
 #include "llvm/MC/MCValue.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/EndianStream.h"
 
 #define DEBUG_TYPE "loongarch-asmbackend"
 
 using namespace llvm;
 
-Optional<MCFixupKind> LoongArchAsmBackend::getFixupKind(StringRef Name) const {
+std::optional<MCFixupKind>
+LoongArchAsmBackend::getFixupKind(StringRef Name) const {
   if (STI.getTargetTriple().isOSBinFormatELF()) {
     auto Type = llvm::StringSwitch<unsigned>(Name)
 #define ELF_RELOC(X, Y) .Case(#X, Y)
@@ -37,7 +37,7 @@ Optional<MCFixupKind> LoongArchAsmBackend::getFixupKind(StringRef Name) const {
     if (Type != -1u)
       return static_cast<MCFixupKind>(FirstLiteralRelocationKind + Type);
   }
-  return None;
+  return std::nullopt;
 }
 
 const MCFixupKindInfo &
@@ -77,6 +77,11 @@ LoongArchAsmBackend::getFixupKindInfo(MCFixupKind Kind) const {
   return Infos[Kind - FirstTargetFixupKind];
 }
 
+static void reportOutOfRangeError(MCContext &Ctx, SMLoc Loc, unsigned N) {
+  Ctx.reportError(Loc, "fixup value out of range [" + Twine(llvm::minIntN(N)) +
+                           ", " + Twine(llvm::maxIntN(N)) + "]");
+}
+
 static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
                                  MCContext &Ctx) {
   switch (Fixup.getTargetKind()) {
@@ -89,21 +94,21 @@ static uint64_t adjustFixupValue(const MCFixup &Fixup, uint64_t Value,
     return Value;
   case LoongArch::fixup_loongarch_b16: {
     if (!isInt<18>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportOutOfRangeError(Ctx, Fixup.getLoc(), 18);
     if (Value % 4)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
     return (Value >> 2) & 0xffff;
   }
   case LoongArch::fixup_loongarch_b21: {
     if (!isInt<23>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportOutOfRangeError(Ctx, Fixup.getLoc(), 23);
     if (Value % 4)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
     return ((Value & 0x3fffc) << 8) | ((Value >> 18) & 0x1f);
   }
   case LoongArch::fixup_loongarch_b26: {
     if (!isInt<28>(Value))
-      Ctx.reportError(Fixup.getLoc(), "fixup value out of range");
+      reportOutOfRangeError(Ctx, Fixup.getLoc(), 28);
     if (Value % 4)
       Ctx.reportError(Fixup.getLoc(), "fixup value must be 4-byte aligned");
     return ((Value & 0x3fffc) << 8) | ((Value >> 18) & 0x3ff);
@@ -162,7 +167,7 @@ bool LoongArchAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
     return true;
   switch (Fixup.getTargetKind()) {
   default:
-    return false;
+    return STI.hasFeature(LoongArch::FeatureRelax);
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
@@ -173,20 +178,22 @@ bool LoongArchAsmBackend::shouldForceRelocation(const MCAssembler &Asm,
 
 bool LoongArchAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
                                        const MCSubtargetInfo *STI) const {
-  // Check for byte count not multiple of instruction word size
-  if (Count % 4 != 0)
-    return false;
+  // We mostly follow binutils' convention here: align to 4-byte boundary with a
+  // 0-fill padding.
+  OS.write_zeros(Count % 4);
 
-  // The nop on LoongArch is andi r0, r0, 0.
+  // The remainder is now padded with 4-byte nops.
+  // nop: andi r0, r0, 0
   for (; Count >= 4; Count -= 4)
-    support::endian::write<uint32_t>(OS, 0x03400000, support::little);
+    OS.write("\0\0\x40\x03", 4);
 
   return true;
 }
 
 std::unique_ptr<MCObjectTargetWriter>
 LoongArchAsmBackend::createObjectTargetWriter() const {
-  return createLoongArchELFObjectWriter(OSABI, Is64Bit);
+  return createLoongArchELFObjectWriter(
+      OSABI, Is64Bit, STI.hasFeature(LoongArch::FeatureRelax));
 }
 
 MCAsmBackend *llvm::createLoongArchAsmBackend(const Target &T,
@@ -195,5 +202,5 @@ MCAsmBackend *llvm::createLoongArchAsmBackend(const Target &T,
                                               const MCTargetOptions &Options) {
   const Triple &TT = STI.getTargetTriple();
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TT.getOS());
-  return new LoongArchAsmBackend(STI, OSABI, TT.isArch64Bit());
+  return new LoongArchAsmBackend(STI, OSABI, TT.isArch64Bit(), Options);
 }

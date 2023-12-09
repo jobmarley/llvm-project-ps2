@@ -25,7 +25,7 @@ using namespace mlir;
 
 namespace {
 /// A pass converting MLIR ControlFlow operations into the SPIR-V dialect.
-class ConvertControlFlowToSPIRVPass
+class ConvertControlFlowToSPIRVPass final
     : public impl::ConvertControlFlowToSPIRVBase<
           ConvertControlFlowToSPIRVPass> {
   void runOnOperation() override;
@@ -41,8 +41,10 @@ void ConvertControlFlowToSPIRVPass::runOnOperation() {
       SPIRVConversionTarget::get(targetAttr);
 
   SPIRVConversionOptions options;
-  options.emulateNon32BitScalarTypes = this->emulateNon32BitScalarTypes;
+  options.emulateLT32BitScalarTypes = this->emulateLT32BitScalarTypes;
   SPIRVTypeConverter typeConverter(targetAttr, options);
+
+  // TODO: We should also take care of block argument type conversion.
 
   RewritePatternSet patterns(context);
   cf::populateControlFlowToSPIRVPatterns(typeConverter, patterns);

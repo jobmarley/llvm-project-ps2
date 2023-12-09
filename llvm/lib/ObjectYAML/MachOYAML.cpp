@@ -14,9 +14,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Format.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
 #include <cinttypes>
 #include <cstdint>
 #include <cstring>
@@ -30,7 +30,7 @@ bool MachOYAML::LinkEditData::isEmpty() const {
                   WeakBindOpcodes.size() + LazyBindOpcodes.size() +
                   ExportTrie.Children.size() + NameList.size() +
                   StringTable.size() + FunctionStarts.size() +
-                  DataInCode.size();
+                  ChainedFixups.size() + DataInCode.size();
 }
 
 namespace yaml {
@@ -167,6 +167,7 @@ void MappingTraits<MachOYAML::LinkEditData>::mapping(
   IO.mapOptional("StringTable", LinkEditData.StringTable);
   IO.mapOptional("IndirectSymbols", LinkEditData.IndirectSymbols);
   IO.mapOptional("FunctionStarts", LinkEditData.FunctionStarts);
+  IO.mapOptional("ChainedFixups", LinkEditData.ChainedFixups);
   IO.mapOptional("DataInCode", LinkEditData.DataInCode);
 }
 
@@ -626,7 +627,8 @@ void MappingTraits<MachO::fileset_entry_command>::mapping(
     IO &IO, MachO::fileset_entry_command &LoadCommand) {
   IO.mapRequired("vmaddr", LoadCommand.vmaddr);
   IO.mapRequired("fileoff", LoadCommand.fileoff);
-  IO.mapRequired("id", LoadCommand.entry_id);
+  IO.mapRequired("id", LoadCommand.entry_id.offset);
+  IO.mapOptional("reserved", LoadCommand.reserved);
 }
 
 } // end namespace yaml

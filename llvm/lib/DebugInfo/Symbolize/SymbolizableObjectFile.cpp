@@ -12,7 +12,6 @@
 
 #include "llvm/DebugInfo/Symbolize/SymbolizableObjectFile.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/BinaryFormat/COFF.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
 #include "llvm/Object/COFF.h"
@@ -21,6 +20,7 @@
 #include "llvm/Object/SymbolSize.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/DataExtractor.h"
+#include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 
 using namespace llvm;
@@ -349,6 +349,19 @@ std::vector<DILocal> SymbolizableObjectFile::symbolizeFrame(
     ModuleOffset.SectionIndex =
         getModuleSectionIndexForAddress(ModuleOffset.Address);
   return DebugInfoContext->getLocalsForAddress(ModuleOffset);
+}
+
+std::vector<object::SectionedAddress>
+SymbolizableObjectFile::findSymbol(StringRef Symbol) const {
+  std::vector<object::SectionedAddress> Result;
+  for (const SymbolDesc &Sym : Symbols) {
+    if (Sym.Name.equals(Symbol)) {
+      object::SectionedAddress A{Sym.Addr,
+                                 getModuleSectionIndexForAddress(Sym.Addr)};
+      Result.push_back(A);
+    }
+  }
+  return Result;
 }
 
 /// Search for the first occurence of specified Address in ObjectFile.

@@ -76,6 +76,7 @@ public:
   std::string ABIName;
   std::string AssemblyLanguage;
   std::string SplitDwarfFile;
+  std::string AsSecureLogFile;
 
   const char *Argv0 = nullptr;
   ArrayRef<std::string> CommandLineArgs;
@@ -83,6 +84,13 @@ public:
   /// Additional paths to search for `.include` directives when using the
   /// integrated assembler.
   std::vector<std::string> IASSearchPaths;
+
+  // Whether to emit compact-unwind for non-canonical personality
+  // functions on Darwins.
+  bool EmitCompactUnwindNonCanonical : 1;
+
+  // Whether or not to use full register names on PowerPC.
+  bool PPCUseFullRegisterNames : 1;
 
   MCTargetOptions();
 

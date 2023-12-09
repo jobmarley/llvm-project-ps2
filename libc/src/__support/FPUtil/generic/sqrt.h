@@ -6,19 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC_SUPPORT_FPUTIL_GENERIC_SQRT_H
-#define LLVM_LIBC_SRC_SUPPORT_FPUTIL_GENERIC_SQRT_H
+#ifndef LLVM_LIBC_SRC___SUPPORT_FPUTIL_GENERIC_SQRT_H
+#define LLVM_LIBC_SRC___SUPPORT_FPUTIL_GENERIC_SQRT_H
 
 #include "sqrt_80_bit_long_double.h"
 #include "src/__support/CPP/bit.h"
 #include "src/__support/CPP/type_traits.h"
 #include "src/__support/FPUtil/FEnvImpl.h"
 #include "src/__support/FPUtil/FPBits.h"
-#include "src/__support/FPUtil/PlatformDefs.h"
+#include "src/__support/FPUtil/rounding_mode.h"
 #include "src/__support/UInt128.h"
-#include "src/__support/builtin_wrappers.h"
+#include "src/__support/bit.h"
+#include "src/__support/common.h"
 
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE {
 namespace fputil {
 
 namespace internal {
@@ -34,8 +35,8 @@ template <> struct SpecialLongDouble<long double> {
 #endif // SPECIAL_X86_LONG_DOUBLE
 
 template <typename T>
-static inline void normalize(int &exponent,
-                             typename FPBits<T>::UIntType &mantissa) {
+LIBC_INLINE void normalize(int &exponent,
+                           typename FPBits<T>::UIntType &mantissa) {
   const int shift = unsafe_clz(mantissa) -
                     (8 * sizeof(mantissa) - 1 - MantissaWidth<T>::VALUE);
   exponent -= shift;
@@ -44,12 +45,12 @@ static inline void normalize(int &exponent,
 
 #ifdef LONG_DOUBLE_IS_DOUBLE
 template <>
-inline void normalize<long double>(int &exponent, uint64_t &mantissa) {
+LIBC_INLINE void normalize<long double>(int &exponent, uint64_t &mantissa) {
   normalize<double>(exponent, mantissa);
 }
 #elif !defined(SPECIAL_X86_LONG_DOUBLE)
 template <>
-inline void normalize<long double>(int &exponent, UInt128 &mantissa) {
+LIBC_INLINE void normalize<long double>(int &exponent, UInt128 &mantissa) {
   const uint64_t hi_bits = static_cast<uint64_t>(mantissa >> 64);
   const int shift = hi_bits
                         ? (unsafe_clz(hi_bits) - 15)
@@ -64,7 +65,7 @@ inline void normalize<long double>(int &exponent, UInt128 &mantissa) {
 // Correctly rounded IEEE 754 SQRT for all rounding modes.
 // Shift-and-add algorithm.
 template <typename T>
-static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
+LIBC_INLINE cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
 
   if constexpr (internal::SpecialLongDouble<T>::VALUE) {
     // Special 80-bit long double.
@@ -79,7 +80,7 @@ static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
     if (bits.is_inf_or_nan()) {
       if (bits.get_sign() && (bits.get_mantissa() == 0)) {
         // sqrt(-Inf) = NaN
-        return FPBits<T>::build_nan(ONE >> 1);
+        return FPBits<T>::build_quiet_nan(ONE >> 1);
       } else {
         // sqrt(NaN) = NaN
         // sqrt(+Inf) = +Inf
@@ -91,7 +92,7 @@ static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
       return x;
     } else if (bits.get_sign()) {
       // sqrt( negative numbers ) = NaN
-      return FPBits<T>::build_nan(ONE >> 1);
+      return FPBits<T>::build_quiet_nan(ONE >> 1);
     } else {
       int x_exp = bits.get_exponent();
       UIntType x_mant = bits.get_mantissa();
@@ -135,7 +136,7 @@ static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
       }
 
       // We compute one more iteration in order to round correctly.
-      bool lsb = y & 1; // Least significant bit
+      bool lsb = static_cast<bool>(y & 1); // Least significant bit
       bool rb = false;  // Round bit
       r <<= 2;
       UIntType tmp = (y << 2) + 1;
@@ -149,7 +150,7 @@ static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
 
       y = (y - ONE) | (static_cast<UIntType>(x_exp) << MantissaWidth<T>::VALUE);
 
-      switch (get_round()) {
+      switch (quick_get_round()) {
       case FE_TONEAREST:
         // Round to nearest, ties to even
         if (rb && (lsb || (r != 0)))
@@ -167,6 +168,6 @@ static inline cpp::enable_if_t<cpp::is_floating_point_v<T>, T> sqrt(T x) {
 }
 
 } // namespace fputil
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE
 
-#endif // LLVM_LIBC_SRC_SUPPORT_FPUTIL_GENERIC_SQRT_H
+#endif // LLVM_LIBC_SRC___SUPPORT_FPUTIL_GENERIC_SQRT_H

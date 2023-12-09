@@ -14,7 +14,6 @@
 #include "PPC.h"
 #include "PPCInstrInfo.h"
 #include "PPCSubtarget.h"
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -38,6 +37,8 @@ STATISTIC(NumberOfSelfCopies,
           "Number of self copy instructions eliminated");
 STATISTIC(NumFrameOffFoldInPreEmit,
           "Number of folding frame offset by using r+r in pre-emit peephole");
+STATISTIC(NumCmpsInPreEmit,
+          "Number of compares eliminated in pre-emit peephole");
 
 static cl::opt<bool>
 EnablePCRelLinkerOpt("ppc-pcrel-linker-opt", cl::Hidden, cl::init(true),
@@ -493,7 +494,8 @@ static bool hasPCRelativeForm(MachineInstr &Use) {
             }
           }
           MachineInstr *DefMIToErase = nullptr;
-          if (TII->convertToImmediateForm(MI, &DefMIToErase)) {
+          SmallSet<Register, 4> UpdatedRegs;
+          if (TII->convertToImmediateForm(MI, UpdatedRegs, &DefMIToErase)) {
             Changed = true;
             NumRRConvertedInPreEmit++;
             LLVM_DEBUG(dbgs() << "Converted instruction to imm form: ");
@@ -507,6 +509,13 @@ static bool hasPCRelativeForm(MachineInstr &Use) {
             NumFrameOffFoldInPreEmit++;
             LLVM_DEBUG(dbgs() << "Frame offset folding by using index form: ");
             LLVM_DEBUG(MI.dump());
+          }
+          if (TII->optimizeCmpPostRA(MI)) {
+            Changed = true;
+            NumCmpsInPreEmit++;
+            LLVM_DEBUG(dbgs() << "Optimize compare by using record form: ");
+            LLVM_DEBUG(MI.dump());
+            InstrsToErase.push_back(&MI);
           }
         }
 

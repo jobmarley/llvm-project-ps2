@@ -10,11 +10,9 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/Config/config.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -22,6 +20,8 @@
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Testing/Support/SupportHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -436,7 +436,7 @@ TEST(CommandLineTest, HideUnrelatedOptionsMulti) {
   const cl::OptionCategory *VisibleCategories[] = {&TestCategory,
                                                    &TestCategory2};
 
-  cl::HideUnrelatedOptions(makeArrayRef(VisibleCategories));
+  cl::HideUnrelatedOptions(ArrayRef(VisibleCategories));
 
   ASSERT_EQ(cl::ReallyHidden, TestOption1.getOptionHiddenFlag())
       << "Failed to hide extra option.";
@@ -523,6 +523,59 @@ TEST(CommandLineTest, LookupFailsInWrongSubCommand) {
   EXPECT_FALSE(cl::ParseCommandLineOptions(3, args, StringRef(), &OS));
   OS.flush();
   EXPECT_FALSE(Errs.empty());
+}
+
+TEST(CommandLineTest, TopLevelOptInSubcommand) {
+  enum LiteralOptionEnum {
+    foo,
+    bar,
+    baz,
+  };
+
+  cl::ResetCommandLineParser();
+
+  // This is a top-level option and not associated with a subcommand.
+  // A command line using subcommand should parse both subcommand options and
+  // top-level options.  A valid use case is that users of llvm command line
+  // tools should be able to specify top-level options defined in any library.
+  StackOption<std::string> TopLevelOpt("str", cl::init("txt"),
+                                       cl::desc("A top-level option."));
+
+  StackSubCommand SC("sc", "Subcommand");
+  StackOption<std::string> PositionalOpt(
+      cl::Positional, cl::desc("positional argument test coverage"),
+      cl::sub(SC));
+  StackOption<LiteralOptionEnum> LiteralOpt(
+      cl::desc("literal argument test coverage"), cl::sub(SC), cl::init(bar),
+      cl::values(clEnumVal(foo, "foo"), clEnumVal(bar, "bar"),
+                 clEnumVal(baz, "baz")));
+  StackOption<bool> EnableOpt("enable", cl::sub(SC), cl::init(false));
+  StackOption<int> ThresholdOpt("threshold", cl::sub(SC), cl::init(1));
+
+  const char *PositionalOptVal = "input-file";
+  const char *args[] = {"prog",    "sc",        PositionalOptVal,
+                        "-enable", "--str=csv", "--threshold=2"};
+
+  // cl::ParseCommandLineOptions returns true on success. Otherwise, it will
+  // print the error message to stderr and exit in this setting (`Errs` ostream
+  // is not set).
+  ASSERT_TRUE(cl::ParseCommandLineOptions(sizeof(args) / sizeof(args[0]), args,
+                                          StringRef()));
+  EXPECT_STREQ(PositionalOpt.getValue().c_str(), PositionalOptVal);
+  EXPECT_TRUE(EnableOpt);
+  // Tests that the value of `str` option is `csv` as specified.
+  EXPECT_STREQ(TopLevelOpt.getValue().c_str(), "csv");
+  EXPECT_EQ(ThresholdOpt, 2);
+
+  for (auto &[LiteralOptVal, WantLiteralOpt] :
+       {std::pair{"--bar", bar}, {"--foo", foo}, {"--baz", baz}}) {
+    const char *args[] = {"prog", "sc", LiteralOptVal};
+    ASSERT_TRUE(cl::ParseCommandLineOptions(sizeof(args) / sizeof(args[0]),
+                                            args, StringRef()));
+
+    // Tests that literal options are parsed correctly.
+    EXPECT_EQ(LiteralOpt, WantLiteralOpt);
+  }
 }
 
 TEST(CommandLineTest, AddToAllSubCommands) {
@@ -740,7 +793,7 @@ TEST(CommandLineTest, DefaultOptions) {
   StackOption<std::string> SC2_Foo("foo", cl::sub(SC2));
 
   const char *args0[] = {"prog", "-b", "args0 bar string", "-f"};
-  EXPECT_TRUE(cl::ParseCommandLineOptions(sizeof(args0) / sizeof(char *), args0,
+  EXPECT_TRUE(cl::ParseCommandLineOptions(std::size(args0), args0,
                                           StringRef(), &llvm::nulls()));
   EXPECT_EQ(Bar, "args0 bar string");
   EXPECT_TRUE(Foo);
@@ -750,7 +803,7 @@ TEST(CommandLineTest, DefaultOptions) {
   cl::ResetAllOptionOccurrences();
 
   const char *args1[] = {"prog", "sc1", "-b", "-bar", "args1 bar string", "-f"};
-  EXPECT_TRUE(cl::ParseCommandLineOptions(sizeof(args1) / sizeof(char *), args1,
+  EXPECT_TRUE(cl::ParseCommandLineOptions(std::size(args1), args1,
                                           StringRef(), &llvm::nulls()));
   EXPECT_EQ(Bar, "args1 bar string");
   EXPECT_TRUE(Foo);
@@ -766,7 +819,7 @@ TEST(CommandLineTest, DefaultOptions) {
 
   const char *args2[] = {"prog", "sc2", "-b", "args2 bar string",
                          "-f", "-foo", "foo string"};
-  EXPECT_TRUE(cl::ParseCommandLineOptions(sizeof(args2) / sizeof(char *), args2,
+  EXPECT_TRUE(cl::ParseCommandLineOptions(std::size(args2), args2,
                                           StringRef(), &llvm::nulls()));
   EXPECT_EQ(Bar, "args2 bar string");
   EXPECT_TRUE(Foo);
@@ -871,7 +924,7 @@ TEST(CommandLineTest, ResponseFiles) {
   llvm::BumpPtrAllocator A;
   llvm::cl::ExpansionContext ECtx(A, llvm::cl::TokenizeGNUCommandLine);
   ECtx.setVFS(&FS).setCurrentDir(TestRoot).setRelativeNames(true);
-  ASSERT_TRUE(ECtx.expandResponseFiles(Argv));
+  ASSERT_FALSE((bool)ECtx.expandResponseFiles(Argv));
   EXPECT_THAT(Argv, testing::Pointwise(
                         StringEquality(),
                         {"test/test", "-flag_1", "-option_1", "-option_2",
@@ -933,7 +986,14 @@ TEST(CommandLineTest, RecursiveResponseFiles) {
 #endif
   llvm::cl::ExpansionContext ECtx(A, Tokenizer);
   ECtx.setVFS(&FS).setCurrentDir(TestRoot);
-  ASSERT_FALSE(ECtx.expandResponseFiles(Argv));
+  llvm::Error Err = ECtx.expandResponseFiles(Argv);
+  ASSERT_TRUE((bool)Err);
+  SmallString<128> FilePath = SelfFilePath;
+  std::error_code EC = FS.makeAbsolute(FilePath);
+  ASSERT_FALSE((bool)EC);
+  std::string ExpectedMessage =
+      std::string("recursive expansion of: '") + std::string(FilePath) + "'";
+  ASSERT_TRUE(toString(std::move(Err)) == ExpectedMessage);
 
   EXPECT_THAT(Argv,
               testing::Pointwise(StringEquality(),
@@ -971,7 +1031,7 @@ TEST(CommandLineTest, ResponseFilesAtArguments) {
   BumpPtrAllocator A;
   llvm::cl::ExpansionContext ECtx(A, cl::TokenizeGNUCommandLine);
   ECtx.setVFS(&FS).setCurrentDir(TestRoot);
-  ASSERT_FALSE(ECtx.expandResponseFiles(Argv));
+  ASSERT_FALSE((bool)ECtx.expandResponseFiles(Argv));
 
   // ASSERT instead of EXPECT to prevent potential out-of-bounds access.
   ASSERT_EQ(Argv.size(), 1 + NON_RSP_AT_ARGS + 2);
@@ -1005,7 +1065,7 @@ TEST(CommandLineTest, ResponseFileRelativePath) {
   BumpPtrAllocator A;
   llvm::cl::ExpansionContext ECtx(A, cl::TokenizeGNUCommandLine);
   ECtx.setVFS(&FS).setCurrentDir(TestRoot).setRelativeNames(true);
-  ASSERT_TRUE(ECtx.expandResponseFiles(Argv));
+  ASSERT_FALSE((bool)ECtx.expandResponseFiles(Argv));
   EXPECT_THAT(Argv,
               testing::Pointwise(StringEquality(), {"test/test", "-flag"}));
 }
@@ -1025,7 +1085,7 @@ TEST(CommandLineTest, ResponseFileEOLs) {
   llvm::cl::ExpansionContext ECtx(A, cl::TokenizeWindowsCommandLine);
   ECtx.setVFS(&FS).setCurrentDir(TestRoot).setMarkEOLs(true).setRelativeNames(
       true);
-  ASSERT_TRUE(ECtx.expandResponseFiles(Argv));
+  ASSERT_FALSE((bool)ECtx.expandResponseFiles(Argv));
   const char *Expected[] = {"clang", "-Xclang", "-Wno-whatever", nullptr,
                             "input.cpp"};
   ASSERT_EQ(std::size(Expected), Argv.size());
@@ -1038,7 +1098,33 @@ TEST(CommandLineTest, ResponseFileEOLs) {
   }
 }
 
-TEST(CommandLineTest, SetDefautValue) {
+TEST(CommandLineTest, BadResponseFile) {
+  BumpPtrAllocator A;
+  StringSaver Saver(A);
+  TempDir ADir("dir", /*Unique*/ true);
+  SmallString<128> AFilePath = ADir.path();
+  llvm::sys::path::append(AFilePath, "file.rsp");
+  std::string AFileExp = std::string("@") + std::string(AFilePath.str());
+  SmallVector<const char *, 2> Argv = {"clang", AFileExp.c_str()};
+
+  bool Res = cl::ExpandResponseFiles(Saver, cl::TokenizeGNUCommandLine, Argv);
+  ASSERT_TRUE(Res);
+  ASSERT_EQ(2U, Argv.size());
+  ASSERT_STREQ(Argv[0], "clang");
+  ASSERT_STREQ(Argv[1], AFileExp.c_str());
+
+#if !defined(_AIX) && !defined(__MVS__)
+  std::string ADirExp = std::string("@") + std::string(ADir.path());
+  Argv = {"clang", ADirExp.c_str()};
+  Res = cl::ExpandResponseFiles(Saver, cl::TokenizeGNUCommandLine, Argv);
+  ASSERT_FALSE(Res);
+  ASSERT_EQ(2U, Argv.size());
+  ASSERT_STREQ(Argv[0], "clang");
+  ASSERT_STREQ(Argv[1], ADirExp.c_str());
+#endif
+}
+
+TEST(CommandLineTest, SetDefaultValue) {
   cl::ResetCommandLineParser();
 
   StackOption<std::string> Opt1("opt1", cl::init("true"));
@@ -1046,14 +1132,31 @@ TEST(CommandLineTest, SetDefautValue) {
   cl::alias Alias("alias", llvm::cl::aliasopt(Opt2));
   StackOption<int> Opt3("opt3", cl::init(3));
 
-  const char *args[] = {"prog", "-opt1=false", "-opt2", "-opt3"};
+  llvm::SmallVector<int, 3> IntVals = {1, 2, 3};
+  llvm::SmallVector<std::string, 3> StrVals = {"foo", "bar", "baz"};
+
+  StackOption<int, cl::list<int>> List1(
+      "list1", cl::list_init<int>(llvm::ArrayRef<int>(IntVals)),
+      cl::CommaSeparated);
+  StackOption<std::string, cl::list<std::string>> List2(
+      "list2", cl::list_init<std::string>(llvm::ArrayRef<std::string>(StrVals)),
+      cl::CommaSeparated);
+  cl::alias ListAlias("list-alias", llvm::cl::aliasopt(List2));
+
+  const char *args[] = {"prog",   "-opt1=false", "-list1", "4",
+                        "-list1", "5,6",         "-opt2",  "-opt3"};
 
   EXPECT_TRUE(
-    cl::ParseCommandLineOptions(2, args, StringRef(), &llvm::nulls()));
+      cl::ParseCommandLineOptions(7, args, StringRef(), &llvm::nulls()));
 
   EXPECT_EQ(Opt1, "false");
   EXPECT_TRUE(Opt2);
   EXPECT_EQ(Opt3, 3);
+
+  for (size_t I = 0, E = IntVals.size(); I < E; ++I) {
+    EXPECT_EQ(IntVals[I] + 3, List1[I]);
+    EXPECT_EQ(StrVals[I], List2[I]);
+  }
 
   Opt2 = false;
   Opt3 = 1;
@@ -1071,7 +1174,13 @@ TEST(CommandLineTest, SetDefautValue) {
   EXPECT_EQ(Opt1, "true");
   EXPECT_TRUE(Opt2);
   EXPECT_EQ(Opt3, 3);
+  for (size_t I = 0, E = IntVals.size(); I < E; ++I) {
+    EXPECT_EQ(IntVals[I], List1[I]);
+    EXPECT_EQ(StrVals[I], List2[I]);
+  }
+
   Alias.removeArgument();
+  ListAlias.removeArgument();
 }
 
 TEST(CommandLineTest, ReadConfigFile) {
@@ -1122,9 +1231,9 @@ TEST(CommandLineTest, ReadConfigFile) {
 
   llvm::BumpPtrAllocator A;
   llvm::cl::ExpansionContext ECtx(A, cl::tokenizeConfigFile);
-  bool Result = ECtx.readConfigFile(ConfigFile.path(), Argv);
+  llvm::Error Result = ECtx.readConfigFile(ConfigFile.path(), Argv);
 
-  EXPECT_TRUE(Result);
+  EXPECT_FALSE((bool)Result);
   EXPECT_EQ(Argv.size(), 13U);
   EXPECT_STREQ(Argv[0], "-option_1");
   EXPECT_STREQ(Argv[1],
@@ -1238,7 +1347,8 @@ struct AutoDeleteFile {
   }
 };
 
-class PrintOptionInfoTest : public ::testing::Test {
+template <void (*Func)(const cl::Option &)>
+class PrintOptionTestBase : public ::testing::Test {
 public:
   // Return std::string because the output of a failing EXPECT check is
   // unreadable for StringRef. It also avoids any lifetime issues.
@@ -1253,7 +1363,7 @@ public:
 
       StackOption<OptionValue> TestOption(Opt, cl::desc(HelpText),
                                           OptionAttributes...);
-      printOptionInfo(TestOption, 26);
+      Func(TestOption);
       outs().flush();
     }
     auto Buffer = MemoryBuffer::getFile(File.FilePath);
@@ -1265,14 +1375,15 @@ public:
   enum class OptionValue { Val };
   const StringRef Opt = "some-option";
   const StringRef HelpText = "some help";
+};
 
-private:
   // This is a workaround for cl::Option sub-classes having their
   // printOptionInfo functions private.
-  void printOptionInfo(const cl::Option &O, size_t Width) {
-    O.printOptionInfo(Width);
-  }
-};
+void printOptionInfo(const cl::Option &O) {
+  O.printOptionInfo(/*GlobalWidth=*/26);
+}
+
+using PrintOptionInfoTest = PrintOptionTestBase<printOptionInfo>;
 
 TEST_F(PrintOptionInfoTest, PrintOptionInfoValueOptionalWithoutSentinel) {
   std::string Output =
@@ -1346,7 +1457,7 @@ TEST_F(PrintOptionInfoTest, PrintOptionInfoMultilineValueDescription) {
                                     "which has a really long description\n"
                                     "thus it is multi-line."),
                          clEnumValN(OptionValue::Val, "",
-                                    "This is an unnamed enum value option\n"
+                                    "This is an unnamed enum value\n"
                                     "Should be indented as well")));
 
   // clang-format off
@@ -1355,9 +1466,38 @@ TEST_F(PrintOptionInfoTest, PrintOptionInfoMultilineValueDescription) {
              "    =v1                 -   This is the first enum value\n"
              "                            which has a really long description\n"
              "                            thus it is multi-line.\n"
-             "    =<empty>            -   This is an unnamed enum value option\n"
+             "    =<empty>            -   This is an unnamed enum value\n"
              "                            Should be indented as well\n").str());
   // clang-format on
+}
+
+void printOptionValue(const cl::Option &O) {
+  O.printOptionValue(/*GlobalWidth=*/12, /*Force=*/true);
+}
+
+using PrintOptionValueTest = PrintOptionTestBase<printOptionValue>;
+
+TEST_F(PrintOptionValueTest, PrintOptionDefaultValue) {
+  std::string Output =
+      runTest(cl::init(OptionValue::Val),
+              cl::values(clEnumValN(OptionValue::Val, "v1", "desc1")));
+
+  EXPECT_EQ(Output, ("    --" + Opt + " = v1       (default: v1)\n").str());
+}
+
+TEST_F(PrintOptionValueTest, PrintOptionNoDefaultValue) {
+  std::string Output =
+      runTest(cl::values(clEnumValN(OptionValue::Val, "v1", "desc1")));
+
+  // Note: the option still has a (zero-initialized) value, but the default
+  // is invalid and doesn't match any value.
+  EXPECT_EQ(Output, ("    --" + Opt + " = v1       (default: )\n").str());
+}
+
+TEST_F(PrintOptionValueTest, PrintOptionUnknownValue) {
+  std::string Output = runTest(cl::init(OptionValue::Val));
+
+  EXPECT_EQ(Output, ("    --" + Opt + " = *unknown option value*\n").str());
 }
 
 class GetOptionWidthTest : public ::testing::Test {

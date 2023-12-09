@@ -76,6 +76,21 @@ class VOPD_Base<dag outs, dag ins, string asm, VOP_Pseudo VDX, VOP_Pseudo VDY,
   let ReadsModeReg = !or(VDX.ReadsModeReg, VDY.ReadsModeReg);
   let mayRaiseFPException = ReadsModeReg;
 
+  // V_DUAL_FMAC and V_DUAL_DOT2ACC_F32_F16 need a dummy src2 tied to dst for
+  // passes to track its uses. Its presence does not affect VOPD formation rules
+  // because the rules for src2 and dst are the same. src2X and src2Y should not
+  // be encoded.
+  bit hasSrc2AccX = !or(!eq(VDX.Mnemonic, "v_fmac_f32"), !eq(VDX.Mnemonic, "v_dot2c_f32_f16"));
+  bit hasSrc2AccY = !or(!eq(VDY.Mnemonic, "v_fmac_f32"), !eq(VDY.Mnemonic, "v_dot2c_f32_f16"));
+  string ConstraintsX = !if(hasSrc2AccX, "$src2X = $vdstX", "");
+  string ConstraintsY = !if(hasSrc2AccY, "$src2Y = $vdstY", "");
+  let Constraints =
+      ConstraintsX # !if(!and(hasSrc2AccX, hasSrc2AccY), ", ", "") # ConstraintsY;
+  string DisableEncodingX = !if(hasSrc2AccX, "$src2X", "");
+  string DisableEncodingY = !if(hasSrc2AccY, "$src2Y", "");
+  let DisableEncoding =
+      DisableEncodingX # !if(!and(hasSrc2AccX, hasSrc2AccY), ", ", "") # DisableEncodingY;
+
   let Uses = RegListUnion<VDX.Uses, VDY.Uses>.ret;
   let Defs = RegListUnion<VDX.Defs, VDY.Defs>.ret;
   let SchedRW = !listconcat(VDX.SchedRW, VDY.SchedRW);
@@ -96,6 +111,7 @@ class VOPD_MADK<dag outs, dag ins, string asm, VOP_Pseudo VDX, VOP_Pseudo VDY,
   let Inst{16-9} = !if (!eq(VDX.Mnemonic, "v_mov_b32"), 0x0, vsrc1X);
   let Inst{48-41} = !if (!eq(VDY.Mnemonic, "v_mov_b32"), 0x0, vsrc1Y);
   let Size = 12;
+  let FixedSize = 1;
 }
 
 // V_DUAL_DOT2ACC_F32_BF16 is a legal instruction, but V_DOT2ACC_F32_BF16 is

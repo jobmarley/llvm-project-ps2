@@ -405,10 +405,6 @@ void ProcessWindows::RefreshStateAfterStop() {
                "{1:x} with watchpoint {2}",
                m_session_data->m_debugger->GetProcess().GetProcessId(), pc, id);
 
-      if (lldb::WatchpointSP wp_sp =
-              GetTarget().GetWatchpointList().FindByID(id))
-        wp_sp->SetHardwareIndex(slot_id);
-
       stop_info = StopInfo::CreateStopReasonWithWatchpointID(
           *stop_thread, id, m_watchpoints[id].address);
       stop_thread->SetStopInfo(stop_info);
@@ -835,15 +831,8 @@ void ProcessWindows::OnDebuggerError(const Status &error, uint32_t type) {
   }
 }
 
-Status ProcessWindows::GetWatchpointSupportInfo(uint32_t &num) {
-  num = RegisterContextWindows::GetNumHardwareBreakpointSlots();
-  return {};
-}
-
-Status ProcessWindows::GetWatchpointSupportInfo(uint32_t &num, bool &after) {
-  num = RegisterContextWindows::GetNumHardwareBreakpointSlots();
-  after = RegisterContextWindows::DoHardwareBreakpointsTriggerAfter();
-  return {};
+std::optional<uint32_t> ProcessWindows::GetWatchpointSlotCount() {
+  return RegisterContextWindows::GetNumHardwareBreakpointSlots();
 }
 
 Status ProcessWindows::EnableWatchpoint(Watchpoint *wp, bool notify) {

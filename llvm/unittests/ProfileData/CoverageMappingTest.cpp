@@ -23,14 +23,17 @@ using namespace llvm;
 using namespace coverage;
 
 [[nodiscard]] static ::testing::AssertionResult
-ErrorEquals(coveragemap_error Expected, Error E) {
+ErrorEquals(Error E, coveragemap_error Expected_Err,
+            const std::string &Expected_Msg = std::string()) {
   coveragemap_error Found;
+  std::string Msg;
   std::string FoundMsg;
   handleAllErrors(std::move(E), [&](const CoverageMapError &CME) {
     Found = CME.get();
+    Msg = CME.getMessage();
     FoundMsg = CME.message();
   });
-  if (Expected == Found)
+  if (Expected_Err == Found && Msg == Expected_Msg)
     return ::testing::AssertionSuccess();
   return ::testing::AssertionFailure() << "error: " << FoundMsg << "\n";
 }
@@ -213,7 +216,7 @@ struct CoverageMappingTest : ::testing::TestWithParam<std::tuple<bool, bool>> {
     Filenames.resize(Files.size() + 1);
     for (const auto &E : Files)
       Filenames[E.getValue()] = E.getKey().str();
-    ArrayRef<std::string> FilenameRefs = llvm::makeArrayRef(Filenames);
+    ArrayRef<std::string> FilenameRefs = llvm::ArrayRef(Filenames);
     RawCoverageMappingReader Reader(Coverage, FilenameRefs, Data.Filenames,
                                     Data.Expressions, Data.Regions);
     EXPECT_THAT_ERROR(Reader.read(), Succeeded());
@@ -279,7 +282,7 @@ TEST_P(CoverageMappingTest, basic_write_read) {
   InputFunctionCoverageData &Input = InputFunctions.back();
   OutputFunctionCoverageData &Output = OutputFunctions.back();
 
-  size_t N = makeArrayRef(Input.Regions).size();
+  size_t N = ArrayRef(Input.Regions).size();
   ASSERT_EQ(N, Output.Regions.size());
   for (size_t I = 0; I < N; ++I) {
     ASSERT_EQ(Input.Regions[I].Count, Output.Regions[I].Count);
@@ -342,7 +345,8 @@ TEST_P(CoverageMappingTest, load_coverage_with_bogus_function_name) {
   ProfileWriter.addRecord({"", 0x1234, {10}}, Err);
   startFunction("", 0x1234);
   addCMR(Counter::getCounter(0), "foo", 1, 1, 5, 5);
-  EXPECT_TRUE(ErrorEquals(coveragemap_error::malformed, loadCoverageMapping()));
+  EXPECT_TRUE(ErrorEquals(loadCoverageMapping(), coveragemap_error::malformed,
+                          "record function name is empty"));
 }
 
 TEST_P(CoverageMappingTest, load_coverage_for_several_functions) {

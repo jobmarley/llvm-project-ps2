@@ -70,11 +70,8 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/InitializePasses.h"
-#include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/SSAUpdaterBulk.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
@@ -103,10 +100,10 @@ static cl::opt<unsigned> MaxPathLength(
     cl::desc("Max number of blocks searched to find a threading path"),
     cl::Hidden, cl::init(20));
 
-static cl::opt<unsigned> MaxNumPaths(
-    "dfa-max-num-paths",
-    cl::desc("Max number of paths enumerated around a switch"),
-    cl::Hidden, cl::init(200));
+static cl::opt<unsigned>
+    MaxNumPaths("dfa-max-num-paths",
+                cl::desc("Max number of paths enumerated around a switch"),
+                cl::Hidden, cl::init(200));
 
 static cl::opt<unsigned>
     CostThreshold("dfa-cost-threshold",
@@ -168,50 +165,7 @@ private:
   OptimizationRemarkEmitter *ORE;
 };
 
-class DFAJumpThreadingLegacyPass : public FunctionPass {
-public:
-  static char ID; // Pass identification
-  DFAJumpThreadingLegacyPass() : FunctionPass(ID) {}
-
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<AssumptionCacheTracker>();
-    AU.addRequired<DominatorTreeWrapperPass>();
-    AU.addPreserved<DominatorTreeWrapperPass>();
-    AU.addRequired<TargetTransformInfoWrapperPass>();
-    AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
-  }
-
-  bool runOnFunction(Function &F) override {
-    if (skipFunction(F))
-      return false;
-
-    AssumptionCache *AC =
-        &getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F);
-    DominatorTree *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-    TargetTransformInfo *TTI =
-        &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
-    OptimizationRemarkEmitter *ORE =
-        &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE();
-
-    return DFAJumpThreading(AC, DT, TTI, ORE).run(F);
-  }
-};
 } // end anonymous namespace
-
-char DFAJumpThreadingLegacyPass::ID = 0;
-INITIALIZE_PASS_BEGIN(DFAJumpThreadingLegacyPass, "dfa-jump-threading",
-                      "DFA Jump Threading", false, false)
-INITIALIZE_PASS_DEPENDENCY(AssumptionCacheTracker)
-INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(OptimizationRemarkEmitterWrapperPass)
-INITIALIZE_PASS_END(DFAJumpThreadingLegacyPass, "dfa-jump-threading",
-                    "DFA Jump Threading", false, false)
-
-// Public interface to the DFA Jump Threading pass
-FunctionPass *llvm::createDFAJumpThreadingPass() {
-  return new DFAJumpThreadingLegacyPass();
-}
 
 namespace {
 
@@ -295,16 +249,20 @@ void unfold(DomTreeUpdater *DTU, SelectInstToUnfold SIToUnfold,
     FT = FalseBlock;
 
     // Update the phi node of SI.
-    SIUse->removeIncomingValue(StartBlock, /* DeletePHIIfEmpty = */ false);
     SIUse->addIncoming(SI->getTrueValue(), TrueBlock);
     SIUse->addIncoming(SI->getFalseValue(), FalseBlock);
 
     // Update any other PHI nodes in EndBlock.
     for (PHINode &Phi : EndBlock->phis()) {
       if (&Phi != SIUse) {
-        Phi.addIncoming(Phi.getIncomingValueForBlock(StartBlock), TrueBlock);
-        Phi.addIncoming(Phi.getIncomingValueForBlock(StartBlock), FalseBlock);
+        Value *OrigValue = Phi.getIncomingValueForBlock(StartBlock);
+        Phi.addIncoming(OrigValue, TrueBlock);
+        Phi.addIncoming(OrigValue, FalseBlock);
       }
+
+      // Remove incoming place of original StartBlock, which comes in a indirect
+      // way (through TrueBlock and FalseBlock) now.
+      Phi.removeIncomingValue(StartBlock, /* DeletePHIIfEmpty = */ false);
     }
   } else {
     BasicBlock *NewBlock = nullptr;
@@ -343,6 +301,7 @@ void unfold(DomTreeUpdater *DTU, SelectInstToUnfold SIToUnfold,
                      {DominatorTree::Insert, StartBlock, FT}});
 
   // The select is now dead.
+  assert(SI->use_empty() && "Select must be dead now");
   SI->eraseFromParent();
 }
 
@@ -512,8 +471,9 @@ private:
     if (!SITerm || !SITerm->isUnconditional())
       return false;
 
-    if (isa<PHINode>(SIUse) &&
-        SIBB->getSingleSuccessor() != cast<Instruction>(SIUse)->getParent())
+    // Only fold the select coming from directly where it is defined.
+    PHINode *PHIUser = dyn_cast<PHINode>(SIUse);
+    if (PHIUser && PHIUser->getIncomingBlock(*SI->use_begin()) != SIBB)
       return false;
 
     // If select will not be sunk during unfolding, and it is in the same basic
@@ -625,7 +585,7 @@ private:
         continue;
 
       PathsType SuccPaths = paths(Succ, Visited, PathDepth + 1);
-      for (PathType Path : SuccPaths) {
+      for (const PathType &Path : SuccPaths) {
         PathType NewPath(Path);
         NewPath.push_front(BB);
         Res.push_back(NewPath);
@@ -724,7 +684,7 @@ private:
 
     // Make DeterminatorBB the first element in Path.
     PathType Path = TPath.getPath();
-    auto ItDet = std::find(Path.begin(), Path.end(), DeterminatorBB);
+    auto ItDet = llvm::find(Path, DeterminatorBB);
     std::rotate(Path.begin(), ItDet, Path.end());
 
     bool IsDetBBSeen = false;
@@ -774,6 +734,10 @@ private:
     CodeMetrics Metrics;
     SwitchInst *Switch = SwitchPaths->getSwitchInst();
 
+    // Don't thread switch without multiple successors.
+    if (Switch->getNumSuccessors() <= 1)
+      return false;
+
     // Note that DuplicateBlockMap is not being used as intended here. It is
     // just being used to ensure (BB, State) pairs are only counted once.
     DuplicateBlockMap DuplicateMap;
@@ -798,7 +762,7 @@ private:
 
       // Otherwise update Metrics for all blocks that will be cloned. If any
       // block is already cloned and would be reused, don't double count it.
-      auto DetIt = std::find(PathBBs.begin(), PathBBs.end(), Determinator);
+      auto DetIt = llvm::find(PathBBs, Determinator);
       for (auto BBIt = DetIt; BBIt != PathBBs.end(); BBIt++) {
         BB = *BBIt;
         VisitedBB = getClonedBB(BB, NextState, DuplicateMap);
@@ -851,6 +815,8 @@ private:
       // using binary search, hence the LogBase2().
       unsigned CondBranches =
           APInt(32, Switch->getNumSuccessors()).ceilLogBase2();
+      assert(CondBranches > 0 &&
+             "The threaded switch must have multiple branches");
       DuplicationCost = Metrics.NumInsts / CondBranches;
     } else {
       // Compared with jump tables, the DFA optimizer removes an indirect branch
@@ -943,7 +909,7 @@ private:
     if (PathBBs.front() == Determinator)
       PathBBs.pop_front();
 
-    auto DetIt = std::find(PathBBs.begin(), PathBBs.end(), Determinator);
+    auto DetIt = llvm::find(PathBBs, Determinator);
     auto Prev = std::prev(DetIt);
     BasicBlock *PrevBB = *Prev;
     for (auto BBIt = DetIt; BBIt != PathBBs.end(); BBIt++) {
@@ -978,7 +944,7 @@ private:
     SSAUpdaterBulk SSAUpdate;
     SmallVector<Use *, 16> UsesToRename;
 
-    for (auto KV : NewDefs) {
+    for (const auto &KV : NewDefs) {
       Instruction *I = KV.first;
       BasicBlock *BB = I->getParent();
       std::vector<Instruction *> Cloned = KV.second;

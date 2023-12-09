@@ -120,7 +120,7 @@ void attachDebugInfo(GlobalVariable &GV, DISubprogram &SP) {
 
 FunctionType *getCheckFunctionType(LLVMContext &Ctx) {
   Type *VoidTy = Type::getVoidTy(Ctx);
-  PointerType *VoidPtrTy = Type::getInt8PtrTy(Ctx);
+  PointerType *VoidPtrTy = PointerType::getUnqual(Ctx);
   return FunctionType::get(VoidTy, VoidPtrTy, false);
 }
 
@@ -151,7 +151,7 @@ bool JMCInstrumenter::runOnModule(Module &M) {
   bool IsELF = ModuleTriple.isOSBinFormatELF();
   assert((IsELF || IsMSVC) && "Unsupported triple for JMC");
   bool UseX86FastCall = IsMSVC && ModuleTriple.getArch() == Triple::x86;
-  const char *const FlagSymbolSection = IsELF ? ".just.my.code" : ".msvcjmc";
+  const char *const FlagSymbolSection = IsELF ? ".data.just.my.code" : ".msvcjmc";
 
   GlobalValue *CheckFunction = nullptr;
   DenseMap<DISubprogram *, Constant *> SavedFlags(8);

@@ -205,7 +205,7 @@ llvm::MDNode *CodeGenTBAA::getTypeInfoHelper(const Type *Ty) {
 
     SmallString<256> OutName;
     llvm::raw_svector_ostream Out(OutName);
-    MContext.mangleTypeName(QualType(ETy, 0), Out);
+    MContext.mangleCanonicalTypeName(QualType(ETy, 0), Out);
     return createScalarTypeNode(OutName, getChar(), Size);
   }
 
@@ -338,7 +338,7 @@ llvm::MDNode *CodeGenTBAA::getBaseTypeInfoHelper(const Type *Ty) {
     using TBAAStructField = llvm::MDBuilder::TBAAStructField;
     SmallVector<TBAAStructField, 4> Fields;
     if (const CXXRecordDecl *CXXRD = dyn_cast<CXXRecordDecl>(RD)) {
-      // Handle C++ base classes. Non-virtual bases can treated a a kind of
+      // Handle C++ base classes. Non-virtual bases can treated a kind of
       // field. Virtual bases are more complex and omitted, but avoid an
       // incomplete view for NewStructPathTBAA.
       if (CodeGenOpts.NewStructPathTBAA && CXXRD->getNumVBases() != 0)
@@ -391,7 +391,7 @@ llvm::MDNode *CodeGenTBAA::getBaseTypeInfoHelper(const Type *Ty) {
     if (Features.CPlusPlus) {
       // Don't use the mangler for C code.
       llvm::raw_svector_ostream Out(OutName);
-      MContext.mangleTypeName(QualType(Ty, 0), Out);
+      MContext.mangleCanonicalTypeName(QualType(Ty, 0), Out);
     } else {
       OutName = RD->getName();
     }

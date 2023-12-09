@@ -85,8 +85,7 @@ struct GCNRegPressure {
     return !(*this == O);
   }
 
-  void print(raw_ostream &OS, const GCNSubtarget *ST = nullptr) const;
-  void dump() const { print(dbgs()); }
+  void dump() const;
 
 private:
   unsigned Value[TOTAL_KINDS];
@@ -95,6 +94,8 @@ private:
 
   friend GCNRegPressure max(const GCNRegPressure &P1,
                             const GCNRegPressure &P2);
+
+  friend Printable print(const GCNRegPressure &RP, const GCNSubtarget *ST);
 };
 
 inline GCNRegPressure max(const GCNRegPressure &P1, const GCNRegPressure &P2) {
@@ -127,35 +128,55 @@ public:
 
   void clearMaxPressure() { MaxPressure.clear(); }
 
-  // returns MaxPressure, resetting it
-  decltype(MaxPressure) moveMaxPressure() {
-    auto Res = MaxPressure;
-    MaxPressure.clear();
-    return Res;
-  }
+  GCNRegPressure getPressure() const { return CurPressure; }
 
   decltype(LiveRegs) moveLiveRegs() {
     return std::move(LiveRegs);
   }
-
-  static void printLiveRegs(raw_ostream &OS, const LiveRegSet& LiveRegs,
-                            const MachineRegisterInfo &MRI);
 };
+
+GCNRPTracker::LiveRegSet getLiveRegs(SlotIndex SI, const LiveIntervals &LIS,
+                                     const MachineRegisterInfo &MRI);
 
 class GCNUpwardRPTracker : public GCNRPTracker {
 public:
   GCNUpwardRPTracker(const LiveIntervals &LIS_) : GCNRPTracker(LIS_) {}
 
-  // reset tracker to the point just below MI
-  // filling live regs upon this point using LIS
-  void reset(const MachineInstr &MI, const LiveRegSet *LiveRegs = nullptr);
+  // reset tracker and set live register set to the specified value.
+  void reset(const MachineRegisterInfo &MRI_, const LiveRegSet &LiveRegs_);
 
-  // move to the state just above the MI
+  // reset tracker at the specified slot index.
+  void reset(const MachineRegisterInfo &MRI, SlotIndex SI) {
+    reset(MRI, llvm::getLiveRegs(SI, LIS, MRI));
+  }
+
+  // reset tracker to the end of the MBB.
+  void reset(const MachineBasicBlock &MBB) {
+    reset(MBB.getParent()->getRegInfo(),
+          LIS.getSlotIndexes()->getMBBEndIdx(&MBB));
+  }
+
+  // reset tracker to the point just after MI (in program order).
+  void reset(const MachineInstr &MI) {
+    reset(MI.getMF()->getRegInfo(), LIS.getInstructionIndex(MI).getDeadSlot());
+  }
+
+  // move to the state just before the MI (in program order).
   void recede(const MachineInstr &MI);
 
   // checks whether the tracker's state after receding MI corresponds
-  // to reported by LIS
+  // to reported by LIS.
   bool isValid() const;
+
+  const GCNRegPressure &getMaxPressure() const { return MaxPressure; }
+
+  void resetMaxPressure() { MaxPressure = CurPressure; }
+
+  GCNRegPressure getMaxPressureAndReset() {
+    GCNRegPressure RP = MaxPressure;
+    resetMaxPressure();
+    return RP;
+  }
 };
 
 class GCNDownwardRPTracker : public GCNRPTracker {
@@ -169,13 +190,20 @@ public:
 
   MachineBasicBlock::const_iterator getNext() const { return NextMI; }
 
+  // Return MaxPressure and clear it.
+  GCNRegPressure moveMaxPressure() {
+    auto Res = MaxPressure;
+    MaxPressure.clear();
+    return Res;
+  }
+
   // Reset tracker to the point before the MI
   // filling live regs upon this point using LIS.
   // Returns false if block is empty except debug values.
   bool reset(const MachineInstr &MI, const LiveRegSet *LiveRegs = nullptr);
 
-  // Move to the state right before the next MI. Returns false if reached
-  // end of the block.
+  // Move to the state right before the next MI or after the end of MBB.
+  // Returns false if reached end of the block.
   bool advanceBeforeNext();
 
   // Move to the state at the MI, advanceBeforeNext has to be called first.
@@ -198,8 +226,10 @@ LaneBitmask getLiveLaneMask(unsigned Reg,
                             const LiveIntervals &LIS,
                             const MachineRegisterInfo &MRI);
 
-GCNRPTracker::LiveRegSet getLiveRegs(SlotIndex SI,
-                                     const LiveIntervals &LIS,
+LaneBitmask getLiveLaneMask(const LiveInterval &LI, SlotIndex SI,
+                            const MachineRegisterInfo &MRI);
+
+GCNRPTracker::LiveRegSet getLiveRegs(SlotIndex SI, const LiveIntervals &LIS,
                                      const MachineRegisterInfo &MRI);
 
 /// creates a map MachineInstr -> LiveRegSet
@@ -270,9 +300,29 @@ GCNRegPressure getRegPressure(const MachineRegisterInfo &MRI,
 bool isEqual(const GCNRPTracker::LiveRegSet &S1,
              const GCNRPTracker::LiveRegSet &S2);
 
-void printLivesAt(SlotIndex SI,
-                  const LiveIntervals &LIS,
-                  const MachineRegisterInfo &MRI);
+Printable print(const GCNRegPressure &RP, const GCNSubtarget *ST = nullptr);
+
+Printable print(const GCNRPTracker::LiveRegSet &LiveRegs,
+                const MachineRegisterInfo &MRI);
+
+Printable reportMismatch(const GCNRPTracker::LiveRegSet &LISLR,
+                         const GCNRPTracker::LiveRegSet &TrackedL,
+                         const TargetRegisterInfo *TRI, StringRef Pfx = "  ");
+
+struct GCNRegPressurePrinter : public MachineFunctionPass {
+  static char ID;
+
+public:
+  GCNRegPressurePrinter() : MachineFunctionPass(ID) {}
+
+  bool runOnMachineFunction(MachineFunction &MF) override;
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<LiveIntervals>();
+    AU.setPreservesAll();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
+};
 
 } // end namespace llvm
 

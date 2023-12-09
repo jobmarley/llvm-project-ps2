@@ -52,8 +52,9 @@ protected:
     BC = cantFail(BinaryContext::createBinaryContext(
         ObjFile.get(), true, DWARFContext::create(*ObjFile.get())));
     ASSERT_FALSE(!BC);
-    BC->initializeTarget(std::unique_ptr<MCPlusBuilder>(createMCPlusBuilder(
-        GetParam(), BC->MIA.get(), BC->MII.get(), BC->MRI.get())));
+    BC->initializeTarget(std::unique_ptr<MCPlusBuilder>(
+        createMCPlusBuilder(GetParam(), BC->MIA.get(), BC->MII.get(),
+                            BC->MRI.get(), BC->STI.get())));
   }
 
   void testRegAliases(Triple::ArchType Arch, uint64_t Register,
@@ -140,7 +141,7 @@ TEST_P(MCPlusBuilderTester, Annotation) {
   // Test encodeAnnotationImm using this indirect way
   BC->MIB->addEHInfo(Inst, MCPlus::MCLandingPad(LPSymbol, Value));
   // Round-trip encoding-decoding check for negative values
-  Optional<MCPlus::MCLandingPad> EHInfo = BC->MIB->getEHInfo(Inst);
+  std::optional<MCPlus::MCLandingPad> EHInfo = BC->MIB->getEHInfo(Inst);
   ASSERT_TRUE(EHInfo.has_value());
   MCPlus::MCLandingPad LP = EHInfo.value();
   uint64_t DecodedValue = LP.second;

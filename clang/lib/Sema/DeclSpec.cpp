@@ -420,6 +420,18 @@ bool Declarator::isStaticMember() {
               getName().OperatorFunctionId.Operator));
 }
 
+bool Declarator::isExplicitObjectMemberFunction() {
+  if (!isFunctionDeclarator())
+    return false;
+  DeclaratorChunk::FunctionTypeInfo &Fun = getFunctionTypeInfo();
+  if (Fun.NumParams) {
+    auto *P = dyn_cast_or_null<ParmVarDecl>(Fun.Params[0].Param);
+    if (P && P->isExplicitObjectParameter())
+      return true;
+  }
+  return false;
+}
+
 bool Declarator::isCtorOrDtor() {
   return (getName().getKind() == UnqualifiedIdKind::IK_ConstructorName) ||
          (getName().getKind() == UnqualifiedIdKind::IK_DestructorName);
@@ -1117,9 +1129,8 @@ void DeclSpec::SaveWrittenBuiltinSpecs() {
 }
 
 /// Finish - This does final analysis of the declspec, rejecting things like
-/// "_Imaginary" (lacking an FP type).  This returns a diagnostic to issue or
-/// diag::NUM_DIAGNOSTICS if there is no error.  After calling this method,
-/// DeclSpec is guaranteed self-consistent, even if an error occurred.
+/// "_Imaginary" (lacking an FP type). After calling this method, DeclSpec is
+/// guaranteed to be self-consistent, even if an error occurred.
 void DeclSpec::Finish(Sema &S, const PrintingPolicy &Policy) {
   // Before possibly changing their values, save specs as written.
   SaveWrittenBuiltinSpecs();
@@ -1364,8 +1375,9 @@ void DeclSpec::Finish(Sema &S, const PrintingPolicy &Policy) {
     StorageClassSpecLoc = SourceLocation();
   }
   // Diagnose if we've recovered from an ill-formed 'auto' storage class
-  // specifier in a pre-C++11 dialect of C++.
-  if (!S.getLangOpts().CPlusPlus11 && TypeSpecType == TST_auto)
+  // specifier in a pre-C++11 dialect of C++ or in a pre-C23 dialect of C.
+  if (!S.getLangOpts().CPlusPlus11 && !S.getLangOpts().C23 &&
+      TypeSpecType == TST_auto)
     S.Diag(TSTLoc, diag::ext_auto_type_specifier);
   if (S.getLangOpts().CPlusPlus && !S.getLangOpts().CPlusPlus11 &&
       StorageClassSpec == SCS_auto)

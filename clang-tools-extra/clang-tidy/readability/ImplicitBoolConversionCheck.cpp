@@ -15,9 +15,7 @@
 
 using namespace clang::ast_matchers;
 
-namespace clang {
-namespace tidy {
-namespace readability {
+namespace clang::tidy::readability {
 
 namespace {
 
@@ -154,7 +152,8 @@ StringRef getEquivalentBoolLiteralForExpr(const Expr *Expression,
     return "false";
   }
 
-  if (const auto *IntLit = dyn_cast<IntegerLiteral>(Expression)) {
+  if (const auto *IntLit =
+          dyn_cast<IntegerLiteral>(Expression->IgnoreParens())) {
     return (IntLit->getValue() == 0) ? "false" : "true";
   }
 
@@ -172,7 +171,7 @@ StringRef getEquivalentBoolLiteralForExpr(const Expr *Expression,
     return "true";
   }
 
-  return StringRef();
+  return {};
 }
 
 void fixGenericExprCastFromBool(DiagnosticBuilder &Diag,
@@ -230,7 +229,8 @@ bool isCastAllowedInCondition(const ImplicitCastExpr *Cast,
       if (!S)
         return false;
       if (isa<IfStmt>(S) || isa<ConditionalOperator>(S) || isa<ForStmt>(S) ||
-          isa<WhileStmt>(S) || isa<BinaryConditionalOperator>(S))
+          isa<WhileStmt>(S) || isa<DoStmt>(S) ||
+          isa<BinaryConditionalOperator>(S))
         return true;
       if (isa<ParenExpr>(S) || isa<ImplicitCastExpr>(S) ||
           isUnaryLogicalNotOperator(S) ||
@@ -264,7 +264,10 @@ void ImplicitBoolConversionCheck::registerMatchers(MatchFinder *Finder) {
       expr(anyOf(allOf(isMacroExpansion(), unless(isNULLMacroExpansion())),
                  has(ignoringImplicit(
                      memberExpr(hasDeclaration(fieldDecl(hasBitWidth(1)))))),
-                 hasParent(explicitCastExpr())));
+                 hasParent(explicitCastExpr()),
+                 expr(hasType(qualType().bind("type")),
+                      hasParent(initListExpr(hasParent(explicitCastExpr(
+                          hasType(qualType(equalsBoundNode("type"))))))))));
   auto ImplicitCastFromBool = implicitCastExpr(
       anyOf(hasCastKind(CK_IntegralCast), hasCastKind(CK_IntegralToFloating),
             // Prior to C++11 cast from bool literal to pointer was allowed.
@@ -292,7 +295,7 @@ void ImplicitBoolConversionCheck::registerMatchers(MatchFinder *Finder) {
                    unless(ExceptionCases), unless(has(BoolXor)),
                    // Retrieve also parent statement, to check if we need
                    // additional parens in replacement.
-                   anyOf(hasParent(stmt().bind("parentStmt")), anything()),
+                   optionally(hasParent(stmt().bind("parentStmt"))),
                    unless(isInTemplateInstantiation()),
                    unless(hasAncestor(functionTemplateDecl())))
                    .bind("implicitCastToBool")),
@@ -383,7 +386,7 @@ void ImplicitBoolConversionCheck::handleCastFromBool(
               << DestType;
 
   if (const auto *BoolLiteral =
-          dyn_cast<CXXBoolLiteralExpr>(Cast->getSubExpr())) {
+          dyn_cast<CXXBoolLiteralExpr>(Cast->getSubExpr()->IgnoreParens())) {
     Diag << tooling::fixit::createReplacement(
         *Cast, getEquivalentForBoolLiteral(BoolLiteral, DestType, Context));
   } else {
@@ -391,6 +394,4 @@ void ImplicitBoolConversionCheck::handleCastFromBool(
   }
 }
 
-} // namespace readability
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy::readability

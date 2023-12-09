@@ -55,7 +55,7 @@ public:
 
   /// Appends new source to the source list.
   ///
-  ///\param[in] source - An ExternalSemaSource.
+  ///\param[in] Source - An ExternalSemaSource.
   ///
   void AddSource(ExternalSemaSource *Source);
 
@@ -319,6 +319,9 @@ public:
   void ReadPendingInstantiations(
      SmallVectorImpl<std::pair<ValueDecl*, SourceLocation> >& Pending) override;
 
+  virtual void ReadPendingInstantiationsOfConstexprEntity(
+      const NamedDecl *D, llvm::SmallSetVector<NamedDecl *, 4> &Decls) override;
+
   /// Read the set of late parsed template functions for this source.
   ///
   /// The external source should insert its own late parsed template functions
@@ -359,6 +362,9 @@ public:
   /// \return true if a diagnostic was produced, false otherwise.
   bool MaybeDiagnoseMissingCompleteType(SourceLocation Loc,
                                         QualType T) override;
+
+  // Inform all attached sources that a mangling number was assigned.
+  void AssignedLambdaNumbering(const CXXRecordDecl *Lambda) override;
 
   /// LLVM-style RTTI.
   /// \{

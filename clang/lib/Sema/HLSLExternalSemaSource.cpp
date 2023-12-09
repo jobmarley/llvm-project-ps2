@@ -17,11 +17,12 @@
 #include "clang/Basic/HLSLRuntime.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Sema.h"
+#include "llvm/Frontend/HLSL/HLSLResource.h"
 
 #include <functional>
 
 using namespace clang;
-using namespace hlsl;
+using namespace llvm::hlsl;
 
 namespace {
 
@@ -61,16 +62,15 @@ struct BuiltinTypeDeclBuilder {
       return;
     }
 
-    Record = CXXRecordDecl::Create(AST, TagDecl::TagKind::TTK_Class,
-                                   HLSLNamespace, SourceLocation(),
-                                   SourceLocation(), &II, PrevDecl, true);
+    Record = CXXRecordDecl::Create(AST, TagDecl::TagKind::Class, HLSLNamespace,
+                                   SourceLocation(), SourceLocation(), &II,
+                                   PrevDecl, true);
     Record->setImplicit(true);
     Record->setLexicalDeclContext(HLSLNamespace);
     Record->setHasExternalLexicalStorage();
 
     // Don't let anyone derive from built-in types.
     Record->addAttr(FinalAttr::CreateImplicit(AST, SourceRange(),
-                                              AttributeCommonInfo::AS_Keyword,
                                               FinalAttr::Keyword_final));
   }
 
@@ -115,12 +115,12 @@ struct BuiltinTypeDeclBuilder {
     return addMemberVariable("h", Ty, Access);
   }
 
-  BuiltinTypeDeclBuilder &
-  annotateResourceClass(HLSLResourceAttr::ResourceClass RC) {
+  BuiltinTypeDeclBuilder &annotateResourceClass(ResourceClass RC,
+                                                ResourceKind RK) {
     if (Record->isCompleteDefinition())
       return *this;
     Record->addAttr(
-        HLSLResourceAttr::CreateImplicit(Record->getASTContext(), RC));
+        HLSLResourceAttr::CreateImplicit(Record->getASTContext(), RC, RK));
     return *this;
   }
 
@@ -173,9 +173,10 @@ struct BuiltinTypeDeclBuilder {
     Expr *Call = CallExpr::Create(AST, Fn, {RCExpr}, AST.VoidPtrTy, VK_PRValue,
                                   SourceLocation(), FPOptionsOverride());
 
-    CXXThisExpr *This = new (AST)
-        CXXThisExpr(SourceLocation(), Constructor->getThisType(), true);
-    Expr *Handle = MemberExpr::CreateImplicit(AST, This, true, Fields["h"],
+    CXXThisExpr *This = CXXThisExpr::Create(
+        AST, SourceLocation(), Constructor->getFunctionObjectParameterType(),
+        true);
+    Expr *Handle = MemberExpr::CreateImplicit(AST, This, false, Fields["h"],
                                               Fields["h"]->getType(), VK_LValue,
                                               OK_Ordinary);
 
@@ -258,10 +259,11 @@ struct BuiltinTypeDeclBuilder {
     auto FnProtoLoc = TSInfo->getTypeLoc().getAs<FunctionProtoTypeLoc>();
     FnProtoLoc.setParam(0, IdxParam);
 
-    auto *This = new (AST)
-        CXXThisExpr(SourceLocation(), MethodDecl->getThisType(), true);
+    auto *This =
+        CXXThisExpr::Create(AST, SourceLocation(),
+                            MethodDecl->getFunctionObjectParameterType(), true);
     auto *HandleAccess = MemberExpr::CreateImplicit(
-        AST, This, true, Handle, Handle->getType(), VK_LValue, OK_Ordinary);
+        AST, This, false, Handle, Handle->getType(), VK_LValue, OK_Ordinary);
 
     auto *IndexExpr = DeclRefExpr::Create(
         AST, NestedNameSpecifierLoc(), SourceLocation(), IdxParam, false,
@@ -280,8 +282,7 @@ struct BuiltinTypeDeclBuilder {
     MethodDecl->setLexicalDeclContext(Record);
     MethodDecl->setAccess(AccessSpecifier::AS_public);
     MethodDecl->addAttr(AlwaysInlineAttr::CreateImplicit(
-        AST, SourceRange(), AttributeCommonInfo::AS_Keyword,
-        AlwaysInlineAttr::CXX11_clang_always_inline));
+        AST, SourceRange(), AlwaysInlineAttr::CXX11_clang_always_inline));
     Record->addDecl(MethodDecl);
 
     return *this;
@@ -379,9 +380,9 @@ void HLSLExternalSemaSource::InitializeSema(Sema &S) {
   NamespaceDecl *PrevDecl = nullptr;
   if (S.LookupQualifiedName(Result, AST.getTranslationUnitDecl()))
     PrevDecl = Result.getAsSingle<NamespaceDecl>();
-  HLSLNamespace = NamespaceDecl::Create(AST, AST.getTranslationUnitDecl(),
-                                        false, SourceLocation(),
-                                        SourceLocation(), &HLSL, PrevDecl);
+  HLSLNamespace = NamespaceDecl::Create(
+      AST, AST.getTranslationUnitDecl(), /*Inline=*/false, SourceLocation(),
+      SourceLocation(), &HLSL, PrevDecl, /*Nested=*/false);
   HLSLNamespace->setImplicit(true);
   HLSLNamespace->setHasExternalLexicalStorage();
   AST.getTranslationUnitDecl()->addDecl(HLSLNamespace);
@@ -501,6 +502,6 @@ void HLSLExternalSemaSource::completeBufferType(CXXRecordDecl *Record) {
       .addHandleMember()
       .addDefaultHandleConstructor(*SemaPtr, ResourceClass::UAV)
       .addArraySubscriptOperators()
-      .annotateResourceClass(HLSLResourceAttr::UAV)
+      .annotateResourceClass(ResourceClass::UAV, ResourceKind::TypedBuffer)
       .completeDefinition();
 }

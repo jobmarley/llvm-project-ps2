@@ -42,6 +42,9 @@ class DynamicLibrary {
 public:
   explicit DynamicLibrary(void *data = &Invalid) : Data(data) {}
 
+  /// Return the OS specific handle value.
+  void *getOSSpecificHandle() const { return Data; }
+
   /// Returns true if the object refers to a valid library.
   bool isValid() const { return Data != &Invalid; }
 
@@ -100,7 +103,7 @@ public:
 
   /// This function closes the dynamic library at the given path, using the
   /// library close operation of the host operating system, and there is no
-  /// guarantee if or when this will cause the the library to be unloaded.
+  /// guarantee if or when this will cause the library to be unloaded.
   ///
   /// This function should be called only if the library was loaded using the
   /// getLibrary() function.

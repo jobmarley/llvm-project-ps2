@@ -121,7 +121,7 @@ private:
       TODO(loc, "threading length parameters in field index op");
     fir::FirOpBuilder &builder = converter.getFirOpBuilder();
     componentPath.emplace_back(builder.create<fir::FieldIndexOp>(
-        loc, fldTy, componentName, recTy, /*typeParams*/ llvm::None));
+        loc, fldTy, componentName, recTy, /*typeParams*/ std::nullopt));
     return fir::unwrapSequenceType(recTy.getType(componentName));
   }
 
@@ -212,7 +212,8 @@ private:
 
   mlir::Type gen(const Fortran::evaluate::CoarrayRef &) {
     // Is this possible/legal ?
-    TODO(loc, "coarray ref with vector subscript in IO input");
+    TODO(loc, "coarray: reference to coarray object with vector subscript in "
+              "IO input");
   }
 
   template <typename A>

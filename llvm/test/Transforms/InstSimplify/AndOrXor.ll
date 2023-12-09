@@ -523,7 +523,7 @@ define i32 @or_of_zexted_icmps(i32 %i) {
 
 define i3 @or_of_bitcast_icmps_vec(<3 x i65> %i) {
 ; CHECK-LABEL: @or_of_bitcast_icmps_vec(
-; CHECK-NEXT:    ret i3 bitcast (<3 x i1> <i1 true, i1 true, i1 true> to i3)
+; CHECK-NEXT:    ret i3 -1
 ;
   %cmp0 = icmp sge <3 x i65> %i, zeroinitializer
   %conv0 = bitcast <3 x i1> %cmp0 to i3
@@ -680,11 +680,45 @@ define i3 @or_xorn_and_commute1(i3 %a, i3 %b) {
 
 define <2 x i32> @or_xorn_and_commute2(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: @or_xorn_and_commute2(
-; CHECK-NEXT:    [[NEGA:%.*]] = xor <2 x i32> [[A:%.*]], <i32 undef, i32 -1>
+; CHECK-NEXT:    [[NEGA:%.*]] = xor <2 x i32> [[A:%.*]], <i32 -1, i32 -1>
 ; CHECK-NEXT:    [[XOR:%.*]] = xor <2 x i32> [[B:%.*]], [[NEGA]]
 ; CHECK-NEXT:    ret <2 x i32> [[XOR]]
 ;
+  %nega = xor <2 x i32> %a, <i32 -1, i32 -1>
+  %and = and <2 x i32> %b, %a
+  %xor = xor <2 x i32> %b, %nega
+  %or = or <2 x i32> %xor, %and
+  ret <2 x i32> %or
+}
+
+; This is not safe to fold because the extra logic ops limit the undef-ness of the result.
+
+define <2 x i32> @or_xorn_and_commute2_undef(<2 x i32> %a, <2 x i32> %b) {
+; CHECK-LABEL: @or_xorn_and_commute2_undef(
+; CHECK-NEXT:    [[NEGA:%.*]] = xor <2 x i32> [[A:%.*]], <i32 undef, i32 -1>
+; CHECK-NEXT:    [[AND:%.*]] = and <2 x i32> [[B:%.*]], [[A]]
+; CHECK-NEXT:    [[XOR:%.*]] = xor <2 x i32> [[B]], [[NEGA]]
+; CHECK-NEXT:    [[OR:%.*]] = or <2 x i32> [[XOR]], [[AND]]
+; CHECK-NEXT:    ret <2 x i32> [[OR]]
+;
   %nega = xor <2 x i32> %a, <i32 undef, i32 -1>
+  %and = and <2 x i32> %b, %a
+  %xor = xor <2 x i32> %b, %nega
+  %or = or <2 x i32> %xor, %and
+  ret <2 x i32> %or
+}
+
+; TODO: Unlike the above test, this is safe to fold.
+
+define <2 x i32> @or_xorn_and_commute2_poison(<2 x i32> %a, <2 x i32> %b) {
+; CHECK-LABEL: @or_xorn_and_commute2_poison(
+; CHECK-NEXT:    [[NEGA:%.*]] = xor <2 x i32> [[A:%.*]], <i32 poison, i32 -1>
+; CHECK-NEXT:    [[AND:%.*]] = and <2 x i32> [[B:%.*]], [[A]]
+; CHECK-NEXT:    [[XOR:%.*]] = xor <2 x i32> [[B]], [[NEGA]]
+; CHECK-NEXT:    [[OR:%.*]] = or <2 x i32> [[XOR]], [[AND]]
+; CHECK-NEXT:    ret <2 x i32> [[OR]]
+;
+  %nega = xor <2 x i32> %a, <i32 poison, i32 -1>
   %and = and <2 x i32> %b, %a
   %xor = xor <2 x i32> %b, %nega
   %or = or <2 x i32> %xor, %and

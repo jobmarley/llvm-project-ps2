@@ -22,6 +22,7 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <optional>
 
 using namespace mlir;
 using namespace mlir::pdll;
@@ -97,16 +98,19 @@ private:
   SmallVector<Value> genExprImpl(const ast::DeclRefExpr *expr);
   Value genExprImpl(const ast::MemberAccessExpr *expr);
   Value genExprImpl(const ast::OperationExpr *expr);
+  Value genExprImpl(const ast::RangeExpr *expr);
   SmallVector<Value> genExprImpl(const ast::TupleExpr *expr);
   Value genExprImpl(const ast::TypeExpr *expr);
 
   SmallVector<Value> genConstraintCall(const ast::UserConstraintDecl *decl,
-                                       Location loc, ValueRange inputs);
+                                       Location loc, ValueRange inputs,
+                                       bool isNegated = false);
   SmallVector<Value> genRewriteCall(const ast::UserRewriteDecl *decl,
                                     Location loc, ValueRange inputs);
   template <typename PDLOpT, typename T>
   SmallVector<Value> genConstraintOrRewriteCall(const T *decl, Location loc,
-                                                ValueRange inputs);
+                                                ValueRange inputs,
+                                                bool isNegated = false);
 
   //===--------------------------------------------------------------------===//
   // Fields
@@ -237,7 +241,7 @@ void CodeGen::genImpl(const ast::ReplaceStmt *stmt) {
   // replacement values.
   bool usesReplOperation =
       replValues.size() == 1 &&
-      replValues.front().getType().isa<pdl::OperationType>();
+      isa<pdl::OperationType>(replValues.front().getType());
   builder.create<pdl::ReplaceOp>(
       loc, rootExpr, usesReplOperation ? replValues[0] : Value(),
       usesReplOperation ? ValueRange() : ValueRange(replValues));
@@ -281,7 +285,8 @@ void CodeGen::genImpl(const ast::PatternDecl *decl) {
   // here.
   pdl::PatternOp pattern = builder.create<pdl::PatternOp>(
       genLoc(decl->getLoc()), decl->getBenefit(),
-      name ? Optional<StringRef>(name->getName()) : Optional<StringRef>());
+      name ? std::optional<StringRef>(name->getName())
+           : std::optional<StringRef>());
 
   OpBuilder::InsertionGuard savedInsertPoint(builder);
   builder.setInsertionPointToStart(pattern.getBody());
@@ -345,8 +350,8 @@ Value CodeGen::genNonInitializerVar(const ast::VariableDecl *varDecl,
     Value results = builder.create<pdl::TypesOp>(
         loc, pdl::RangeType::get(builder.getType<pdl::TypeType>()),
         /*types=*/ArrayAttr());
-    return builder.create<pdl::OperationOp>(loc, opType.getName(), operands,
-                                            llvm::None, ValueRange(), results);
+    return builder.create<pdl::OperationOp>(
+        loc, opType.getName(), operands, std::nullopt, ValueRange(), results);
   }
 
   if (ast::RangeType rangeTy = type.dyn_cast<ast::RangeType>()) {
@@ -377,7 +382,8 @@ void CodeGen::applyVarConstraints(const ast::VariableDecl *varDecl,
 Value CodeGen::genSingleExpr(const ast::Expr *expr) {
   return TypeSwitch<const ast::Expr *, Value>(expr)
       .Case<const ast::AttributeExpr, const ast::MemberAccessExpr,
-            const ast::OperationExpr, const ast::TypeExpr>(
+            const ast::OperationExpr, const ast::RangeExpr,
+            const ast::TypeExpr>(
           [&](auto derivedNode) { return this->genExprImpl(derivedNode); })
       .Case<const ast::CallExpr, const ast::DeclRefExpr, const ast::TupleExpr>(
           [&](auto derivedNode) {
@@ -415,7 +421,7 @@ SmallVector<Value> CodeGen::genExprImpl(const ast::CallExpr *expr) {
   // Generate the PDL based on the type of callable.
   const ast::Decl *callable = callableExpr->getDecl();
   if (const auto *decl = dyn_cast<ast::UserConstraintDecl>(callable))
-    return genConstraintCall(decl, loc, arguments);
+    return genConstraintCall(decl, loc, arguments, expr->getIsNegated());
   if (const auto *decl = dyn_cast<ast::UserRewriteDecl>(callable))
     return genRewriteCall(decl, loc, arguments);
   llvm_unreachable("unhandled CallExpr callable");
@@ -437,7 +443,7 @@ Value CodeGen::genExprImpl(const ast::MemberAccessExpr *expr) {
   if (ast::OperationType opType = parentType.dyn_cast<ast::OperationType>()) {
     if (isa<ast::AllResultsMemberAccessExpr>(expr)) {
       Type mlirType = genType(expr->getType());
-      if (mlirType.isa<pdl::ValueType>())
+      if (isa<pdl::ValueType>(mlirType))
         return builder.create<pdl::ResultOp>(loc, mlirType, parentExprs[0],
                                              builder.getI32IntegerAttr(0));
       return builder.create<pdl::ResultsOp>(loc, mlirType, parentExprs[0]);
@@ -493,7 +499,7 @@ Value CodeGen::genExprImpl(const ast::MemberAccessExpr *expr) {
 
 Value CodeGen::genExprImpl(const ast::OperationExpr *expr) {
   Location loc = genLoc(expr->getLoc());
-  Optional<StringRef> opName = expr->getName();
+  std::optional<StringRef> opName = expr->getName();
 
   // Operands.
   SmallVector<Value> operands;
@@ -517,6 +523,15 @@ Value CodeGen::genExprImpl(const ast::OperationExpr *expr) {
                                           attrValues, results);
 }
 
+Value CodeGen::genExprImpl(const ast::RangeExpr *expr) {
+  SmallVector<Value> elements;
+  for (const ast::Expr *element : expr->getElements())
+    llvm::append_range(elements, genExpr(element));
+
+  return builder.create<pdl::RangeOp>(genLoc(expr->getLoc()),
+                                      genType(expr->getType()), elements);
+}
+
 SmallVector<Value> CodeGen::genExprImpl(const ast::TupleExpr *expr) {
   SmallVector<Value> elements;
   for (const ast::Expr *element : expr->getElements())
@@ -534,15 +549,15 @@ Value CodeGen::genExprImpl(const ast::TypeExpr *expr) {
 
 SmallVector<Value>
 CodeGen::genConstraintCall(const ast::UserConstraintDecl *decl, Location loc,
-                           ValueRange inputs) {
+                           ValueRange inputs, bool isNegated) {
   // Apply any constraints defined on the arguments to the input values.
   for (auto it : llvm::zip(decl->getInputs(), inputs))
     applyVarConstraints(std::get<0>(it), std::get<1>(it));
 
   // Generate the constraint call.
   SmallVector<Value> results =
-      genConstraintOrRewriteCall<pdl::ApplyNativeConstraintOp>(decl, loc,
-                                                               inputs);
+      genConstraintOrRewriteCall<pdl::ApplyNativeConstraintOp>(
+          decl, loc, inputs, isNegated);
 
   // Apply any constraints defined on the results of the constraint.
   for (auto it : llvm::zip(decl->getResults(), results))
@@ -557,9 +572,9 @@ SmallVector<Value> CodeGen::genRewriteCall(const ast::UserRewriteDecl *decl,
 }
 
 template <typename PDLOpT, typename T>
-SmallVector<Value> CodeGen::genConstraintOrRewriteCall(const T *decl,
-                                                       Location loc,
-                                                       ValueRange inputs) {
+SmallVector<Value>
+CodeGen::genConstraintOrRewriteCall(const T *decl, Location loc,
+                                    ValueRange inputs, bool isNegated) {
   const ast::CompoundStmt *cstBody = decl->getBody();
 
   // If the decl doesn't have a statement body, it is a native decl.
@@ -572,8 +587,10 @@ SmallVector<Value> CodeGen::genConstraintOrRewriteCall(const T *decl,
     } else {
       resultTypes.push_back(genType(declResultType));
     }
-    Operation *pdlOp = builder.create<PDLOpT>(
+    PDLOpT pdlOp = builder.create<PDLOpT>(
         loc, resultTypes, decl->getName().getName(), inputs);
+    if (isNegated && std::is_same_v<PDLOpT, pdl::ApplyNativeConstraintOp>)
+      cast<pdl::ApplyNativeConstraintOp>(pdlOp).setIsNegated(true);
     return pdlOp->getResults();
   }
 

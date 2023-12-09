@@ -16,6 +16,7 @@
 #include "bolt/Passes/FrameAnalysis.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/MC/MCInstPrinter.h"
+#include <optional>
 #include <queue>
 
 #define DEBUG_TYPE "bolt-internalcalls"
@@ -43,7 +44,7 @@ class StackPointerTrackingForInternalCalls
   friend class DataflowAnalysis<StackPointerTrackingForInternalCalls,
                                 std::pair<int, int>>;
 
-  Optional<unsigned> AnnotationIndex;
+  std::optional<unsigned> AnnotationIndex;
 
 protected:
   // We change the starting state to only consider the first block as an
@@ -280,18 +281,16 @@ bool ValidateInternalCalls::analyzeFunction(BinaryFunction &Function) const {
           LLVM_DEBUG({
             dbgs() << "Detected out-of-range PIC reference in " << Function
                    << "\nReturn address load: ";
-            BC.InstPrinter->printInst(TargetInst, 0, "", *BC.STI, dbgs());
-            dbgs() << "\nUse: ";
-            BC.InstPrinter->printInst(&Use, 0, "", *BC.STI, dbgs());
-            dbgs() << "\n";
+            BC.dump(*TargetInst);
+            dbgs() << "Use: ";
+            BC.dump(Use);
             Function.dump();
           });
           return false;
         }
         LLVM_DEBUG({
           dbgs() << "Validated access: ";
-          BC.InstPrinter->printInst(&Use, 0, "", *BC.STI, dbgs());
-          dbgs() << "\n";
+          BC.dump(Use);
         });
       }
       if (!UseDetected) {

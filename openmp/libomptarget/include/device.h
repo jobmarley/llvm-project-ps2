@@ -16,24 +16,24 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <list>
 #include <map>
-#include <memory>
 #include <mutex>
 #include <set>
-#include <thread>
 
 #include "ExclusiveAccess.h"
 #include "omptarget.h"
 #include "rtl.h"
+
+#include "OpenMP/Mapping.h"
+
 #include "llvm/ADT/SmallVector.h"
 
 // Forward declarations.
 struct RTLInfoTy;
 struct __tgt_bin_desc;
 struct __tgt_target_table;
-
-using map_var_info_t = void *;
 
 // enum for OMP_TARGET_OFFLOAD; keep in sync with kmp.h definition
 enum kmp_target_offload_kind {
@@ -42,267 +42,6 @@ enum kmp_target_offload_kind {
   tgt_mandatory = 2
 };
 typedef enum kmp_target_offload_kind kmp_target_offload_kind_t;
-
-/// Map between host data and target data.
-struct HostDataToTargetTy {
-  const uintptr_t HstPtrBase; // host info.
-  const uintptr_t HstPtrBegin;
-  const uintptr_t HstPtrEnd;       // non-inclusive.
-  const map_var_info_t HstPtrName; // Optional source name of mapped variable.
-
-  const uintptr_t TgtPtrBegin; // target info.
-
-private:
-  static const uint64_t INFRefCount = ~(uint64_t)0;
-  static std::string refCountToStr(uint64_t RefCount) {
-    return RefCount == INFRefCount ? "INF" : std::to_string(RefCount);
-  }
-
-  struct StatesTy {
-    StatesTy(uint64_t DRC, uint64_t HRC)
-        : DynRefCount(DRC), HoldRefCount(HRC),
-          MayContainAttachedPointers(false), DeleteThreadId(std::thread::id()) {
-    }
-    /// The dynamic reference count is the standard reference count as of OpenMP
-    /// 4.5.  The hold reference count is an OpenMP extension for the sake of
-    /// OpenACC support.
-    ///
-    /// The 'ompx_hold' map type modifier is permitted only on "omp target" and
-    /// "omp target data", and "delete" is permitted only on "omp target exit
-    /// data" and associated runtime library routines.  As a result, we really
-    /// need to implement "reset" functionality only for the dynamic reference
-    /// counter.  Likewise, only the dynamic reference count can be infinite
-    /// because, for example, omp_target_associate_ptr and "omp declare target
-    /// link" operate only on it.  Nevertheless, it's actually easier to follow
-    /// the code (and requires less assertions for special cases) when we just
-    /// implement these features generally across both reference counters here.
-    /// Thus, it's the users of this class that impose those restrictions.
-    ///
-    uint64_t DynRefCount;
-    uint64_t HoldRefCount;
-
-    /// Boolean flag to remember if any subpart of the mapped region might be
-    /// an attached pointer.
-    bool MayContainAttachedPointers;
-
-    /// This mutex will be locked when data movement is issued. For targets that
-    /// doesn't support async data movement, this mutex can guarantee that after
-    /// it is released, memory region on the target is update to date. For
-    /// targets that support async data movement, this can guarantee that data
-    /// movement has been issued. This mutex *must* be locked right before
-    /// releasing the mapping table lock.
-    std::mutex UpdateMtx;
-    /// Pointer to the event corresponding to the data update of this map.
-    /// Note: At present this event is created when the first data transfer from
-    /// host to device is issued, and only being used for H2D. It is not used
-    /// for data transfer in another direction (device to host). It is still
-    /// unclear whether we need it for D2H. If in the future we need similar
-    /// mechanism for D2H, and if the event cannot be shared between them, Event
-    /// should be written as <tt>void *Event[2]</tt>.
-    void *Event = nullptr;
-
-    /// The id of the thread responsible for deleting this entry. This thread
-    /// set the reference count to zero *last*. Other threads might reuse the
-    /// entry while it is marked for deletion but not yet deleted (e.g., the
-    /// data is still being moved back). If another thread reuses the entry we
-    /// will have a non-zero reference count *or* the thread will have changed
-    /// this id, effectively taking over deletion responsibility.
-    std::thread::id DeleteThreadId;
-  };
-  // When HostDataToTargetTy is used by std::set, std::set::iterator is const
-  // use unique_ptr to make States mutable.
-  const std::unique_ptr<StatesTy> States;
-
-public:
-  HostDataToTargetTy(uintptr_t BP, uintptr_t B, uintptr_t E, uintptr_t TB,
-                     bool UseHoldRefCount, map_var_info_t Name = nullptr,
-                     bool IsINF = false)
-      : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E), HstPtrName(Name),
-        TgtPtrBegin(TB), States(std::make_unique<StatesTy>(UseHoldRefCount ? 0
-                                                           : IsINF ? INFRefCount
-                                                                   : 1,
-                                                           !UseHoldRefCount ? 0
-                                                           : IsINF ? INFRefCount
-                                                                   : 1)) {}
-
-  /// Get the total reference count.  This is smarter than just getDynRefCount()
-  /// + getHoldRefCount() because it handles the case where at least one is
-  /// infinity and the other is non-zero.
-  uint64_t getTotalRefCount() const {
-    if (States->DynRefCount == INFRefCount ||
-        States->HoldRefCount == INFRefCount)
-      return INFRefCount;
-    return States->DynRefCount + States->HoldRefCount;
-  }
-
-  /// Get the dynamic reference count.
-  uint64_t getDynRefCount() const { return States->DynRefCount; }
-
-  /// Get the hold reference count.
-  uint64_t getHoldRefCount() const { return States->HoldRefCount; }
-
-  /// Get the event bound to this data map.
-  void *getEvent() const { return States->Event; }
-
-  /// Add a new event, if necessary.
-  /// Returns OFFLOAD_FAIL if something went wrong, OFFLOAD_SUCCESS otherwise.
-  int addEventIfNecessary(DeviceTy &Device, AsyncInfoTy &AsyncInfo) const;
-
-  /// Indicate that the current thread expected to delete this entry.
-  void setDeleteThreadId() const {
-    States->DeleteThreadId = std::this_thread::get_id();
-  }
-
-  /// Return the thread id of the thread expected to delete this entry.
-  std::thread::id getDeleteThreadId() const { return States->DeleteThreadId; }
-
-  /// Set the event bound to this data map.
-  void setEvent(void *Event) const { States->Event = Event; }
-
-  /// Reset the specified reference count unless it's infinity.  Reset to 1
-  /// (even if currently 0) so it can be followed by a decrement.
-  void resetRefCount(bool UseHoldRefCount) const {
-    uint64_t &ThisRefCount =
-        UseHoldRefCount ? States->HoldRefCount : States->DynRefCount;
-    if (ThisRefCount != INFRefCount)
-      ThisRefCount = 1;
-  }
-
-  /// Increment the specified reference count unless it's infinity.
-  void incRefCount(bool UseHoldRefCount) const {
-    uint64_t &ThisRefCount =
-        UseHoldRefCount ? States->HoldRefCount : States->DynRefCount;
-    if (ThisRefCount != INFRefCount) {
-      ++ThisRefCount;
-      assert(ThisRefCount < INFRefCount && "refcount overflow");
-    }
-  }
-
-  /// Decrement the specified reference count unless it's infinity or zero, and
-  /// return the total reference count.
-  uint64_t decRefCount(bool UseHoldRefCount) const {
-    uint64_t &ThisRefCount =
-        UseHoldRefCount ? States->HoldRefCount : States->DynRefCount;
-    uint64_t OtherRefCount =
-        UseHoldRefCount ? States->DynRefCount : States->HoldRefCount;
-    (void)OtherRefCount;
-    if (ThisRefCount != INFRefCount) {
-      if (ThisRefCount > 0)
-        --ThisRefCount;
-      else
-        assert(OtherRefCount >= 0 && "total refcount underflow");
-    }
-    return getTotalRefCount();
-  }
-
-  /// Is the dynamic (and thus the total) reference count infinite?
-  bool isDynRefCountInf() const { return States->DynRefCount == INFRefCount; }
-
-  /// Convert the dynamic reference count to a debug string.
-  std::string dynRefCountToStr() const {
-    return refCountToStr(States->DynRefCount);
-  }
-
-  /// Convert the hold reference count to a debug string.
-  std::string holdRefCountToStr() const {
-    return refCountToStr(States->HoldRefCount);
-  }
-
-  /// Should one decrement of the specified reference count (after resetting it
-  /// if \c AfterReset) remove this mapping?
-  bool decShouldRemove(bool UseHoldRefCount, bool AfterReset = false) const {
-    uint64_t ThisRefCount =
-        UseHoldRefCount ? States->HoldRefCount : States->DynRefCount;
-    uint64_t OtherRefCount =
-        UseHoldRefCount ? States->DynRefCount : States->HoldRefCount;
-    if (OtherRefCount > 0)
-      return false;
-    if (AfterReset)
-      return ThisRefCount != INFRefCount;
-    return ThisRefCount == 1;
-  }
-
-  void setMayContainAttachedPointers() const {
-    States->MayContainAttachedPointers = true;
-  }
-  bool getMayContainAttachedPointers() const {
-    return States->MayContainAttachedPointers;
-  }
-
-  void lock() const { States->UpdateMtx.lock(); }
-
-  void unlock() const { States->UpdateMtx.unlock(); }
-};
-
-/// Wrapper around the HostDataToTargetTy to be used in the HDTT map. In
-/// addition to the HDTT pointer we store the key value explicitly. This
-/// allows the set to inspect (sort/search/...) this entry without an additional
-/// load of HDTT. HDTT is a pointer to allow the modification of the set without
-/// invalidating HDTT entries which can now be inspected at the same time.
-struct HostDataToTargetMapKeyTy {
-  uintptr_t KeyValue;
-
-  HostDataToTargetMapKeyTy(void *Key) : KeyValue(uintptr_t(Key)) {}
-  HostDataToTargetMapKeyTy(HostDataToTargetTy *HDTT)
-      : KeyValue(HDTT->HstPtrBegin), HDTT(HDTT) {}
-  HostDataToTargetTy *HDTT;
-};
-inline bool operator<(const HostDataToTargetMapKeyTy &LHS,
-                      const uintptr_t &RHS) {
-  return LHS.KeyValue < RHS;
-}
-inline bool operator<(const uintptr_t &LHS,
-                      const HostDataToTargetMapKeyTy &RHS) {
-  return LHS < RHS.KeyValue;
-}
-inline bool operator<(const HostDataToTargetMapKeyTy &LHS,
-                      const HostDataToTargetMapKeyTy &RHS) {
-  return LHS.KeyValue < RHS.KeyValue;
-}
-
-struct LookupResult {
-  struct {
-    unsigned IsContained : 1;
-    unsigned ExtendsBefore : 1;
-    unsigned ExtendsAfter : 1;
-  } Flags;
-
-  /// The corresponding map table entry which is stable.
-  HostDataToTargetTy *Entry = nullptr;
-
-  LookupResult() : Flags({0, 0, 0}), Entry() {}
-};
-
-/// This struct will be returned by \p DeviceTy::getTargetPointer which provides
-/// more data than just a target pointer.
-struct TargetPointerResultTy {
-  struct {
-    /// If the map table entry is just created
-    unsigned IsNewEntry : 1;
-    /// If the pointer is actually a host pointer (when unified memory enabled)
-    unsigned IsHostPointer : 1;
-    /// If the pointer is present in the mapping table.
-    unsigned IsPresent : 1;
-  } Flags = {0, 0, 0};
-
-  bool isPresent() const { return Flags.IsPresent; }
-
-  bool isHostPointer() const { return Flags.IsHostPointer; }
-
-  /// The corresponding map table entry which is stable.
-  HostDataToTargetTy *Entry = nullptr;
-
-  /// The corresponding target pointer
-  void *TargetPointer = nullptr;
-};
-
-/// Map for shadow pointers
-struct ShadowPtrValTy {
-  void *HstPtrVal;
-  void *TgtPtrAddr;
-  void *TgtPtrVal;
-};
-typedef std::map<void *, ShadowPtrValTy> ShadowPtrListTy;
 
 ///
 struct PendingCtorDtorListsTy {
@@ -336,9 +75,7 @@ struct DeviceTy {
 
   PendingCtorsDtorsPerLibrary PendingCtorsDtors;
 
-  ShadowPtrListTy ShadowPtrMap;
-
-  std::mutex PendingGlobalsMtx, ShadowMtx;
+  std::mutex PendingGlobalsMtx;
 
   DeviceTy(RTLInfoTy *RTL);
   // DeviceTy is not copyable
@@ -353,7 +90,8 @@ struct DeviceTy {
   /// Lookup the mapping of \p HstPtrBegin in \p HDTTMap. The accessor ensures
   /// exclusive access to the HDTT map.
   LookupResult lookupMapping(HDTTMapAccessorTy &HDTTMap, void *HstPtrBegin,
-                             int64_t Size);
+                             int64_t Size,
+                             HostDataToTargetTy *OwnedTPR = nullptr);
 
   /// Get the target pointer based on host pointer begin and base. If the
   /// mapping already exists, the target pointer will be returned directly. In
@@ -365,32 +103,49 @@ struct DeviceTy {
   /// - Data allocation failed;
   /// - The user tried to do an illegal mapping;
   /// - Data transfer issue fails.
-  TargetPointerResultTy
-  getTargetPointer(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
-                   map_var_info_t HstPtrName, bool HasFlagTo,
-                   bool HasFlagAlways, bool IsImplicit, bool UpdateRefCount,
-                   bool HasCloseModifier, bool HasPresentModifier,
-                   bool HasHoldModifier, AsyncInfoTy &AsyncInfo);
+  TargetPointerResultTy getTargetPointer(
+      HDTTMapAccessorTy &HDTTMap, void *HstPtrBegin, void *HstPtrBase,
+      int64_t TgtPadding, int64_t Size, map_var_info_t HstPtrName,
+      bool HasFlagTo, bool HasFlagAlways, bool IsImplicit, bool UpdateRefCount,
+      bool HasCloseModifier, bool HasPresentModifier, bool HasHoldModifier,
+      AsyncInfoTy &AsyncInfo, HostDataToTargetTy *OwnedTPR = nullptr,
+      bool ReleaseHDTTMap = true);
 
   /// Return the target pointer for \p HstPtrBegin in \p HDTTMap. The accessor
   /// ensures exclusive access to the HDTT map.
   void *getTgtPtrBegin(HDTTMapAccessorTy &HDTTMap, void *HstPtrBegin,
                        int64_t Size);
 
-  TargetPointerResultTy getTgtPtrBegin(void *HstPtrBegin, int64_t Size,
-                                       bool &IsLast, bool UpdateRefCount,
-                                       bool UseHoldRefCount, bool &IsHostPtr,
-                                       bool MustContain = false,
-                                       bool ForceDelete = false);
+  /// Return the target pointer begin (where the data will be moved).
+  /// Used by targetDataBegin, targetDataEnd, targetDataUpdate and target.
+  /// - \p UpdateRefCount and \p UseHoldRefCount controls which and if the entry
+  /// reference counters will be decremented.
+  /// - \p MustContain enforces that the query must not extend beyond an already
+  /// mapped entry to be valid.
+  /// - \p ForceDelete deletes the entry regardless of its reference counting
+  /// (unless it is infinite).
+  /// - \p FromDataEnd tracks the number of threads referencing the entry at
+  /// targetDataEnd for delayed deletion purpose.
+  [[nodiscard]] TargetPointerResultTy
+  getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool UpdateRefCount,
+                 bool UseHoldRefCount, bool MustContain = false,
+                 bool ForceDelete = false, bool FromDataEnd = false);
 
-  /// Deallocate \p LR and remove the entry. Assume the total reference count is
-  /// zero and the calling thread is the deleting thread for \p LR. \p HDTTMap
-  /// ensure the caller holds exclusive access and can modify the map. Return \c
-  /// OFFLOAD_SUCCESS if the map entry existed, and return \c OFFLOAD_FAIL if
-  /// not. It is the caller's responsibility to skip calling this function if
-  /// the map entry is not expected to exist because \p HstPtrBegin uses shared
-  /// memory.
-  int deallocTgtPtr(HDTTMapAccessorTy &HDTTMap, LookupResult LR, int64_t Size);
+  /// Remove the \p Entry from the data map. Expect the entry's total reference
+  /// count to be zero and the caller thread to be the last one using it. \p
+  /// HDTTMap ensure the caller holds exclusive access and can modify the map.
+  /// Return \c OFFLOAD_SUCCESS if the map entry existed, and return \c
+  /// OFFLOAD_FAIL if not. It is the caller's responsibility to skip calling
+  /// this function if the map entry is not expected to exist because \p
+  /// HstPtrBegin uses shared memory.
+  [[nodiscard]] int eraseMapEntry(HDTTMapAccessorTy &HDTTMap,
+                                  HostDataToTargetTy *Entry, int64_t Size);
+
+  /// Deallocate the \p Entry from the device memory and delete it. Return \c
+  /// OFFLOAD_SUCCESS if the deallocation operations executed successfully, and
+  /// return \c OFFLOAD_FAIL otherwise.
+  [[nodiscard]] int deallocTgtPtrAndEntry(HostDataToTargetTy *Entry,
+                                          int64_t Size);
 
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
   int disassociatePtr(void *HstPtrBegin);
@@ -419,24 +174,38 @@ struct DeviceTy {
   // synchronous.
   // Copy data from host to device
   int32_t submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
-                     AsyncInfoTy &AsyncInfo);
+                     AsyncInfoTy &AsyncInfo,
+                     HostDataToTargetTy *Entry = nullptr);
   // Copy data from device back to host
   int32_t retrieveData(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
-                       AsyncInfoTy &AsyncInfo);
+                       AsyncInfoTy &AsyncInfo,
+                       HostDataToTargetTy *Entry = nullptr);
   // Copy data from current device to destination device directly
   int32_t dataExchange(void *SrcPtr, DeviceTy &DstDev, void *DstPtr,
                        int64_t Size, AsyncInfoTy &AsyncInfo);
 
-  int32_t runRegion(void *TgtEntryPtr, void **TgtVarsPtr, ptrdiff_t *TgtOffsets,
-                    int32_t TgtVarsSize, AsyncInfoTy &AsyncInfo);
-  int32_t runTeamRegion(void *TgtEntryPtr, void **TgtVarsPtr,
-                        ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
-                        int32_t NumTeams, int32_t ThreadLimit,
-                        uint64_t LoopTripCount, AsyncInfoTy &AsyncInfo);
+  /// Notify the plugin about a new mapping starting at the host address
+  /// \p HstPtr and \p Size bytes.
+  int32_t notifyDataMapped(void *HstPtr, int64_t Size);
+
+  /// Notify the plugin about an existing mapping being unmapped starting at
+  /// the host address \p HstPtr.
+  int32_t notifyDataUnmapped(void *HstPtr);
+
+  // Launch the kernel identified by \p TgtEntryPtr with the given arguments.
+  int32_t launchKernel(void *TgtEntryPtr, void **TgtVarsPtr,
+                       ptrdiff_t *TgtOffsets, const KernelArgsTy &KernelArgs,
+                       AsyncInfoTy &AsyncInfo);
 
   /// Synchronize device/queue/event based on \p AsyncInfo and return
   /// OFFLOAD_SUCCESS/OFFLOAD_FAIL when succeeds/fails.
   int32_t synchronize(AsyncInfoTy &AsyncInfo);
+
+  /// Query for device/queue/event based completion on \p AsyncInfo in a
+  /// non-blocking manner and return OFFLOAD_SUCCESS/OFFLOAD_FAIL when
+  /// succeeds/fails. Must be called multiple times until AsyncInfo is
+  /// completed and AsyncInfo.isDone() returns true.
+  int32_t queryAsync(AsyncInfoTy &AsyncInfo);
 
   /// Calls the corresponding print in the \p RTLDEVID
   /// device RTL to obtain the information of the specific device.
@@ -507,6 +276,28 @@ struct PluginManager {
   /// Flag to indicate if we use events to ensure the atomicity of
   /// map clauses or not. Can be modified with an environment variable.
   const bool UseEventsForAtomicTransfers;
+
+  // Work around for plugins that call dlopen on shared libraries that call
+  // tgt_register_lib during their initialisation. Stash the pointers in a
+  // vector until the plugins are all initialised and then register them.
+  bool delayRegisterLib(__tgt_bin_desc *Desc) {
+    if (RTLsLoaded)
+      return false;
+    DelayedBinDesc.push_back(Desc);
+    return true;
+  }
+
+  void registerDelayedLibraries() {
+    // Only called by libomptarget constructor
+    RTLsLoaded = true;
+    for (auto *Desc : DelayedBinDesc)
+      __tgt_register_lib(Desc);
+    DelayedBinDesc.clear();
+  }
+
+private:
+  bool RTLsLoaded = false;
+  llvm::SmallVector<__tgt_bin_desc *> DelayedBinDesc;
 };
 
 extern PluginManager *PM;

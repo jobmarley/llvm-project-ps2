@@ -80,7 +80,6 @@ namespace lldb_private {
 class Breakpoint : public std::enable_shared_from_this<Breakpoint>,
                    public Stoppoint {
 public:
-  static ConstString GetEventIdentifier();
   static const char *
       BreakpointEventTypeAsCString(lldb::BreakpointEventType type);
 
@@ -106,11 +105,11 @@ public:
 
     ~BreakpointEventData() override;
 
-    static ConstString GetFlavorString();
-    
+    static llvm::StringRef GetFlavorString();
+
     Log *GetLogChannel() override;
 
-    ConstString GetFlavor() const override;
+    llvm::StringRef GetFlavor() const override;
 
     lldb::BreakpointEventType GetBreakpointEventType() const;
 
@@ -524,9 +523,8 @@ public:
 
   lldb::SearchFilterSP GetSearchFilter() { return m_filter_sp; }
 
-private: // The target needs to manage adding & removing names.  It will do the
-         // checking for name validity as well.
-  bool AddName(llvm::StringRef new_name);
+private:
+  void AddName(llvm::StringRef new_name);
 
   void RemoveName(const char *name_to_remove) {
     if (name_to_remove)

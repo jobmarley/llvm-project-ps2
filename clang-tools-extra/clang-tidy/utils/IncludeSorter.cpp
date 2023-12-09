@@ -10,9 +10,9 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include <algorithm>
+#include <optional>
 
-namespace clang {
-namespace tidy {
+namespace clang::tidy {
 namespace utils {
 
 namespace {
@@ -134,12 +134,13 @@ void IncludeSorter::addInclude(StringRef FileName, bool IsAngled,
   int Offset = findNextLine(SourceMgr->getCharacterData(EndLocation));
 
   // Record the relevant location information for this inclusion directive.
-  IncludeLocations[FileName].push_back(
+  auto &IncludeLocation = IncludeLocations[FileName];
+  IncludeLocation.push_back(
       SourceRange(HashLocation, EndLocation.getLocWithOffset(Offset)));
-  SourceLocations.push_back(IncludeLocations[FileName].back());
+  SourceLocations.push_back(IncludeLocation.back());
 
   // Stop if this inclusion is a duplicate.
-  if (IncludeLocations[FileName].size() > 1)
+  if (IncludeLocation.size() > 1)
     return;
 
   // Add the included file's name to the appropriate bucket.
@@ -149,8 +150,8 @@ void IncludeSorter::addInclude(StringRef FileName, bool IsAngled,
     IncludeBucket[Kind].push_back(FileName.str());
 }
 
-Optional<FixItHint> IncludeSorter::createIncludeInsertion(StringRef FileName,
-                                                          bool IsAngled) {
+std::optional<FixItHint>
+IncludeSorter::createIncludeInsertion(StringRef FileName, bool IsAngled) {
   std::string IncludeStmt;
   if (Style == IncludeStyle::IS_Google_ObjC) {
     IncludeStmt = IsAngled
@@ -179,7 +180,7 @@ Optional<FixItHint> IncludeSorter::createIncludeInsertion(StringRef FileName,
         return FixItHint::CreateInsertion(Location.getBegin(), IncludeStmt);
       }
       if (FileName == IncludeEntry) {
-        return llvm::None;
+        return std::nullopt;
       }
     }
     // FileName comes after all include entries in bucket, insert it after
@@ -203,7 +204,7 @@ Optional<FixItHint> IncludeSorter::createIncludeInsertion(StringRef FileName,
     }
   }
   if (NonEmptyKind == IK_InvalidInclude) {
-    return llvm::None;
+    return std::nullopt;
   }
 
   if (NonEmptyKind < IncludeKind) {
@@ -230,7 +231,6 @@ OptionEnumMapping<utils::IncludeSorter::IncludeStyle>::getEnumMapping() {
       Mapping[] = {{utils::IncludeSorter::IS_LLVM, "llvm"},
                    {utils::IncludeSorter::IS_Google, "google"},
                    {utils::IncludeSorter::IS_Google_ObjC, "google-objc"}};
-  return makeArrayRef(Mapping);
+  return {Mapping};
 }
-} // namespace tidy
-} // namespace clang
+} // namespace clang::tidy

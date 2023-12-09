@@ -8,8 +8,10 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ExecutionEngine/JITLink/JITLink.h"
-#include "llvm/Support/Endian.h"
+#include "llvm/ExecutionEngine/Orc/ObjectFileInterface.h"
 #include "llvm/Support/Memory.h"
+
+#include "llvm/Testing/Support/Error.h"
 #include "gtest/gtest.h"
 
 using namespace llvm;
@@ -58,12 +60,12 @@ static ArrayRef<char> BlockContent(BlockContentBytes);
 
 TEST(LinkGraphTest, Construction) {
   // Check that LinkGraph construction works as expected.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   EXPECT_EQ(G.getName(), "foo");
   EXPECT_EQ(G.getTargetTriple().str(), "x86_64-apple-darwin");
   EXPECT_EQ(G.getPointerSize(), 8U);
-  EXPECT_EQ(G.getEndianness(), support::little);
+  EXPECT_EQ(G.getEndianness(), llvm::endianness::little);
   EXPECT_TRUE(G.external_symbols().empty());
   EXPECT_TRUE(G.absolute_symbols().empty());
   EXPECT_TRUE(G.defined_symbols().empty());
@@ -72,7 +74,7 @@ TEST(LinkGraphTest, Construction) {
 
 TEST(LinkGraphTest, AddressAccess) {
   // Check that we can get addresses for blocks, symbols, and edges.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
 
   auto &Sec1 =
@@ -89,9 +91,27 @@ TEST(LinkGraphTest, AddressAccess) {
   EXPECT_EQ(B1.getFixupAddress(E1), B1Addr + 8) << "Incorrect fixup address";
 }
 
+TEST(LinkGraphTest, SectionEmpty) {
+  // Check that Section::empty behaves as expected.
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
+              getGenericEdgeKindName);
+  auto &Sec1 =
+      G.createSection("__data.1", orc::MemProt::Read | orc::MemProt::Write);
+  auto &B =
+      G.createContentBlock(Sec1, BlockContent, orc::ExecutorAddr(0x1000), 8, 0);
+  G.addDefinedSymbol(B, 0, "S", 4, Linkage::Strong, Scope::Default, false,
+                     false);
+
+  auto &Sec2 =
+      G.createSection("__data.2", orc::MemProt::Read | orc::MemProt::Write);
+
+  EXPECT_FALSE(Sec1.empty());
+  EXPECT_TRUE(Sec2.empty());
+}
+
 TEST(LinkGraphTest, BlockAndSymbolIteration) {
   // Check that we can iterate over blocks within Sections and across sections.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec1 =
       G.createSection("__data.1", orc::MemProt::Read | orc::MemProt::Write);
@@ -144,7 +164,7 @@ TEST(LinkGraphTest, BlockAndSymbolIteration) {
 
 TEST(LinkGraphTest, ContentAccessAndUpdate) {
   // Check that we can make a defined symbol external.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -196,6 +216,16 @@ TEST(LinkGraphTest, ContentAccessAndUpdate) {
   EXPECT_EQ(MutableContent3.size(), MutableContent.size())
       << "Unexpected mutable content 2 size";
 
+  // Check that we can obtain a writer and reader over the content.
+  // Check that we can get a BinaryStreamReader for B.
+  auto Writer = G.getBlockContentWriter(B);
+  EXPECT_THAT_ERROR(Writer.writeInteger((uint32_t)0xcafef00d), Succeeded());
+
+  auto Reader = G.getBlockContentReader(B);
+  uint32_t Initial32Bits = 0;
+  EXPECT_THAT_ERROR(Reader.readInteger(Initial32Bits), Succeeded());
+  EXPECT_EQ(Initial32Bits, (uint32_t)0xcafef00d);
+
   // Set content back to immutable and check that everything behaves as
   // expected again.
   B.setContent(BlockContent);
@@ -210,11 +240,20 @@ TEST(LinkGraphTest, ContentAccessAndUpdate) {
                                          orc::ExecutorAddr(0x10000), 8, 0);
 
   EXPECT_TRUE(B2.isContentMutable()) << "Expected B2 content to be mutable";
+  EXPECT_EQ(B2.getSize(), MutableContent.size());
+
+  // Create a mutable content block with initial zero-fill.
+  auto &B3 =
+      G.createMutableContentBlock(Sec, 16, orc::ExecutorAddr(0x2000), 8, 0);
+  EXPECT_TRUE(B3.isContentMutable()) << "Expected B2 content to be mutable";
+  EXPECT_EQ(B3.getSize(), 16U);
+  EXPECT_TRUE(llvm::all_of(B3.getAlreadyMutableContent(),
+                           [](char C) { return C == 0; }));
 }
 
 TEST(LinkGraphTest, MakeExternal) {
   // Check that we can make defined and absolute symbols external.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -284,7 +323,7 @@ TEST(LinkGraphTest, MakeExternal) {
 
 TEST(LinkGraphTest, MakeAbsolute) {
   // Check that we can make defined and external symbols absolute.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -353,7 +392,7 @@ TEST(LinkGraphTest, MakeAbsolute) {
 
 TEST(LinkGraphTest, MakeDefined) {
   // Check that we can make an external symbol defined.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -401,7 +440,7 @@ TEST(LinkGraphTest, MakeDefined) {
 
 TEST(LinkGraphTest, TransferDefinedSymbol) {
   // Check that we can transfer a defined symbol from one block to another.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -426,7 +465,7 @@ TEST(LinkGraphTest, TransferDefinedSymbol) {
   EXPECT_EQ(S1.getSize(), 64U) << "Size was not updated";
 
   // Transfer with non-zero offset, implicit truncation.
-  G.transferDefinedSymbol(S1, B3, 16, None);
+  G.transferDefinedSymbol(S1, B3, 16, std::nullopt);
 
   EXPECT_EQ(&S1.getBlock(), &B3) << "Block was not updated";
   EXPECT_EQ(S1.getOffset(), 16U) << "Offset was not updated";
@@ -436,7 +475,7 @@ TEST(LinkGraphTest, TransferDefinedSymbol) {
 TEST(LinkGraphTest, TransferDefinedSymbolAcrossSections) {
   // Check that we can transfer a defined symbol from an existing block in one
   // section to another.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec1 =
       G.createSection("__data.1", orc::MemProt::Read | orc::MemProt::Write);
@@ -470,7 +509,7 @@ TEST(LinkGraphTest, TransferDefinedSymbolAcrossSections) {
 TEST(LinkGraphTest, TransferBlock) {
   // Check that we can transfer a block (and all associated symbols) from one
   // section to another.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec1 =
       G.createSection("__data.1", orc::MemProt::Read | orc::MemProt::Write);
@@ -518,7 +557,7 @@ TEST(LinkGraphTest, TransferBlock) {
 TEST(LinkGraphTest, MergeSections) {
   // Check that we can transfer a block (and all associated symbols) from one
   // section to another.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec1 =
       G.createSection("__data.1", orc::MemProt::Read | orc::MemProt::Write);
@@ -604,7 +643,7 @@ TEST(LinkGraphTest, MergeSections) {
 
 TEST(LinkGraphTest, SplitBlock) {
   // Check that the LinkGraph::splitBlock test works as expected.
-  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, support::little,
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
               getGenericEdgeKindName);
   auto &Sec =
       G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
@@ -697,4 +736,77 @@ TEST(LinkGraphTest, SplitBlock) {
     EXPECT_EQ(E1->getOffset(), 0U);
     EXPECT_EQ(E2->getOffset(), 4U);
   }
+}
+
+TEST(LinkGraphTest, GraphAllocationMethods) {
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
+              getGenericEdgeKindName);
+
+  // Test allocation of sized, uninitialized buffer.
+  auto Buf1 = G.allocateBuffer(10);
+  EXPECT_EQ(Buf1.size(), 10U);
+
+  // Test allocation of content-backed buffer.
+  char Buf2Src[] = {1, static_cast<char>(-1), 0, 42};
+  auto Buf2 = G.allocateContent(ArrayRef<char>(Buf2Src));
+  EXPECT_EQ(Buf2, ArrayRef<char>(Buf2Src));
+
+  // Test c-string allocation from StringRef.
+  StringRef Buf3Src = "hello";
+  auto Buf3 = G.allocateCString(Buf3Src);
+  EXPECT_TRUE(llvm::equal(Buf3.drop_back(1), Buf3Src));
+  EXPECT_EQ(Buf3.back(), '\0');
+}
+
+TEST(LinkGraphTest, IsCStringBlockTest) {
+  // Check that the LinkGraph::splitBlock test works as expected.
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
+              getGenericEdgeKindName);
+  auto &Sec =
+      G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
+
+  char CString[] = "hello, world!";
+  char NotACString[] = {0, 1, 0, 1, 0};
+
+  auto &CStringBlock =
+      G.createContentBlock(Sec, CString, orc::ExecutorAddr(), 1, 0);
+  auto &NotACStringBlock =
+      G.createContentBlock(Sec, NotACString, orc::ExecutorAddr(), 1, 0);
+  auto &SizeOneZeroFillBlock =
+      G.createZeroFillBlock(Sec, 1, orc::ExecutorAddr(), 1, 0);
+  auto &LargerZeroFillBlock =
+      G.createZeroFillBlock(Sec, 2, orc::ExecutorAddr(), 1, 0);
+
+  EXPECT_TRUE(isCStringBlock(CStringBlock));
+  EXPECT_FALSE(isCStringBlock(NotACStringBlock));
+  EXPECT_TRUE(isCStringBlock(SizeOneZeroFillBlock));
+  EXPECT_FALSE(isCStringBlock(LargerZeroFillBlock));
+}
+
+TEST(LinkGraphTest, BasicLayoutHonorsNoAlloc) {
+  // Check that BasicLayout honors NoAlloc.
+  LinkGraph G("foo", Triple("x86_64-apple-darwin"), 8, llvm::endianness::little,
+              getGenericEdgeKindName);
+
+  // Create a regular section and block.
+  auto &Sec1 =
+      G.createSection("__data", orc::MemProt::Read | orc::MemProt::Write);
+  G.createContentBlock(Sec1, BlockContent.slice(0, 8), orc::ExecutorAddr(), 8,
+                       0);
+
+  // Create a NoAlloc section and block.
+  auto &Sec2 =
+      G.createSection("__metadata", orc::MemProt::Read | orc::MemProt::Write);
+  Sec2.setMemLifetime(orc::MemLifetime::NoAlloc);
+  G.createContentBlock(Sec2, BlockContent.slice(0, 8), orc::ExecutorAddr(), 8,
+                       0);
+
+  BasicLayout BL(G);
+
+  EXPECT_EQ(std::distance(BL.segments().begin(), BL.segments().end()), 1U);
+  EXPECT_EQ(BL.segments().begin()->first,
+            orc::MemProt::Read | orc::MemProt::Write);
+  auto &SegInfo = BL.segments().begin()->second;
+  EXPECT_EQ(SegInfo.Alignment, 8U);
+  EXPECT_EQ(SegInfo.ContentSize, 8U);
 }

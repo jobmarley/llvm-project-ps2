@@ -1,4 +1,4 @@
-// RUN: mlir-opt %s -linalg-tile="tile-sizes=2,3,4" -split-input-file | FileCheck %s
+// RUN: mlir-opt %s -transform-interpreter -split-input-file | FileCheck %s
 
 // CHECK-LABEL: func @matmul_tensors(
 // CHECK-SAME:    %[[TA:[0-9a-z]+]]: tensor<?x?xf32>
@@ -27,6 +27,14 @@ func.func @matmul_tensors(
   return %0 : tensor<?x?xf32>
 }
 
+module attributes {transform.with_named_sequence} {
+  transform.named_sequence @__transform_main(%arg1: !transform.any_op {transform.readonly}) {
+    %0 = transform.structured.match ops{["linalg.matmul"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+    %1, %loops:3 = transform.structured.tile_using_for %0 [2, 3, 4] : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
+    transform.yield
+  }
+}
+
 // -----
 
 func.func @generic_op_tensors(
@@ -50,6 +58,14 @@ func.func @generic_op_tensors(
       linalg.yield %5 : f32
     } -> tensor<?x?x?xf32>
   return %4 : tensor<?x?x?xf32>
+}
+
+module attributes {transform.with_named_sequence} {
+  transform.named_sequence @__transform_main(%arg1: !transform.any_op {transform.readonly}) {
+    %0 = transform.structured.match ops{["linalg.generic"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+    %1, %loops:3 = transform.structured.tile_using_for %0 [2, 3, 4] : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
+    transform.yield
+  }
 }
 
 // CHECK-LABEL: func @generic_op_tensors
@@ -76,7 +92,7 @@ func.func @generic_op_tensors(
 
 // -----
 
-//  CHECK-DAG:  #[[MAP0:.*]] = affine_map<(d0)[s0] -> (-d0 + s0, 2)>
+//  CHECK-DAG:  #[[MAP0:.*]] = affine_map<(d0)[s0] -> (2, -d0 + s0)>
 
 //      CHECK:  fold_extract_slice
 // CHECK-SAME:    %[[ARG0:[0-9a-zA-Z]*]]: tensor<?x128xf32>
@@ -94,10 +110,10 @@ func.func @fold_extract_slice(
   //      CHECK:   %[[E:.*]] = tensor.extract_slice %[[ARG0]][3, 4] [%[[DIM]], 42] [1, 1] : tensor<?x128xf32> to tensor<?x42xf32>
 
   //      CHECK:    scf.for %[[IV0:[0-9a-zA-Z]*]] =
+  //      CHECK:      %[[SIZE0:.*]] = affine.min #[[MAP0]](%[[IV0]])[%[[DIM]]
   //      CHECK:      scf.for %[[IV1:[0-9a-zA-Z]*]] =
 
   // Fold the existing extract slice op into the one created by the tiling.
-  //      CHECK:        %[[SIZE0:.*]] = affine.min #[[MAP0]](%[[IV0]])[%[[DIM]]
   //      CHECK:        %[[T0:.*]] = tensor.extract_slice %[[E]]
   // CHECK-SAME:                                          %[[IV0]], %[[IV1]]
   // CHECK-SAME:                                          %[[SIZE0]], 3
@@ -117,3 +133,10 @@ func.func @fold_extract_slice(
   return %2 : tensor<?x42xf32>
 }
 
+module attributes {transform.with_named_sequence} {
+  transform.named_sequence @__transform_main(%arg1: !transform.any_op {transform.readonly}) {
+    %0 = transform.structured.match ops{["linalg.generic"]} in %arg1 : (!transform.any_op) -> !transform.any_op
+    %1, %loops:3 = transform.structured.tile_using_for %0 [2, 3, 4] : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
+    transform.yield
+  }
+}

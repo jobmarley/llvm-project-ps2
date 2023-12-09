@@ -1,5 +1,10 @@
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.0-compute -std=hlsl202x -S -emit-llvm -disable-llvm-passes %s -o - | FileCheck %s
-// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.3-library -std=hlsl202x -S -emit-llvm -disable-llvm-passes %s -o - | FileCheck %s --check-prefixes=CHECK
+// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.0-compute -std=hlsl202x -S -emit-llvm -disable-llvm-passes %s -o - | FileCheck %s --check-prefixes=CS,CHECK
+// RUN: %clang_cc1 -triple dxil-pc-shadermodel6.3-library -std=hlsl202x -S -emit-llvm -disable-llvm-passes %s -o - | FileCheck %s --check-prefixes=LIB,CHECK
+
+// Make sure global variable for dtors exist for lib profile.
+// LIB:@llvm.global_dtors
+// Make sure global variable for dtors removed for compute profile.
+// CS-NOT:llvm.global_dtors
 
 struct Tail {
   Tail() {
@@ -36,10 +41,14 @@ void Wag() {
 int Pupper::Count = 0;
 
 [numthreads(1,1,1)]
+[shader("compute")]
 void main(unsigned GI : SV_GroupIndex) {
   Wag();
 }
 
+// Make sure global variable for ctors/dtors removed.
+// CHECK-NOT:@llvm.global_ctors
+// CHECK-NOT:@llvm.global_dtors
 //CHECK:      define void @main()
 //CHECK-NEXT: entry:
 //CHECK-NEXT:   call void @_GLOBAL__sub_I_GlobalDestructors.hlsl()

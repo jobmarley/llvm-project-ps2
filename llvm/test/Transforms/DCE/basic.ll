@@ -1,4 +1,5 @@
 ; RUN: opt -passes='module(debugify),function(dce)' -S < %s | FileCheck %s
+; RUN: opt -passes='module(debugify),function(dce)' -S < %s --try-experimental-debuginfo-iterators | FileCheck %s
 
 ; CHECK-LABEL: @test
 define void @test() {
@@ -53,18 +54,18 @@ define i32 @test_lifetime_global() {
 }
 
 ; CHECK-LABEL: @test_lifetime_bitcast
-define i32 @test_lifetime_bitcast(ptr) {
+define i32 @test_lifetime_bitcast(ptr %arg) {
 ; Check that lifetime intrinsics are NOT removed when the pointer is a bitcast.
 ; It's not uncommon for two bitcasts to be made: one for lifetime, one for use.
 ; TODO: Support the above case.
 ; CHECK-NEXT: bitcast
 ; CHECK-NEXT: llvm.dbg.value
-; CHECK-NEXT: llvm.lifetime.start
-; CHECK-NEXT: llvm.lifetime.end
+; CHECK-NEXT: llvm.lifetime.start.p0(i64 -1, ptr %cast)
+; CHECK-NEXT: llvm.lifetime.end.p0(i64 -1, ptr %cast)
 ; CHECK-NEXT: ret i32 0
-  %2 = bitcast ptr %0 to ptr
-  call void @llvm.lifetime.start.p0(i64 -1, ptr %2)
-  call void @llvm.lifetime.end.p0(i64 -1, ptr %2)
+  %cast = bitcast ptr %arg to ptr
+  call void @llvm.lifetime.start.p0(i64 -1, ptr %cast)
+  call void @llvm.lifetime.end.p0(i64 -1, ptr %cast)
   ret i32 0
 }
 

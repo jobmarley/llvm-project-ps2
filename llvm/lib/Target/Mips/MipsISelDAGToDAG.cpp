@@ -36,6 +36,7 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "mips-isel"
+#define PASS_NAME "MIPS DAG->DAG Pattern Instruction Selection"
 
 //===----------------------------------------------------------------------===//
 // Instruction Selector Implementation
@@ -296,8 +297,8 @@ void MipsDAGToDAGISel::Select(SDNode *Node) {
   case ISD::LOAD:
   case ISD::STORE:
     assert((Subtarget->systemSupportsUnalignedAccess() ||
-            cast<MemSDNode>(Node)->getMemoryVT().getSizeInBits() / 8 <=
-            cast<MemSDNode>(Node)->getAlignment()) &&
+            cast<MemSDNode>(Node)->getAlign() >=
+                cast<MemSDNode>(Node)->getMemoryVT().getStoreSize()) &&
            "Unexpected unaligned loads/stores.");
     break;
 #endif
@@ -307,18 +308,22 @@ void MipsDAGToDAGISel::Select(SDNode *Node) {
   SelectCode(Node);
 }
 
-bool MipsDAGToDAGISel::
-SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
-                             std::vector<SDValue> &OutOps) {
+bool MipsDAGToDAGISel::SelectInlineAsmMemoryOperand(
+    const SDValue &Op, InlineAsm::ConstraintCode ConstraintID,
+    std::vector<SDValue> &OutOps) {
   // All memory constraints can at least accept raw pointers.
   switch(ConstraintID) {
   default:
     llvm_unreachable("Unexpected asm memory constraint");
-  case InlineAsm::Constraint_m:
-  case InlineAsm::Constraint_R:
-  case InlineAsm::Constraint_ZC:
+  case InlineAsm::ConstraintCode::m:
+  case InlineAsm::ConstraintCode::R:
+  case InlineAsm::ConstraintCode::ZC:
     OutOps.push_back(Op);
     return false;
   }
   return true;
 }
+
+char MipsDAGToDAGISel::ID = 0;
+
+INITIALIZE_PASS(MipsDAGToDAGISel, DEBUG_TYPE, PASS_NAME, false, false)

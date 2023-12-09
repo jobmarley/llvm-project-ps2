@@ -17,6 +17,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/Support/BranchProbability.h"
 #include "llvm/Support/CommandLine.h"
@@ -44,26 +45,6 @@ constexpr unsigned WeightsIdx = 1;
 
 // the minimum number of operands for MD_prof nodes with branch weights
 constexpr unsigned MinBWOps = 3;
-
-bool extractWeights(const MDNode *ProfileData,
-                    SmallVectorImpl<uint32_t> &Weights) {
-  // Assume preconditions are already met (i.e. this is valid metadata)
-  assert(ProfileData && "ProfileData was nullptr in extractWeights");
-  unsigned NOps = ProfileData->getNumOperands();
-
-  assert(WeightsIdx < NOps && "Weights Index must be less than NOps.");
-  Weights.resize(NOps - WeightsIdx);
-
-  for (unsigned Idx = WeightsIdx, E = NOps; Idx != E; ++Idx) {
-    ConstantInt *Weight =
-        mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(Idx));
-    assert(Weight && "Malformed branch_weight in MD_prof node");
-    assert(Weight->getValue().getActiveBits() <= 32 &&
-           "Too many bits for uint32_t");
-    Weights[Idx - WeightsIdx] = Weight->getZExtValue();
-  }
-  return true;
-}
 
 // We may want to add support for other MD_prof types, so provide an abstraction
 // for checking the metadata type.
@@ -101,11 +82,48 @@ bool hasBranchWeightMD(const Instruction &I) {
   return isBranchWeightMD(ProfileData);
 }
 
+bool hasValidBranchWeightMD(const Instruction &I) {
+  return getValidBranchWeightMDNode(I);
+}
+
+MDNode *getBranchWeightMDNode(const Instruction &I) {
+  auto *ProfileData = I.getMetadata(LLVMContext::MD_prof);
+  if (!isBranchWeightMD(ProfileData))
+    return nullptr;
+  return ProfileData;
+}
+
+MDNode *getValidBranchWeightMDNode(const Instruction &I) {
+  auto *ProfileData = getBranchWeightMDNode(I);
+  if (ProfileData && ProfileData->getNumOperands() == 1 + I.getNumSuccessors())
+    return ProfileData;
+  return nullptr;
+}
+
+void extractFromBranchWeightMD(const MDNode *ProfileData,
+                               SmallVectorImpl<uint32_t> &Weights) {
+  assert(isBranchWeightMD(ProfileData) && "wrong metadata");
+
+  unsigned NOps = ProfileData->getNumOperands();
+  assert(WeightsIdx < NOps && "Weights Index must be less than NOps.");
+  Weights.resize(NOps - WeightsIdx);
+
+  for (unsigned Idx = WeightsIdx, E = NOps; Idx != E; ++Idx) {
+    ConstantInt *Weight =
+        mdconst::dyn_extract<ConstantInt>(ProfileData->getOperand(Idx));
+    assert(Weight && "Malformed branch_weight in MD_prof node");
+    assert(Weight->getValue().getActiveBits() <= 32 &&
+           "Too many bits for uint32_t");
+    Weights[Idx - WeightsIdx] = Weight->getZExtValue();
+  }
+}
+
 bool extractBranchWeights(const MDNode *ProfileData,
                           SmallVectorImpl<uint32_t> &Weights) {
   if (!isBranchWeightMD(ProfileData))
     return false;
-  return extractWeights(ProfileData, Weights);
+  extractFromBranchWeightMD(ProfileData, Weights);
+  return true;
 }
 
 bool extractBranchWeights(const Instruction &I,
@@ -118,7 +136,8 @@ bool extractBranchWeights(const Instruction &I, uint64_t &TrueVal,
                           uint64_t &FalseVal) {
   assert((I.getOpcode() == Instruction::Br ||
           I.getOpcode() == Instruction::Select) &&
-         "Looking for branch weights on something besides branch or select");
+         "Looking for branch weights on something besides branch, select, or "
+         "switch");
 
   SmallVector<uint32_t, 2> Weights;
   auto *ProfileData = I.getMetadata(LLVMContext::MD_prof);
@@ -159,6 +178,16 @@ bool extractProfTotalWeight(const MDNode *ProfileData, uint64_t &TotalVal) {
     return true;
   }
   return false;
+}
+
+bool extractProfTotalWeight(const Instruction &I, uint64_t &TotalVal) {
+  return extractProfTotalWeight(I.getMetadata(LLVMContext::MD_prof), TotalVal);
+}
+
+void setBranchWeights(Instruction &I, ArrayRef<uint32_t> Weights) {
+  MDBuilder MDB(I.getContext());
+  MDNode *BranchWeights = MDB.createBranchWeights(Weights);
+  I.setMetadata(LLVMContext::MD_prof, BranchWeights);
 }
 
 } // namespace llvm

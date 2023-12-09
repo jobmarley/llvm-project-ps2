@@ -17,6 +17,7 @@
 #include "mlir/Conversion/FuncToSPIRV/FuncToSPIRV.h"
 #include "mlir/Conversion/GPUToSPIRV/GPUToSPIRV.h"
 #include "mlir/Conversion/MemRefToSPIRV/MemRefToSPIRV.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVDialect.h"
 #include "mlir/Dialect/SPIRV/IR/SPIRVOps.h"
@@ -39,8 +40,7 @@ namespace {
 /// replace it).
 ///
 /// 2) Lower the body of the spirv::ModuleOp.
-class GPUToSPIRVPass : public impl::ConvertGPUToSPIRVBase<GPUToSPIRVPass> {
-public:
+struct GPUToSPIRVPass final : impl::ConvertGPUToSPIRVBase<GPUToSPIRVPass> {
   explicit GPUToSPIRVPass(bool mapMemorySpace)
       : mapMemorySpace(mapMemorySpace) {}
   void runOnOperation() override;
@@ -48,7 +48,6 @@ public:
 private:
   bool mapMemorySpace;
 };
-} // namespace
 
 void GPUToSPIRVPass::runOnOperation() {
   MLIRContext *context = &getContext();
@@ -56,45 +55,106 @@ void GPUToSPIRVPass::runOnOperation() {
 
   SmallVector<Operation *, 1> gpuModules;
   OpBuilder builder(context);
+
+  auto targetEnvSupportsKernelCapability = [](gpu::GPUModuleOp moduleOp) {
+    Operation *gpuModule = moduleOp.getOperation();
+    auto targetAttr = spirv::lookupTargetEnvOrDefault(gpuModule);
+    spirv::TargetEnv targetEnv(targetAttr);
+    return targetEnv.allows(spirv::Capability::Kernel);
+  };
+
   module.walk([&](gpu::GPUModuleOp moduleOp) {
     // Clone each GPU kernel module for conversion, given that the GPU
     // launch op still needs the original GPU kernel module.
-    builder.setInsertionPoint(moduleOp.getOperation());
+    // For Vulkan Shader capabilities, we insert the newly converted SPIR-V
+    // module right after the original GPU module, as that's the expectation of
+    // the in-tree Vulkan runner.
+    // For OpenCL Kernel capabilities, we insert the newly converted SPIR-V
+    // module inside the original GPU module, as that's the expectaion of the
+    // normal GPU compilation pipeline.
+    if (targetEnvSupportsKernelCapability(moduleOp)) {
+      builder.setInsertionPoint(moduleOp.getBody(),
+                                moduleOp.getBody()->begin());
+    } else {
+      builder.setInsertionPoint(moduleOp.getOperation());
+    }
     gpuModules.push_back(builder.clone(*moduleOp.getOperation()));
   });
 
-  // Map MemRef memory space to SPIR-V storage class first if requested.
-  if (mapMemorySpace) {
+  // Run conversion for each module independently as they can have different
+  // TargetEnv attributes.
+  for (Operation *gpuModule : gpuModules) {
+    spirv::TargetEnvAttr targetAttr =
+        spirv::lookupTargetEnvOrDefault(gpuModule);
+
+    // Map MemRef memory space to SPIR-V storage class first if requested.
+    if (mapMemorySpace) {
+      std::unique_ptr<ConversionTarget> target =
+          spirv::getMemorySpaceToStorageClassTarget(*context);
+      spirv::MemorySpaceToStorageClassMap memorySpaceMap =
+          targetEnvSupportsKernelCapability(
+              dyn_cast<gpu::GPUModuleOp>(gpuModule))
+              ? spirv::mapMemorySpaceToOpenCLStorageClass
+              : spirv::mapMemorySpaceToVulkanStorageClass;
+      spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
+
+      RewritePatternSet patterns(context);
+      spirv::populateMemorySpaceToStorageClassPatterns(converter, patterns);
+
+      if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
+        return signalPassFailure();
+    }
+
     std::unique_ptr<ConversionTarget> target =
-        spirv::getMemorySpaceToStorageClassTarget(*context);
-    spirv::MemorySpaceToStorageClassMap memorySpaceMap =
-        spirv::mapMemorySpaceToVulkanStorageClass;
-    spirv::MemorySpaceToStorageClassConverter converter(memorySpaceMap);
+        SPIRVConversionTarget::get(targetAttr);
+
+    SPIRVConversionOptions options;
+    options.use64bitIndex = this->use64bitIndex;
+    SPIRVTypeConverter typeConverter(targetAttr, options);
+    populateMMAToSPIRVCoopMatrixTypeConversion(typeConverter,
+                                               this->useCoopMatrixNV);
 
     RewritePatternSet patterns(context);
-    spirv::populateMemorySpaceToStorageClassPatterns(converter, patterns);
+    populateGPUToSPIRVPatterns(typeConverter, patterns);
+    if (this->useCoopMatrixNV) {
+      populateGpuWMMAToSPIRVCoopMatrixNVConversionPatterns(typeConverter,
+                                                           patterns);
+    } else {
+      populateGpuWMMAToSPIRVCoopMatrixKHRConversionPatterns(typeConverter,
+                                                            patterns);
+    }
 
-    if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
+    // TODO: Change SPIR-V conversion to be progressive and remove the following
+    // patterns.
+    mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
+    populateMemRefToSPIRVPatterns(typeConverter, patterns);
+    populateFuncToSPIRVPatterns(typeConverter, patterns);
+
+    if (failed(applyFullConversion(gpuModule, *target, std::move(patterns))))
       return signalPassFailure();
   }
 
-  auto targetAttr = spirv::lookupTargetEnvOrDefault(module);
-  std::unique_ptr<ConversionTarget> target =
-      SPIRVConversionTarget::get(targetAttr);
-
-  SPIRVTypeConverter typeConverter(targetAttr);
-  RewritePatternSet patterns(context);
-  populateGPUToSPIRVPatterns(typeConverter, patterns);
-
-  // TODO: Change SPIR-V conversion to be progressive and remove the following
-  // patterns.
-  mlir::arith::populateArithToSPIRVPatterns(typeConverter, patterns);
-  populateMemRefToSPIRVPatterns(typeConverter, patterns);
-  populateFuncToSPIRVPatterns(typeConverter, patterns);
-
-  if (failed(applyFullConversion(gpuModules, *target, std::move(patterns))))
-    return signalPassFailure();
+  // For OpenCL, the gpu.func op in the original gpu.module op needs to be
+  // replaced with an empty func.func op with the same arguments as the gpu.func
+  // op. The func.func op needs gpu.kernel attribute set.
+  module.walk([&](gpu::GPUModuleOp moduleOp) {
+    if (targetEnvSupportsKernelCapability(moduleOp)) {
+      moduleOp.walk([&](gpu::GPUFuncOp funcOp) {
+        builder.setInsertionPoint(funcOp);
+        auto newFuncOp = builder.create<func::FuncOp>(
+            funcOp.getLoc(), funcOp.getName(), funcOp.getFunctionType());
+        auto entryBlock = newFuncOp.addEntryBlock();
+        builder.setInsertionPointToEnd(entryBlock);
+        builder.create<func::ReturnOp>(funcOp.getLoc());
+        newFuncOp->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                           builder.getUnitAttr());
+        funcOp.erase();
+      });
+    }
+  });
 }
+
+} // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>>
 mlir::createConvertGPUToSPIRVPass(bool mapMemorySpace) {

@@ -7,7 +7,7 @@
 define <vscale x 1 x i8> @vrem_vv_nxv1i8(<vscale x 1 x i8> %va, <vscale x 1 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv1i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, mf8, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf8, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 1 x i8> %va, %vb
@@ -17,7 +17,7 @@ define <vscale x 1 x i8> @vrem_vv_nxv1i8(<vscale x 1 x i8> %va, <vscale x 1 x i8
 define <vscale x 1 x i8> @vrem_vx_nxv1i8(<vscale x 1 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv1i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf8, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 1 x i8> poison, i8 %b, i32 0
@@ -30,7 +30,7 @@ define <vscale x 1 x i8> @vrem_vi_nxv1i8_0(<vscale x 1 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv1i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf8, ta, ma
 ; CHECK-NEXT:    vmulh.vx v9, v8, a0
 ; CHECK-NEXT:    vsub.vv v9, v9, v8
 ; CHECK-NEXT:    vsra.vi v9, v9, 2
@@ -45,10 +45,23 @@ define <vscale x 1 x i8> @vrem_vi_nxv1i8_0(<vscale x 1 x i8> %va) {
   ret <vscale x 1 x i8> %vc
 }
 
+define <vscale x 1 x i8> @vrem_vv_nxv1i8_sext_twice(<vscale x 1 x i8> %va, <vscale x 1 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv1i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf8, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 1 x i8> %va to <vscale x 1 x i16>
+  %sext_vb = sext <vscale x 1 x i8> %vb to <vscale x 1 x i16>
+  %vc_ext = srem <vscale x 1 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 1 x i16> %vc_ext to <vscale x 1 x i8>
+  ret <vscale x 1 x i8> %vc
+}
+
 define <vscale x 2 x i8> @vrem_vv_nxv2i8(<vscale x 2 x i8> %va, <vscale x 2 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv2i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, mf4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 2 x i8> %va, %vb
@@ -58,7 +71,7 @@ define <vscale x 2 x i8> @vrem_vv_nxv2i8(<vscale x 2 x i8> %va, <vscale x 2 x i8
 define <vscale x 2 x i8> @vrem_vx_nxv2i8(<vscale x 2 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv2i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf4, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 2 x i8> poison, i8 %b, i32 0
@@ -71,7 +84,7 @@ define <vscale x 2 x i8> @vrem_vi_nxv2i8_0(<vscale x 2 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv2i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf4, ta, ma
 ; CHECK-NEXT:    vmulh.vx v9, v8, a0
 ; CHECK-NEXT:    vsub.vv v9, v9, v8
 ; CHECK-NEXT:    vsra.vi v9, v9, 2
@@ -86,10 +99,23 @@ define <vscale x 2 x i8> @vrem_vi_nxv2i8_0(<vscale x 2 x i8> %va) {
   ret <vscale x 2 x i8> %vc
 }
 
+define <vscale x 2 x i8> @vrem_vv_nxv2i8_sext_twice(<vscale x 2 x i8> %va, <vscale x 2 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv2i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf4, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 2 x i8> %va to <vscale x 2 x i16>
+  %sext_vb = sext <vscale x 2 x i8> %vb to <vscale x 2 x i16>
+  %vc_ext = srem <vscale x 2 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 2 x i16> %vc_ext to <vscale x 2 x i8>
+  ret <vscale x 2 x i8> %vc
+}
+
 define <vscale x 4 x i8> @vrem_vv_nxv4i8(<vscale x 4 x i8> %va, <vscale x 4 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv4i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 4 x i8> %va, %vb
@@ -99,7 +125,7 @@ define <vscale x 4 x i8> @vrem_vv_nxv4i8(<vscale x 4 x i8> %va, <vscale x 4 x i8
 define <vscale x 4 x i8> @vrem_vx_nxv4i8(<vscale x 4 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv4i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 4 x i8> poison, i8 %b, i32 0
@@ -112,7 +138,7 @@ define <vscale x 4 x i8> @vrem_vi_nxv4i8_0(<vscale x 4 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv4i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, mf2, ta, ma
 ; CHECK-NEXT:    vmulh.vx v9, v8, a0
 ; CHECK-NEXT:    vsub.vv v9, v9, v8
 ; CHECK-NEXT:    vsra.vi v9, v9, 2
@@ -127,10 +153,23 @@ define <vscale x 4 x i8> @vrem_vi_nxv4i8_0(<vscale x 4 x i8> %va) {
   ret <vscale x 4 x i8> %vc
 }
 
+define <vscale x 4 x i8> @vrem_vv_nxv4i8_sext_twice(<vscale x 4 x i8> %va, <vscale x 4 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv4i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, mf2, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 4 x i8> %va to <vscale x 4 x i16>
+  %sext_vb = sext <vscale x 4 x i8> %vb to <vscale x 4 x i16>
+  %vc_ext = srem <vscale x 4 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 4 x i16> %vc_ext to <vscale x 4 x i8>
+  ret <vscale x 4 x i8> %vc
+}
+
 define <vscale x 8 x i8> @vrem_vv_nxv8i8(<vscale x 8 x i8> %va, <vscale x 8 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv8i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, m1, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, m1, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 8 x i8> %va, %vb
@@ -140,7 +179,7 @@ define <vscale x 8 x i8> @vrem_vv_nxv8i8(<vscale x 8 x i8> %va, <vscale x 8 x i8
 define <vscale x 8 x i8> @vrem_vx_nxv8i8(<vscale x 8 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv8i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, m1, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m1, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i8> poison, i8 %b, i32 0
@@ -153,7 +192,7 @@ define <vscale x 8 x i8> @vrem_vi_nxv8i8_0(<vscale x 8 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv8i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, m1, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m1, ta, ma
 ; CHECK-NEXT:    vmulh.vx v9, v8, a0
 ; CHECK-NEXT:    vsub.vv v9, v9, v8
 ; CHECK-NEXT:    vsra.vi v9, v9, 2
@@ -168,10 +207,23 @@ define <vscale x 8 x i8> @vrem_vi_nxv8i8_0(<vscale x 8 x i8> %va) {
   ret <vscale x 8 x i8> %vc
 }
 
+define <vscale x 8 x i8> @vrem_vv_nxv8i8_sext_twice(<vscale x 8 x i8> %va, <vscale x 8 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv8i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, m1, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 8 x i8> %va to <vscale x 8 x i16>
+  %sext_vb = sext <vscale x 8 x i8> %vb to <vscale x 8 x i16>
+  %vc_ext = srem <vscale x 8 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 8 x i16> %vc_ext to <vscale x 8 x i8>
+  ret <vscale x 8 x i8> %vc
+}
+
 define <vscale x 16 x i8> @vrem_vv_nxv16i8(<vscale x 16 x i8> %va, <vscale x 16 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv16i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, m2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, m2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v10
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 16 x i8> %va, %vb
@@ -181,7 +233,7 @@ define <vscale x 16 x i8> @vrem_vv_nxv16i8(<vscale x 16 x i8> %va, <vscale x 16 
 define <vscale x 16 x i8> @vrem_vx_nxv16i8(<vscale x 16 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv16i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, m2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 16 x i8> poison, i8 %b, i32 0
@@ -194,7 +246,7 @@ define <vscale x 16 x i8> @vrem_vi_nxv16i8_0(<vscale x 16 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv16i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, m2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m2, ta, ma
 ; CHECK-NEXT:    vmulh.vx v10, v8, a0
 ; CHECK-NEXT:    vsub.vv v10, v10, v8
 ; CHECK-NEXT:    vsra.vi v10, v10, 2
@@ -209,10 +261,23 @@ define <vscale x 16 x i8> @vrem_vi_nxv16i8_0(<vscale x 16 x i8> %va) {
   ret <vscale x 16 x i8> %vc
 }
 
+define <vscale x 16 x i8> @vrem_vv_nxv16i8_sext_twice(<vscale x 16 x i8> %va, <vscale x 16 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv16i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, m2, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v10
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 16 x i8> %va to <vscale x 16 x i16>
+  %sext_vb = sext <vscale x 16 x i8> %vb to <vscale x 16 x i16>
+  %vc_ext = srem <vscale x 16 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 16 x i16> %vc_ext to <vscale x 16 x i8>
+  ret <vscale x 16 x i8> %vc
+}
+
 define <vscale x 32 x i8> @vrem_vv_nxv32i8(<vscale x 32 x i8> %va, <vscale x 32 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv32i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, m4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, m4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v12
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 32 x i8> %va, %vb
@@ -222,7 +287,7 @@ define <vscale x 32 x i8> @vrem_vv_nxv32i8(<vscale x 32 x i8> %va, <vscale x 32 
 define <vscale x 32 x i8> @vrem_vx_nxv32i8(<vscale x 32 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv32i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, m4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m4, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 32 x i8> poison, i8 %b, i32 0
@@ -235,7 +300,7 @@ define <vscale x 32 x i8> @vrem_vi_nxv32i8_0(<vscale x 32 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv32i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, m4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m4, ta, ma
 ; CHECK-NEXT:    vmulh.vx v12, v8, a0
 ; CHECK-NEXT:    vsub.vv v12, v12, v8
 ; CHECK-NEXT:    vsra.vi v12, v12, 2
@@ -250,10 +315,23 @@ define <vscale x 32 x i8> @vrem_vi_nxv32i8_0(<vscale x 32 x i8> %va) {
   ret <vscale x 32 x i8> %vc
 }
 
+define <vscale x 32 x i8> @vrem_vv_nxv32i8_sext_twice(<vscale x 32 x i8> %va, <vscale x 32 x i8> %vb) {
+; CHECK-LABEL: vrem_vv_nxv32i8_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e8, m4, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v12
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 32 x i8> %va to <vscale x 32 x i16>
+  %sext_vb = sext <vscale x 32 x i8> %vb to <vscale x 32 x i16>
+  %vc_ext = srem <vscale x 32 x i16> %sext_va, %sext_vb
+  %vc = trunc <vscale x 32 x i16> %vc_ext to <vscale x 32 x i8>
+  ret <vscale x 32 x i8> %vc
+}
+
 define <vscale x 64 x i8> @vrem_vv_nxv64i8(<vscale x 64 x i8> %va, <vscale x 64 x i8> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv64i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e8, m8, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e8, m8, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v16
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 64 x i8> %va, %vb
@@ -263,7 +341,7 @@ define <vscale x 64 x i8> @vrem_vv_nxv64i8(<vscale x 64 x i8> %va, <vscale x 64 
 define <vscale x 64 x i8> @vrem_vx_nxv64i8(<vscale x 64 x i8> %va, i8 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv64i8:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e8, m8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m8, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 64 x i8> poison, i8 %b, i32 0
@@ -276,7 +354,7 @@ define <vscale x 64 x i8> @vrem_vi_nxv64i8_0(<vscale x 64 x i8> %va) {
 ; CHECK-LABEL: vrem_vi_nxv64i8_0:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    li a0, 109
-; CHECK-NEXT:    vsetvli a1, zero, e8, m8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e8, m8, ta, ma
 ; CHECK-NEXT:    vmulh.vx v16, v8, a0
 ; CHECK-NEXT:    vsub.vv v16, v16, v8
 ; CHECK-NEXT:    vsra.vi v16, v16, 2
@@ -294,7 +372,7 @@ define <vscale x 64 x i8> @vrem_vi_nxv64i8_0(<vscale x 64 x i8> %va) {
 define <vscale x 1 x i16> @vrem_vv_nxv1i16(<vscale x 1 x i16> %va, <vscale x 1 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv1i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, mf4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, mf4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 1 x i16> %va, %vb
@@ -304,7 +382,7 @@ define <vscale x 1 x i16> @vrem_vv_nxv1i16(<vscale x 1 x i16> %va, <vscale x 1 x
 define <vscale x 1 x i16> @vrem_vx_nxv1i16(<vscale x 1 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv1i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, mf4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, mf4, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 1 x i16> poison, i16 %b, i32 0
@@ -314,41 +392,41 @@ define <vscale x 1 x i16> @vrem_vx_nxv1i16(<vscale x 1 x i16> %va, i16 signext %
 }
 
 define <vscale x 1 x i16> @vrem_vi_nxv1i16_0(<vscale x 1 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv1i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, mf4, ta, mu
-; RV32-NEXT:    vmulh.vx v9, v8, a0
-; RV32-NEXT:    vsra.vi v9, v9, 1
-; RV32-NEXT:    vsrl.vi v10, v9, 15
-; RV32-NEXT:    vadd.vv v9, v9, v10
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v9
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv1i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, mf4, ta, mu
-; RV64-NEXT:    vmulh.vx v9, v8, a0
-; RV64-NEXT:    vsra.vi v9, v9, 1
-; RV64-NEXT:    vsrl.vi v10, v9, 15
-; RV64-NEXT:    vadd.vv v9, v9, v10
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v9
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv1i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, mf4, ta, ma
+; CHECK-NEXT:    vmulh.vx v9, v8, a0
+; CHECK-NEXT:    vsra.vi v9, v9, 1
+; CHECK-NEXT:    vsrl.vi v10, v9, 15
+; CHECK-NEXT:    vadd.vv v9, v9, v10
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v9
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 1 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 1 x i16> %head, <vscale x 1 x i16> poison, <vscale x 1 x i32> zeroinitializer
   %vc = srem <vscale x 1 x i16> %va, %splat
   ret <vscale x 1 x i16> %vc
 }
 
+define <vscale x 1 x i16> @vrem_vv_nxv1i16_sext_twice(<vscale x 1 x i16> %va, <vscale x 1 x i16> %vb) {
+; CHECK-LABEL: vrem_vv_nxv1i16_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e16, mf4, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 1 x i16> %va to <vscale x 1 x i32>
+  %sext_vb = sext <vscale x 1 x i16> %vb to <vscale x 1 x i32>
+  %vc_ext = srem <vscale x 1 x i32> %sext_va, %sext_vb
+  %vc = trunc <vscale x 1 x i32> %vc_ext to <vscale x 1 x i16>
+  ret <vscale x 1 x i16> %vc
+}
+
 define <vscale x 2 x i16> @vrem_vv_nxv2i16(<vscale x 2 x i16> %va, <vscale x 2 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv2i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 2 x i16> %va, %vb
@@ -358,7 +436,7 @@ define <vscale x 2 x i16> @vrem_vv_nxv2i16(<vscale x 2 x i16> %va, <vscale x 2 x
 define <vscale x 2 x i16> @vrem_vx_nxv2i16(<vscale x 2 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv2i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 2 x i16> poison, i16 %b, i32 0
@@ -368,41 +446,41 @@ define <vscale x 2 x i16> @vrem_vx_nxv2i16(<vscale x 2 x i16> %va, i16 signext %
 }
 
 define <vscale x 2 x i16> @vrem_vi_nxv2i16_0(<vscale x 2 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv2i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, mf2, ta, mu
-; RV32-NEXT:    vmulh.vx v9, v8, a0
-; RV32-NEXT:    vsra.vi v9, v9, 1
-; RV32-NEXT:    vsrl.vi v10, v9, 15
-; RV32-NEXT:    vadd.vv v9, v9, v10
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v9
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv2i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, mf2, ta, mu
-; RV64-NEXT:    vmulh.vx v9, v8, a0
-; RV64-NEXT:    vsra.vi v9, v9, 1
-; RV64-NEXT:    vsrl.vi v10, v9, 15
-; RV64-NEXT:    vadd.vv v9, v9, v10
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v9
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv2i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, mf2, ta, ma
+; CHECK-NEXT:    vmulh.vx v9, v8, a0
+; CHECK-NEXT:    vsra.vi v9, v9, 1
+; CHECK-NEXT:    vsrl.vi v10, v9, 15
+; CHECK-NEXT:    vadd.vv v9, v9, v10
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v9
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 2 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 2 x i16> %head, <vscale x 2 x i16> poison, <vscale x 2 x i32> zeroinitializer
   %vc = srem <vscale x 2 x i16> %va, %splat
   ret <vscale x 2 x i16> %vc
 }
 
+define <vscale x 2 x i16> @vrem_vv_nxv2i16_sext_twice(<vscale x 2 x i16> %va, <vscale x 2 x i16> %vb) {
+; CHECK-LABEL: vrem_vv_nxv2i16_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e16, mf2, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 2 x i16> %va to <vscale x 2 x i32>
+  %sext_vb = sext <vscale x 2 x i16> %vb to <vscale x 2 x i32>
+  %vc_ext = srem <vscale x 2 x i32> %sext_va, %sext_vb
+  %vc = trunc <vscale x 2 x i32> %vc_ext to <vscale x 2 x i16>
+  ret <vscale x 2 x i16> %vc
+}
+
 define <vscale x 4 x i16> @vrem_vv_nxv4i16(<vscale x 4 x i16> %va, <vscale x 4 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv4i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, m1, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, m1, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 4 x i16> %va, %vb
@@ -412,7 +490,7 @@ define <vscale x 4 x i16> @vrem_vv_nxv4i16(<vscale x 4 x i16> %va, <vscale x 4 x
 define <vscale x 4 x i16> @vrem_vx_nxv4i16(<vscale x 4 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv4i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, m1, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, m1, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 4 x i16> poison, i16 %b, i32 0
@@ -422,41 +500,41 @@ define <vscale x 4 x i16> @vrem_vx_nxv4i16(<vscale x 4 x i16> %va, i16 signext %
 }
 
 define <vscale x 4 x i16> @vrem_vi_nxv4i16_0(<vscale x 4 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv4i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, m1, ta, mu
-; RV32-NEXT:    vmulh.vx v9, v8, a0
-; RV32-NEXT:    vsra.vi v9, v9, 1
-; RV32-NEXT:    vsrl.vi v10, v9, 15
-; RV32-NEXT:    vadd.vv v9, v9, v10
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v9
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv4i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, m1, ta, mu
-; RV64-NEXT:    vmulh.vx v9, v8, a0
-; RV64-NEXT:    vsra.vi v9, v9, 1
-; RV64-NEXT:    vsrl.vi v10, v9, 15
-; RV64-NEXT:    vadd.vv v9, v9, v10
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v9
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv4i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, m1, ta, ma
+; CHECK-NEXT:    vmulh.vx v9, v8, a0
+; CHECK-NEXT:    vsra.vi v9, v9, 1
+; CHECK-NEXT:    vsrl.vi v10, v9, 15
+; CHECK-NEXT:    vadd.vv v9, v9, v10
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v9
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 4 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 4 x i16> %head, <vscale x 4 x i16> poison, <vscale x 4 x i32> zeroinitializer
   %vc = srem <vscale x 4 x i16> %va, %splat
   ret <vscale x 4 x i16> %vc
 }
 
+define <vscale x 4 x i16> @vrem_vv_nxv4i16_sext_twice(<vscale x 4 x i16> %va, <vscale x 4 x i16> %vb) {
+; CHECK-LABEL: vrem_vv_nxv4i16_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e16, m1, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v9
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 4 x i16> %va to <vscale x 4 x i32>
+  %sext_vb = sext <vscale x 4 x i16> %vb to <vscale x 4 x i32>
+  %vc_ext = srem <vscale x 4 x i32> %sext_va, %sext_vb
+  %vc = trunc <vscale x 4 x i32> %vc_ext to <vscale x 4 x i16>
+  ret <vscale x 4 x i16> %vc
+}
+
 define <vscale x 8 x i16> @vrem_vv_nxv8i16(<vscale x 8 x i16> %va, <vscale x 8 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv8i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, m2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, m2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v10
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 8 x i16> %va, %vb
@@ -466,7 +544,7 @@ define <vscale x 8 x i16> @vrem_vv_nxv8i16(<vscale x 8 x i16> %va, <vscale x 8 x
 define <vscale x 8 x i16> @vrem_vx_nxv8i16(<vscale x 8 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv8i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, m2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, m2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i16> poison, i16 %b, i32 0
@@ -476,41 +554,41 @@ define <vscale x 8 x i16> @vrem_vx_nxv8i16(<vscale x 8 x i16> %va, i16 signext %
 }
 
 define <vscale x 8 x i16> @vrem_vi_nxv8i16_0(<vscale x 8 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv8i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, m2, ta, mu
-; RV32-NEXT:    vmulh.vx v10, v8, a0
-; RV32-NEXT:    vsra.vi v10, v10, 1
-; RV32-NEXT:    vsrl.vi v12, v10, 15
-; RV32-NEXT:    vadd.vv v10, v10, v12
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v10
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv8i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, m2, ta, mu
-; RV64-NEXT:    vmulh.vx v10, v8, a0
-; RV64-NEXT:    vsra.vi v10, v10, 1
-; RV64-NEXT:    vsrl.vi v12, v10, 15
-; RV64-NEXT:    vadd.vv v10, v10, v12
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v10
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv8i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, m2, ta, ma
+; CHECK-NEXT:    vmulh.vx v10, v8, a0
+; CHECK-NEXT:    vsra.vi v10, v10, 1
+; CHECK-NEXT:    vsrl.vi v12, v10, 15
+; CHECK-NEXT:    vadd.vv v10, v10, v12
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v10
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 8 x i16> %head, <vscale x 8 x i16> poison, <vscale x 8 x i32> zeroinitializer
   %vc = srem <vscale x 8 x i16> %va, %splat
   ret <vscale x 8 x i16> %vc
 }
 
+define <vscale x 8 x i16> @vrem_vv_nxv8i16_sext_twice(<vscale x 8 x i16> %va, <vscale x 8 x i16> %vb) {
+; CHECK-LABEL: vrem_vv_nxv8i16_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e16, m2, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v10
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 8 x i16> %va to <vscale x 8 x i32>
+  %sext_vb = sext <vscale x 8 x i16> %vb to <vscale x 8 x i32>
+  %vc_ext = srem <vscale x 8 x i32> %sext_va, %sext_vb
+  %vc = trunc <vscale x 8 x i32> %vc_ext to <vscale x 8 x i16>
+  ret <vscale x 8 x i16> %vc
+}
+
 define <vscale x 16 x i16> @vrem_vv_nxv16i16(<vscale x 16 x i16> %va, <vscale x 16 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv16i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, m4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, m4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v12
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 16 x i16> %va, %vb
@@ -520,7 +598,7 @@ define <vscale x 16 x i16> @vrem_vv_nxv16i16(<vscale x 16 x i16> %va, <vscale x 
 define <vscale x 16 x i16> @vrem_vx_nxv16i16(<vscale x 16 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv16i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, m4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, m4, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 16 x i16> poison, i16 %b, i32 0
@@ -530,41 +608,41 @@ define <vscale x 16 x i16> @vrem_vx_nxv16i16(<vscale x 16 x i16> %va, i16 signex
 }
 
 define <vscale x 16 x i16> @vrem_vi_nxv16i16_0(<vscale x 16 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv16i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, m4, ta, mu
-; RV32-NEXT:    vmulh.vx v12, v8, a0
-; RV32-NEXT:    vsra.vi v12, v12, 1
-; RV32-NEXT:    vsrl.vi v16, v12, 15
-; RV32-NEXT:    vadd.vv v12, v12, v16
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v12
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv16i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, m4, ta, mu
-; RV64-NEXT:    vmulh.vx v12, v8, a0
-; RV64-NEXT:    vsra.vi v12, v12, 1
-; RV64-NEXT:    vsrl.vi v16, v12, 15
-; RV64-NEXT:    vadd.vv v12, v12, v16
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v12
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv16i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, m4, ta, ma
+; CHECK-NEXT:    vmulh.vx v12, v8, a0
+; CHECK-NEXT:    vsra.vi v12, v12, 1
+; CHECK-NEXT:    vsrl.vi v16, v12, 15
+; CHECK-NEXT:    vadd.vv v12, v12, v16
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v12
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 16 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 16 x i16> %head, <vscale x 16 x i16> poison, <vscale x 16 x i32> zeroinitializer
   %vc = srem <vscale x 16 x i16> %va, %splat
   ret <vscale x 16 x i16> %vc
 }
 
+define <vscale x 16 x i16> @vrem_vv_nxv16i16_sext_twice(<vscale x 16 x i16> %va, <vscale x 16 x i16> %vb) {
+; CHECK-LABEL: vrem_vv_nxv16i16_sext_twice:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    vsetvli a0, zero, e16, m4, ta, ma
+; CHECK-NEXT:    vrem.vv v8, v8, v12
+; CHECK-NEXT:    ret
+  %sext_va = sext <vscale x 16 x i16> %va to <vscale x 16 x i32>
+  %sext_vb = sext <vscale x 16 x i16> %vb to <vscale x 16 x i32>
+  %vc_ext = srem <vscale x 16 x i32> %sext_va, %sext_vb
+  %vc = trunc <vscale x 16 x i32> %vc_ext to <vscale x 16 x i16>
+  ret <vscale x 16 x i16> %vc
+}
+
 define <vscale x 32 x i16> @vrem_vv_nxv32i16(<vscale x 32 x i16> %va, <vscale x 32 x i16> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv32i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e16, m8, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e16, m8, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v16
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 32 x i16> %va, %vb
@@ -574,7 +652,7 @@ define <vscale x 32 x i16> @vrem_vv_nxv32i16(<vscale x 32 x i16> %va, <vscale x 
 define <vscale x 32 x i16> @vrem_vx_nxv32i16(<vscale x 32 x i16> %va, i16 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv32i16:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e16, m8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e16, m8, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 32 x i16> poison, i16 %b, i32 0
@@ -584,31 +662,18 @@ define <vscale x 32 x i16> @vrem_vx_nxv32i16(<vscale x 32 x i16> %va, i16 signex
 }
 
 define <vscale x 32 x i16> @vrem_vi_nxv32i16_0(<vscale x 32 x i16> %va) {
-; RV32-LABEL: vrem_vi_nxv32i16_0:
-; RV32:       # %bb.0:
-; RV32-NEXT:    lui a0, 1048571
-; RV32-NEXT:    addi a0, a0, 1755
-; RV32-NEXT:    vsetvli a1, zero, e16, m8, ta, mu
-; RV32-NEXT:    vmulh.vx v16, v8, a0
-; RV32-NEXT:    vsra.vi v16, v16, 1
-; RV32-NEXT:    vsrl.vi v24, v16, 15
-; RV32-NEXT:    vadd.vv v16, v16, v24
-; RV32-NEXT:    li a0, -7
-; RV32-NEXT:    vnmsac.vx v8, a0, v16
-; RV32-NEXT:    ret
-;
-; RV64-LABEL: vrem_vi_nxv32i16_0:
-; RV64:       # %bb.0:
-; RV64-NEXT:    lui a0, 1048571
-; RV64-NEXT:    addiw a0, a0, 1755
-; RV64-NEXT:    vsetvli a1, zero, e16, m8, ta, mu
-; RV64-NEXT:    vmulh.vx v16, v8, a0
-; RV64-NEXT:    vsra.vi v16, v16, 1
-; RV64-NEXT:    vsrl.vi v24, v16, 15
-; RV64-NEXT:    vadd.vv v16, v16, v24
-; RV64-NEXT:    li a0, -7
-; RV64-NEXT:    vnmsac.vx v8, a0, v16
-; RV64-NEXT:    ret
+; CHECK-LABEL: vrem_vi_nxv32i16_0:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lui a0, 1048571
+; CHECK-NEXT:    addi a0, a0, 1755
+; CHECK-NEXT:    vsetvli a1, zero, e16, m8, ta, ma
+; CHECK-NEXT:    vmulh.vx v16, v8, a0
+; CHECK-NEXT:    vsra.vi v16, v16, 1
+; CHECK-NEXT:    vsrl.vi v24, v16, 15
+; CHECK-NEXT:    vadd.vv v16, v16, v24
+; CHECK-NEXT:    li a0, -7
+; CHECK-NEXT:    vnmsac.vx v8, a0, v16
+; CHECK-NEXT:    ret
   %head = insertelement <vscale x 32 x i16> poison, i16 -7, i32 0
   %splat = shufflevector <vscale x 32 x i16> %head, <vscale x 32 x i16> poison, <vscale x 32 x i32> zeroinitializer
   %vc = srem <vscale x 32 x i16> %va, %splat
@@ -618,7 +683,7 @@ define <vscale x 32 x i16> @vrem_vi_nxv32i16_0(<vscale x 32 x i16> %va) {
 define <vscale x 1 x i32> @vrem_vv_nxv1i32(<vscale x 1 x i32> %va, <vscale x 1 x i32> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv1i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e32, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e32, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 1 x i32> %va, %vb
@@ -628,7 +693,7 @@ define <vscale x 1 x i32> @vrem_vv_nxv1i32(<vscale x 1 x i32> %va, <vscale x 1 x
 define <vscale x 1 x i32> @vrem_vx_nxv1i32(<vscale x 1 x i32> %va, i32 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv1i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e32, mf2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e32, mf2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 1 x i32> poison, i32 %b, i32 0
@@ -642,7 +707,7 @@ define <vscale x 1 x i32> @vrem_vi_nxv1i32_0(<vscale x 1 x i32> %va) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a0, 449390
 ; RV32-NEXT:    addi a0, a0, -1171
-; RV32-NEXT:    vsetvli a1, zero, e32, mf2, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e32, mf2, ta, ma
 ; RV32-NEXT:    vmulh.vx v9, v8, a0
 ; RV32-NEXT:    vsub.vv v9, v9, v8
 ; RV32-NEXT:    vsrl.vi v10, v9, 31
@@ -655,8 +720,8 @@ define <vscale x 1 x i32> @vrem_vi_nxv1i32_0(<vscale x 1 x i32> %va) {
 ; RV64-LABEL: vrem_vi_nxv1i32_0:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    lui a0, 449390
-; RV64-NEXT:    addiw a0, a0, -1171
-; RV64-NEXT:    vsetvli a1, zero, e32, mf2, ta, mu
+; RV64-NEXT:    addi a0, a0, -1171
+; RV64-NEXT:    vsetvli a1, zero, e32, mf2, ta, ma
 ; RV64-NEXT:    vmulh.vx v9, v8, a0
 ; RV64-NEXT:    vsub.vv v9, v9, v8
 ; RV64-NEXT:    vsra.vi v9, v9, 2
@@ -674,7 +739,7 @@ define <vscale x 1 x i32> @vrem_vi_nxv1i32_0(<vscale x 1 x i32> %va) {
 define <vscale x 2 x i32> @vrem_vv_nxv2i32(<vscale x 2 x i32> %va, <vscale x 2 x i32> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv2i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e32, m1, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e32, m1, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 2 x i32> %va, %vb
@@ -684,7 +749,7 @@ define <vscale x 2 x i32> @vrem_vv_nxv2i32(<vscale x 2 x i32> %va, <vscale x 2 x
 define <vscale x 2 x i32> @vrem_vx_nxv2i32(<vscale x 2 x i32> %va, i32 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv2i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e32, m1, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e32, m1, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 2 x i32> poison, i32 %b, i32 0
@@ -698,7 +763,7 @@ define <vscale x 2 x i32> @vrem_vi_nxv2i32_0(<vscale x 2 x i32> %va) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a0, 449390
 ; RV32-NEXT:    addi a0, a0, -1171
-; RV32-NEXT:    vsetvli a1, zero, e32, m1, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e32, m1, ta, ma
 ; RV32-NEXT:    vmulh.vx v9, v8, a0
 ; RV32-NEXT:    vsub.vv v9, v9, v8
 ; RV32-NEXT:    vsrl.vi v10, v9, 31
@@ -711,8 +776,8 @@ define <vscale x 2 x i32> @vrem_vi_nxv2i32_0(<vscale x 2 x i32> %va) {
 ; RV64-LABEL: vrem_vi_nxv2i32_0:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    lui a0, 449390
-; RV64-NEXT:    addiw a0, a0, -1171
-; RV64-NEXT:    vsetvli a1, zero, e32, m1, ta, mu
+; RV64-NEXT:    addi a0, a0, -1171
+; RV64-NEXT:    vsetvli a1, zero, e32, m1, ta, ma
 ; RV64-NEXT:    vmulh.vx v9, v8, a0
 ; RV64-NEXT:    vsub.vv v9, v9, v8
 ; RV64-NEXT:    vsra.vi v9, v9, 2
@@ -730,7 +795,7 @@ define <vscale x 2 x i32> @vrem_vi_nxv2i32_0(<vscale x 2 x i32> %va) {
 define <vscale x 4 x i32> @vrem_vv_nxv4i32(<vscale x 4 x i32> %va, <vscale x 4 x i32> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv4i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e32, m2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e32, m2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v10
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 4 x i32> %va, %vb
@@ -740,7 +805,7 @@ define <vscale x 4 x i32> @vrem_vv_nxv4i32(<vscale x 4 x i32> %va, <vscale x 4 x
 define <vscale x 4 x i32> @vrem_vx_nxv4i32(<vscale x 4 x i32> %va, i32 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv4i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e32, m2, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e32, m2, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 4 x i32> poison, i32 %b, i32 0
@@ -754,7 +819,7 @@ define <vscale x 4 x i32> @vrem_vi_nxv4i32_0(<vscale x 4 x i32> %va) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a0, 449390
 ; RV32-NEXT:    addi a0, a0, -1171
-; RV32-NEXT:    vsetvli a1, zero, e32, m2, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e32, m2, ta, ma
 ; RV32-NEXT:    vmulh.vx v10, v8, a0
 ; RV32-NEXT:    vsub.vv v10, v10, v8
 ; RV32-NEXT:    vsrl.vi v12, v10, 31
@@ -767,8 +832,8 @@ define <vscale x 4 x i32> @vrem_vi_nxv4i32_0(<vscale x 4 x i32> %va) {
 ; RV64-LABEL: vrem_vi_nxv4i32_0:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    lui a0, 449390
-; RV64-NEXT:    addiw a0, a0, -1171
-; RV64-NEXT:    vsetvli a1, zero, e32, m2, ta, mu
+; RV64-NEXT:    addi a0, a0, -1171
+; RV64-NEXT:    vsetvli a1, zero, e32, m2, ta, ma
 ; RV64-NEXT:    vmulh.vx v10, v8, a0
 ; RV64-NEXT:    vsub.vv v10, v10, v8
 ; RV64-NEXT:    vsra.vi v10, v10, 2
@@ -786,7 +851,7 @@ define <vscale x 4 x i32> @vrem_vi_nxv4i32_0(<vscale x 4 x i32> %va) {
 define <vscale x 8 x i32> @vrem_vv_nxv8i32(<vscale x 8 x i32> %va, <vscale x 8 x i32> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv8i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e32, m4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e32, m4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v12
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 8 x i32> %va, %vb
@@ -796,7 +861,7 @@ define <vscale x 8 x i32> @vrem_vv_nxv8i32(<vscale x 8 x i32> %va, <vscale x 8 x
 define <vscale x 8 x i32> @vrem_vx_nxv8i32(<vscale x 8 x i32> %va, i32 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv8i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e32, m4, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e32, m4, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 8 x i32> poison, i32 %b, i32 0
@@ -810,7 +875,7 @@ define <vscale x 8 x i32> @vrem_vi_nxv8i32_0(<vscale x 8 x i32> %va) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a0, 449390
 ; RV32-NEXT:    addi a0, a0, -1171
-; RV32-NEXT:    vsetvli a1, zero, e32, m4, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e32, m4, ta, ma
 ; RV32-NEXT:    vmulh.vx v12, v8, a0
 ; RV32-NEXT:    vsub.vv v12, v12, v8
 ; RV32-NEXT:    vsrl.vi v16, v12, 31
@@ -823,8 +888,8 @@ define <vscale x 8 x i32> @vrem_vi_nxv8i32_0(<vscale x 8 x i32> %va) {
 ; RV64-LABEL: vrem_vi_nxv8i32_0:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    lui a0, 449390
-; RV64-NEXT:    addiw a0, a0, -1171
-; RV64-NEXT:    vsetvli a1, zero, e32, m4, ta, mu
+; RV64-NEXT:    addi a0, a0, -1171
+; RV64-NEXT:    vsetvli a1, zero, e32, m4, ta, ma
 ; RV64-NEXT:    vmulh.vx v12, v8, a0
 ; RV64-NEXT:    vsub.vv v12, v12, v8
 ; RV64-NEXT:    vsra.vi v12, v12, 2
@@ -842,7 +907,7 @@ define <vscale x 8 x i32> @vrem_vi_nxv8i32_0(<vscale x 8 x i32> %va) {
 define <vscale x 16 x i32> @vrem_vv_nxv16i32(<vscale x 16 x i32> %va, <vscale x 16 x i32> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv16i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v16
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 16 x i32> %va, %vb
@@ -852,7 +917,7 @@ define <vscale x 16 x i32> @vrem_vv_nxv16i32(<vscale x 16 x i32> %va, <vscale x 
 define <vscale x 16 x i32> @vrem_vx_nxv16i32(<vscale x 16 x i32> %va, i32 signext %b) {
 ; CHECK-LABEL: vrem_vx_nxv16i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a1, zero, e32, m8, ta, mu
+; CHECK-NEXT:    vsetvli a1, zero, e32, m8, ta, ma
 ; CHECK-NEXT:    vrem.vx v8, v8, a0
 ; CHECK-NEXT:    ret
   %head = insertelement <vscale x 16 x i32> poison, i32 %b, i32 0
@@ -866,7 +931,7 @@ define <vscale x 16 x i32> @vrem_vi_nxv16i32_0(<vscale x 16 x i32> %va) {
 ; RV32:       # %bb.0:
 ; RV32-NEXT:    lui a0, 449390
 ; RV32-NEXT:    addi a0, a0, -1171
-; RV32-NEXT:    vsetvli a1, zero, e32, m8, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e32, m8, ta, ma
 ; RV32-NEXT:    vmulh.vx v16, v8, a0
 ; RV32-NEXT:    vsub.vv v16, v16, v8
 ; RV32-NEXT:    vsrl.vi v24, v16, 31
@@ -879,8 +944,8 @@ define <vscale x 16 x i32> @vrem_vi_nxv16i32_0(<vscale x 16 x i32> %va) {
 ; RV64-LABEL: vrem_vi_nxv16i32_0:
 ; RV64:       # %bb.0:
 ; RV64-NEXT:    lui a0, 449390
-; RV64-NEXT:    addiw a0, a0, -1171
-; RV64-NEXT:    vsetvli a1, zero, e32, m8, ta, mu
+; RV64-NEXT:    addi a0, a0, -1171
+; RV64-NEXT:    vsetvli a1, zero, e32, m8, ta, ma
 ; RV64-NEXT:    vmulh.vx v16, v8, a0
 ; RV64-NEXT:    vsub.vv v16, v16, v8
 ; RV64-NEXT:    vsra.vi v16, v16, 2
@@ -898,7 +963,7 @@ define <vscale x 16 x i32> @vrem_vi_nxv16i32_0(<vscale x 16 x i32> %va) {
 define <vscale x 1 x i64> @vrem_vv_nxv1i64(<vscale x 1 x i64> %va, <vscale x 1 x i64> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv1i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e64, m1, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e64, m1, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v9
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 1 x i64> %va, %vb
@@ -913,7 +978,7 @@ define <vscale x 1 x i64> @vrem_vx_nxv1i64(<vscale x 1 x i64> %va, i64 %b) {
 ; RV32-NEXT:    sw a1, 12(sp)
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
-; RV32-NEXT:    vsetvli a1, zero, e64, m1, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
 ; RV32-NEXT:    vlse64.v v9, (a0), zero
 ; RV32-NEXT:    vrem.vv v8, v8, v9
 ; RV32-NEXT:    addi sp, sp, 16
@@ -921,7 +986,7 @@ define <vscale x 1 x i64> @vrem_vx_nxv1i64(<vscale x 1 x i64> %va, i64 %b) {
 ;
 ; RV64-LABEL: vrem_vx_nxv1i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    vsetvli a1, zero, e64, m1, ta, mu
+; RV64-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
 ; RV64-NEXT:    vrem.vx v8, v8, a0
 ; RV64-NEXT:    ret
   %head = insertelement <vscale x 1 x i64> poison, i64 %b, i32 0
@@ -942,7 +1007,7 @@ define <vscale x 1 x i64> @vrem_vi_nxv1i64_0(<vscale x 1 x i64> %va) {
 ; RV32-V-NEXT:    addi a0, a0, 1755
 ; RV32-V-NEXT:    sw a0, 8(sp)
 ; RV32-V-NEXT:    addi a0, sp, 8
-; RV32-V-NEXT:    vsetvli a1, zero, e64, m1, ta, mu
+; RV32-V-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
 ; RV32-V-NEXT:    vlse64.v v9, (a0), zero
 ; RV32-V-NEXT:    vmulh.vv v9, v8, v9
 ; RV32-V-NEXT:    li a0, 63
@@ -957,15 +1022,15 @@ define <vscale x 1 x i64> @vrem_vi_nxv1i64_0(<vscale x 1 x i64> %va) {
 ; ZVE64X-LABEL: vrem_vi_nxv1i64_0:
 ; ZVE64X:       # %bb.0:
 ; ZVE64X-NEXT:    li a0, -7
-; ZVE64X-NEXT:    vsetvli a1, zero, e64, m1, ta, mu
+; ZVE64X-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
 ; ZVE64X-NEXT:    vrem.vx v8, v8, a0
 ; ZVE64X-NEXT:    ret
 ;
 ; RV64-V-LABEL: vrem_vi_nxv1i64_0:
 ; RV64-V:       # %bb.0:
-; RV64-V-NEXT:    lui a0, %hi(.LCPI56_0)
-; RV64-V-NEXT:    ld a0, %lo(.LCPI56_0)(a0)
-; RV64-V-NEXT:    vsetvli a1, zero, e64, m1, ta, mu
+; RV64-V-NEXT:    lui a0, %hi(.LCPI67_0)
+; RV64-V-NEXT:    ld a0, %lo(.LCPI67_0)(a0)
+; RV64-V-NEXT:    vsetvli a1, zero, e64, m1, ta, ma
 ; RV64-V-NEXT:    vmulh.vx v9, v8, a0
 ; RV64-V-NEXT:    li a0, 63
 ; RV64-V-NEXT:    vsrl.vx v10, v9, a0
@@ -983,7 +1048,7 @@ define <vscale x 1 x i64> @vrem_vi_nxv1i64_0(<vscale x 1 x i64> %va) {
 define <vscale x 2 x i64> @vrem_vv_nxv2i64(<vscale x 2 x i64> %va, <vscale x 2 x i64> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv2i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e64, m2, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e64, m2, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v10
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 2 x i64> %va, %vb
@@ -998,7 +1063,7 @@ define <vscale x 2 x i64> @vrem_vx_nxv2i64(<vscale x 2 x i64> %va, i64 %b) {
 ; RV32-NEXT:    sw a1, 12(sp)
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
-; RV32-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
 ; RV32-NEXT:    vlse64.v v10, (a0), zero
 ; RV32-NEXT:    vrem.vv v8, v8, v10
 ; RV32-NEXT:    addi sp, sp, 16
@@ -1006,7 +1071,7 @@ define <vscale x 2 x i64> @vrem_vx_nxv2i64(<vscale x 2 x i64> %va, i64 %b) {
 ;
 ; RV64-LABEL: vrem_vx_nxv2i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; RV64-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
 ; RV64-NEXT:    vrem.vx v8, v8, a0
 ; RV64-NEXT:    ret
   %head = insertelement <vscale x 2 x i64> poison, i64 %b, i32 0
@@ -1027,7 +1092,7 @@ define <vscale x 2 x i64> @vrem_vi_nxv2i64_0(<vscale x 2 x i64> %va) {
 ; RV32-V-NEXT:    addi a0, a0, 1755
 ; RV32-V-NEXT:    sw a0, 8(sp)
 ; RV32-V-NEXT:    addi a0, sp, 8
-; RV32-V-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; RV32-V-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
 ; RV32-V-NEXT:    vlse64.v v10, (a0), zero
 ; RV32-V-NEXT:    vmulh.vv v10, v8, v10
 ; RV32-V-NEXT:    li a0, 63
@@ -1042,15 +1107,15 @@ define <vscale x 2 x i64> @vrem_vi_nxv2i64_0(<vscale x 2 x i64> %va) {
 ; ZVE64X-LABEL: vrem_vi_nxv2i64_0:
 ; ZVE64X:       # %bb.0:
 ; ZVE64X-NEXT:    li a0, -7
-; ZVE64X-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; ZVE64X-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
 ; ZVE64X-NEXT:    vrem.vx v8, v8, a0
 ; ZVE64X-NEXT:    ret
 ;
 ; RV64-V-LABEL: vrem_vi_nxv2i64_0:
 ; RV64-V:       # %bb.0:
-; RV64-V-NEXT:    lui a0, %hi(.LCPI59_0)
-; RV64-V-NEXT:    ld a0, %lo(.LCPI59_0)(a0)
-; RV64-V-NEXT:    vsetvli a1, zero, e64, m2, ta, mu
+; RV64-V-NEXT:    lui a0, %hi(.LCPI70_0)
+; RV64-V-NEXT:    ld a0, %lo(.LCPI70_0)(a0)
+; RV64-V-NEXT:    vsetvli a1, zero, e64, m2, ta, ma
 ; RV64-V-NEXT:    vmulh.vx v10, v8, a0
 ; RV64-V-NEXT:    li a0, 63
 ; RV64-V-NEXT:    vsrl.vx v12, v10, a0
@@ -1068,7 +1133,7 @@ define <vscale x 2 x i64> @vrem_vi_nxv2i64_0(<vscale x 2 x i64> %va) {
 define <vscale x 4 x i64> @vrem_vv_nxv4i64(<vscale x 4 x i64> %va, <vscale x 4 x i64> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv4i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e64, m4, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e64, m4, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v12
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 4 x i64> %va, %vb
@@ -1083,7 +1148,7 @@ define <vscale x 4 x i64> @vrem_vx_nxv4i64(<vscale x 4 x i64> %va, i64 %b) {
 ; RV32-NEXT:    sw a1, 12(sp)
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
-; RV32-NEXT:    vsetvli a1, zero, e64, m4, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
 ; RV32-NEXT:    vlse64.v v12, (a0), zero
 ; RV32-NEXT:    vrem.vv v8, v8, v12
 ; RV32-NEXT:    addi sp, sp, 16
@@ -1091,7 +1156,7 @@ define <vscale x 4 x i64> @vrem_vx_nxv4i64(<vscale x 4 x i64> %va, i64 %b) {
 ;
 ; RV64-LABEL: vrem_vx_nxv4i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    vsetvli a1, zero, e64, m4, ta, mu
+; RV64-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
 ; RV64-NEXT:    vrem.vx v8, v8, a0
 ; RV64-NEXT:    ret
   %head = insertelement <vscale x 4 x i64> poison, i64 %b, i32 0
@@ -1112,7 +1177,7 @@ define <vscale x 4 x i64> @vrem_vi_nxv4i64_0(<vscale x 4 x i64> %va) {
 ; RV32-V-NEXT:    addi a0, a0, 1755
 ; RV32-V-NEXT:    sw a0, 8(sp)
 ; RV32-V-NEXT:    addi a0, sp, 8
-; RV32-V-NEXT:    vsetvli a1, zero, e64, m4, ta, mu
+; RV32-V-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
 ; RV32-V-NEXT:    vlse64.v v12, (a0), zero
 ; RV32-V-NEXT:    vmulh.vv v12, v8, v12
 ; RV32-V-NEXT:    li a0, 63
@@ -1127,15 +1192,15 @@ define <vscale x 4 x i64> @vrem_vi_nxv4i64_0(<vscale x 4 x i64> %va) {
 ; ZVE64X-LABEL: vrem_vi_nxv4i64_0:
 ; ZVE64X:       # %bb.0:
 ; ZVE64X-NEXT:    li a0, -7
-; ZVE64X-NEXT:    vsetvli a1, zero, e64, m4, ta, mu
+; ZVE64X-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
 ; ZVE64X-NEXT:    vrem.vx v8, v8, a0
 ; ZVE64X-NEXT:    ret
 ;
 ; RV64-V-LABEL: vrem_vi_nxv4i64_0:
 ; RV64-V:       # %bb.0:
-; RV64-V-NEXT:    lui a0, %hi(.LCPI62_0)
-; RV64-V-NEXT:    ld a0, %lo(.LCPI62_0)(a0)
-; RV64-V-NEXT:    vsetvli a1, zero, e64, m4, ta, mu
+; RV64-V-NEXT:    lui a0, %hi(.LCPI73_0)
+; RV64-V-NEXT:    ld a0, %lo(.LCPI73_0)(a0)
+; RV64-V-NEXT:    vsetvli a1, zero, e64, m4, ta, ma
 ; RV64-V-NEXT:    vmulh.vx v12, v8, a0
 ; RV64-V-NEXT:    li a0, 63
 ; RV64-V-NEXT:    vsrl.vx v16, v12, a0
@@ -1153,7 +1218,7 @@ define <vscale x 4 x i64> @vrem_vi_nxv4i64_0(<vscale x 4 x i64> %va) {
 define <vscale x 8 x i64> @vrem_vv_nxv8i64(<vscale x 8 x i64> %va, <vscale x 8 x i64> %vb) {
 ; CHECK-LABEL: vrem_vv_nxv8i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    vsetvli a0, zero, e64, m8, ta, mu
+; CHECK-NEXT:    vsetvli a0, zero, e64, m8, ta, ma
 ; CHECK-NEXT:    vrem.vv v8, v8, v16
 ; CHECK-NEXT:    ret
   %vc = srem <vscale x 8 x i64> %va, %vb
@@ -1168,7 +1233,7 @@ define <vscale x 8 x i64> @vrem_vx_nxv8i64(<vscale x 8 x i64> %va, i64 %b) {
 ; RV32-NEXT:    sw a1, 12(sp)
 ; RV32-NEXT:    sw a0, 8(sp)
 ; RV32-NEXT:    addi a0, sp, 8
-; RV32-NEXT:    vsetvli a1, zero, e64, m8, ta, mu
+; RV32-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
 ; RV32-NEXT:    vlse64.v v16, (a0), zero
 ; RV32-NEXT:    vrem.vv v8, v8, v16
 ; RV32-NEXT:    addi sp, sp, 16
@@ -1176,7 +1241,7 @@ define <vscale x 8 x i64> @vrem_vx_nxv8i64(<vscale x 8 x i64> %va, i64 %b) {
 ;
 ; RV64-LABEL: vrem_vx_nxv8i64:
 ; RV64:       # %bb.0:
-; RV64-NEXT:    vsetvli a1, zero, e64, m8, ta, mu
+; RV64-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
 ; RV64-NEXT:    vrem.vx v8, v8, a0
 ; RV64-NEXT:    ret
   %head = insertelement <vscale x 8 x i64> poison, i64 %b, i32 0
@@ -1197,7 +1262,7 @@ define <vscale x 8 x i64> @vrem_vi_nxv8i64_0(<vscale x 8 x i64> %va) {
 ; RV32-V-NEXT:    addi a0, a0, 1755
 ; RV32-V-NEXT:    sw a0, 8(sp)
 ; RV32-V-NEXT:    addi a0, sp, 8
-; RV32-V-NEXT:    vsetvli a1, zero, e64, m8, ta, mu
+; RV32-V-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
 ; RV32-V-NEXT:    vlse64.v v16, (a0), zero
 ; RV32-V-NEXT:    vmulh.vv v16, v8, v16
 ; RV32-V-NEXT:    li a0, 63
@@ -1212,15 +1277,15 @@ define <vscale x 8 x i64> @vrem_vi_nxv8i64_0(<vscale x 8 x i64> %va) {
 ; ZVE64X-LABEL: vrem_vi_nxv8i64_0:
 ; ZVE64X:       # %bb.0:
 ; ZVE64X-NEXT:    li a0, -7
-; ZVE64X-NEXT:    vsetvli a1, zero, e64, m8, ta, mu
+; ZVE64X-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
 ; ZVE64X-NEXT:    vrem.vx v8, v8, a0
 ; ZVE64X-NEXT:    ret
 ;
 ; RV64-V-LABEL: vrem_vi_nxv8i64_0:
 ; RV64-V:       # %bb.0:
-; RV64-V-NEXT:    lui a0, %hi(.LCPI65_0)
-; RV64-V-NEXT:    ld a0, %lo(.LCPI65_0)(a0)
-; RV64-V-NEXT:    vsetvli a1, zero, e64, m8, ta, mu
+; RV64-V-NEXT:    lui a0, %hi(.LCPI76_0)
+; RV64-V-NEXT:    ld a0, %lo(.LCPI76_0)(a0)
+; RV64-V-NEXT:    vsetvli a1, zero, e64, m8, ta, ma
 ; RV64-V-NEXT:    vmulh.vx v16, v8, a0
 ; RV64-V-NEXT:    li a0, 63
 ; RV64-V-NEXT:    vsrl.vx v24, v16, a0

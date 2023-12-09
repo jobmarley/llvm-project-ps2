@@ -28,6 +28,7 @@
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/ProfileData/SampleProf.h"
 #include "llvm/ProfileData/SampleProfReader.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include "llvm/Transforms/IPO/SampleProfile.h"
 using namespace llvm;
 using namespace sampleprof;
@@ -109,6 +110,11 @@ bool X86InsertPrefetch::findPrefetchInfo(const FunctionSamples *TopSamples,
                                          Prefetches &Prefetches) const {
   assert(Prefetches.empty() &&
          "Expected caller passed empty PrefetchInfo vector.");
+
+  // There is no point to match prefetch hints if the profile is using MD5.
+  if (FunctionSamples::UseMD5)
+    return false;
+
   static constexpr std::pair<StringLiteral, unsigned> HintTypes[] = {
       {"_nta_", X86::PREFETCHNTA},
       {"_t0_", X86::PREFETCHT0},
@@ -124,7 +130,7 @@ bool X86InsertPrefetch::findPrefetchInfo(const FunctionSamples *TopSamples,
   // Convert serialized prefetch hints into PrefetchInfo objects, and populate
   // the Prefetches vector.
   for (const auto &S_V : *T) {
-    StringRef Name = S_V.getKey();
+    StringRef Name = S_V.first.stringRef();
     if (Name.consume_front(SerializedPrefetchPrefix)) {
       int64_t D = static_cast<int64_t>(S_V.second);
       unsigned IID = 0;
@@ -159,8 +165,10 @@ bool X86InsertPrefetch::doInitialization(Module &M) {
     return false;
 
   LLVMContext &Ctx = M.getContext();
+  // TODO: Propagate virtual file system into LLVM targets.
+  auto FS = vfs::getRealFileSystem();
   ErrorOr<std::unique_ptr<SampleProfileReader>> ReaderOrErr =
-      SampleProfileReader::create(Filename, Ctx);
+      SampleProfileReader::create(Filename, Ctx, *FS);
   if (std::error_code EC = ReaderOrErr.getError()) {
     std::string Msg = "Could not open profile: " + EC.message();
     Ctx.diagnose(DiagnosticInfoSampleProfile(Filename, Msg,

@@ -15,6 +15,7 @@
 #include "bolt/Core/BinaryFunction.h"
 #include "bolt/Core/FunctionLayout.h"
 #include "bolt/Core/ParallelUtilities.h"
+#include "bolt/Utils/CommandLineOpts.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Sequence.h"
 #include "llvm/ADT/SmallVector.h"
@@ -91,6 +92,9 @@ static cl::opt<SplitFunctionsStrategy> SplitStrategy(
     cl::values(clEnumValN(SplitFunctionsStrategy::Profile2, "profile2",
                           "split each function into a hot and cold fragment "
                           "using profiling information")),
+    cl::values(clEnumValN(SplitFunctionsStrategy::CDSplit, "cdsplit",
+                          "split each function into a hot, warm, and cold "
+                          "fragment using profiling information")),
     cl::values(clEnumValN(
         SplitFunctionsStrategy::Random2, "random2",
         "split each function into a hot and cold fragment at a randomly chosen "
@@ -125,13 +129,57 @@ struct SplitProfile2 final : public SplitStrategy {
     return BF.hasValidProfile() && hasFullProfile(BF) && !allBlocksCold(BF);
   }
 
-  bool keepEmpty() override { return false; }
+  bool compactFragments() override { return true; }
 
   void fragment(const BlockIt Start, const BlockIt End) override {
     for (BinaryBasicBlock *const BB : llvm::make_range(Start, End)) {
       if (BB->getExecutionCount() == 0)
         BB->setFragmentNum(FragmentNum::cold());
     }
+  }
+};
+
+struct SplitCacheDirected final : public SplitStrategy {
+  using BasicBlockOrder = BinaryFunction::BasicBlockOrderType;
+
+  bool canSplit(const BinaryFunction &BF) override {
+    return BF.hasValidProfile() && hasFullProfile(BF) && !allBlocksCold(BF);
+  }
+
+  // When some functions are hot-warm split and others are hot-warm-cold split,
+  // we do not want to change the fragment numbers of the blocks in the hot-warm
+  // split functions.
+  bool compactFragments() override { return false; }
+
+  void fragment(const BlockIt Start, const BlockIt End) override {
+    BasicBlockOrder BlockOrder(Start, End);
+    BinaryFunction &BF = *BlockOrder.front()->getFunction();
+
+    size_t BestSplitIndex = findSplitIndex(BF, BlockOrder);
+
+    // Assign fragments based on the computed best split index.
+    // All basic blocks with index up to the best split index become hot.
+    // All remaining blocks are warm / cold depending on if count is
+    // greater than zero or not.
+    for (size_t Index = 0; Index < BlockOrder.size(); Index++) {
+      BinaryBasicBlock *BB = BlockOrder[Index];
+      if (Index <= BestSplitIndex)
+        BB->setFragmentNum(FragmentNum::main());
+      else
+        BB->setFragmentNum(BB->getKnownExecutionCount() > 0
+                               ? FragmentNum::warm()
+                               : FragmentNum::cold());
+    }
+  }
+
+private:
+  /// Find the best index for splitting. The returned value is the index of the
+  /// last hot basic block. Hence, "no splitting" is equivalent to returning the
+  /// value which is one less than the size of the function.
+  size_t findSplitIndex(const BinaryFunction &BF,
+                        const BasicBlockOrder &BlockOrder) {
+    // Placeholder: hot-warm split after entry block.
+    return 0;
   }
 };
 
@@ -142,7 +190,7 @@ struct SplitRandom2 final : public SplitStrategy {
 
   bool canSplit(const BinaryFunction &BF) override { return true; }
 
-  bool keepEmpty() override { return false; }
+  bool compactFragments() override { return true; }
 
   void fragment(const BlockIt Start, const BlockIt End) override {
     using DiffT = typename std::iterator_traits<BlockIt>::difference_type;
@@ -169,7 +217,7 @@ struct SplitRandomN final : public SplitStrategy {
 
   bool canSplit(const BinaryFunction &BF) override { return true; }
 
-  bool keepEmpty() override { return false; }
+  bool compactFragments() override { return true; }
 
   void fragment(const BlockIt Start, const BlockIt End) override {
     using DiffT = typename std::iterator_traits<BlockIt>::difference_type;
@@ -216,10 +264,10 @@ struct SplitRandomN final : public SplitStrategy {
 struct SplitAll final : public SplitStrategy {
   bool canSplit(const BinaryFunction &BF) override { return true; }
 
-  bool keepEmpty() override {
+  bool compactFragments() override {
     // Keeping empty fragments allows us to test, that empty fragments do not
     // generate symbols.
-    return true;
+    return false;
   }
 
   void fragment(const BlockIt Start, const BlockIt End) override {
@@ -245,10 +293,27 @@ void SplitFunctions::runOnFunctions(BinaryContext &BC) {
   if (!opts::SplitFunctions)
     return;
 
+  // If split strategy is not CDSplit, then a second run of the pass is not
+  // needed after function reordering.
+  if (BC.HasFinalizedFunctionOrder &&
+      opts::SplitStrategy != SplitFunctionsStrategy::CDSplit)
+    return;
+
   std::unique_ptr<SplitStrategy> Strategy;
   bool ForceSequential = false;
 
   switch (opts::SplitStrategy) {
+  case SplitFunctionsStrategy::CDSplit:
+    // CDSplit runs two splitting passes: hot-cold splitting (SplitPrfoile2)
+    // before function reordering and hot-warm-cold splitting
+    // (SplitCacheDirected) after function reordering.
+    if (BC.HasFinalizedFunctionOrder)
+      Strategy = std::make_unique<SplitCacheDirected>();
+    else
+      Strategy = std::make_unique<SplitProfile2>();
+    opts::AggressiveSplitting = true;
+    BC.HasWarmSection = true;
+    break;
   case SplitFunctionsStrategy::Profile2:
     Strategy = std::make_unique<SplitProfile2>();
     break;
@@ -381,7 +446,7 @@ void SplitFunctions::splitFunction(BinaryFunction &BF, SplitStrategy &S) {
     CurrentFragment = BB->getFragmentNum();
   }
 
-  if (!S.keepEmpty()) {
+  if (S.compactFragments()) {
     FragmentNum CurrentFragment = FragmentNum::main();
     FragmentNum NewFragment = FragmentNum::main();
     for (BinaryBasicBlock *const BB : NewLayout) {
@@ -393,7 +458,7 @@ void SplitFunctions::splitFunction(BinaryFunction &BF, SplitStrategy &S) {
     }
   }
 
-  BF.getLayout().update(NewLayout);
+  const bool LayoutUpdated = BF.getLayout().update(NewLayout);
 
   // For shared objects, invoke instructions and corresponding landing pads
   // have to be placed in the same fragment. When we split them, create
@@ -403,17 +468,18 @@ void SplitFunctions::splitFunction(BinaryFunction &BF, SplitStrategy &S) {
     Trampolines = createEHTrampolines(BF);
 
   // Check the new size to see if it's worth splitting the function.
-  if (BC.isX86() && BF.isSplit()) {
+  if (BC.isX86() && LayoutUpdated) {
     std::tie(HotSize, ColdSize) = BC.calculateEmittedSize(BF);
     LLVM_DEBUG(dbgs() << "Estimated size for function " << BF
                       << " post-split is <0x" << Twine::utohexstr(HotSize)
                       << ", 0x" << Twine::utohexstr(ColdSize) << ">\n");
     if (alignTo(OriginalHotSize, opts::SplitAlignThreshold) <=
         alignTo(HotSize, opts::SplitAlignThreshold) + opts::SplitThreshold) {
-      LLVM_DEBUG(dbgs() << "Reversing splitting of function " << BF << ":\n  0x"
-                        << Twine::utohexstr(HotSize) << ", 0x"
-                        << Twine::utohexstr(ColdSize) << " -> 0x"
-                        << Twine::utohexstr(OriginalHotSize) << '\n');
+      if (opts::Verbosity >= 2) {
+        outs() << "BOLT-INFO: Reversing splitting of function "
+               << formatv("{0}:\n  {1:x}, {2:x} -> {3:x}\n", BF, HotSize,
+                          ColdSize, OriginalHotSize);
+      }
 
       // Reverse the action of createEHTrampolines(). The trampolines will be
       // placed immediately before the matching destination resulting in no
@@ -429,6 +495,11 @@ void SplitFunctions::splitFunction(BinaryFunction &BF, SplitStrategy &S) {
       SplitBytesCold += ColdSize;
     }
   }
+
+  // Fix branches if the splitting decision of the pass after function
+  // reordering is different from that of the pass before function reordering.
+  if (LayoutUpdated && BC.HasFinalizedFunctionOrder)
+    BF.fixBranches();
 }
 
 SplitFunctions::TrampolineSetType
@@ -443,7 +514,7 @@ SplitFunctions::createEHTrampolines(BinaryFunction &BF) const {
   std::vector<BinaryBasicBlock *> Blocks(BF.pbegin(), BF.pend());
   for (BinaryBasicBlock *BB : Blocks) {
     for (MCInst &Instr : *BB) {
-      const Optional<MCPlus::MCLandingPad> EHInfo = MIB->getEHInfo(Instr);
+      const std::optional<MCPlus::MCLandingPad> EHInfo = MIB->getEHInfo(Instr);
       if (!EHInfo || !EHInfo->first)
         continue;
 

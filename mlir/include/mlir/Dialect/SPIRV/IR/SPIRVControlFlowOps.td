@@ -22,20 +22,12 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 // -----
 
 def SPIRV_BranchOp : SPIRV_Op<"Branch", [
-    DeclareOpInterfaceMethods<BranchOpInterface>, InFunctionScope, NoSideEffect,
+    DeclareOpInterfaceMethods<BranchOpInterface>, InFunctionScope, Pure,
     Terminator]> {
   let summary = "Unconditional branch to target block.";
 
   let description = [{
     This instruction must be the last instruction in a block.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    branch-op ::= `spirv.Branch` successor
-    successor ::= bb-id branch-use-list?
-    branch-use-list ::= `(` ssa-use-list `:` type-list-no-parens `)`
-    ```
 
     #### Example:
 
@@ -79,7 +71,7 @@ def SPIRV_BranchOp : SPIRV_Op<"Branch", [
 
 def SPIRV_BranchConditionalOp : SPIRV_Op<"BranchConditional", [
     AttrSizedOperandSegments, DeclareOpInterfaceMethods<BranchOpInterface>,
-    InFunctionScope, NoSideEffect, Terminator]> {
+    InFunctionScope, Pure, Terminator]> {
   let summary = [{
     If Condition is true, branch to true block, otherwise branch to false
     block.
@@ -134,7 +126,7 @@ def SPIRV_BranchConditionalOp : SPIRV_Op<"BranchConditional", [
     OpBuilder<(ins "Value":$condition, "Block *":$trueBlock,
       "ValueRange":$trueArguments, "Block *":$falseBlock,
       "ValueRange":$falseArguments,
-      CArg<"Optional<std::pair<uint32_t, uint32_t>>", "{}">:$weights),
+      CArg<"std::optional<std::pair<uint32_t, uint32_t>>", "{}">:$weights),
     [{
       ArrayAttr weightsAttr;
       if (weights) {
@@ -211,13 +203,6 @@ def SPIRV_FunctionCallOp : SPIRV_Op<"FunctionCall", [
     Note: A forward call is possible because there is no missing type
     information: Result Type must match the Return Type of the function, and
     the calling argument types must match the formal parameter types.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    function-call-op ::= `spirv.FunctionCall` function-id `(` ssa-use-list `)`
-                     `:` function-type
-    ```
 
     #### Example:
 
@@ -313,7 +298,7 @@ def SPIRV_LoopOp : SPIRV_Op<"mlir.loop", [InFunctionScope]> {
 
 // -----
 
-def SPIRV_MergeOp : SPIRV_Op<"mlir.merge", [NoSideEffect, Terminator]> {
+def SPIRV_MergeOp : SPIRV_Op<"mlir.merge", [Pure, Terminator]> {
   let summary = "A special terminator for merging a structured selection/loop.";
 
   let description = [{
@@ -337,17 +322,17 @@ def SPIRV_MergeOp : SPIRV_Op<"mlir.merge", [NoSideEffect, Terminator]> {
 
 // -----
 
-def SPIRV_ReturnOp : SPIRV_Op<"Return", [InFunctionScope, NoSideEffect,
+def SPIRV_ReturnOp : SPIRV_Op<"Return", [InFunctionScope, Pure,
                                      Terminator]> {
   let summary = "Return with no value from a function with void return type.";
 
   let description = [{
     This instruction must be the last instruction in a block.
 
-    <!-- End of AutoGen section -->
+    #### Example:
 
-    ```
-    return-op ::= `spirv.Return`
+    ```mlir
+    spirv.Return
     ```
   }];
 
@@ -365,12 +350,6 @@ def SPIRV_UnreachableOp : SPIRV_Op<"Unreachable", [InFunctionScope, Terminator]>
 
   let description = [{
     This instruction must be the last instruction in a block.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    unreachable-op ::= `spirv.Unreachable`
-    ```
   }];
 
   let arguments = (ins);
@@ -382,7 +361,7 @@ def SPIRV_UnreachableOp : SPIRV_Op<"Unreachable", [InFunctionScope, Terminator]>
 
 // -----
 
-def SPIRV_ReturnValueOp : SPIRV_Op<"ReturnValue", [InFunctionScope, NoSideEffect,
+def SPIRV_ReturnValueOp : SPIRV_Op<"ReturnValue", [InFunctionScope, Pure,
                                                Terminator]> {
   let summary = "Return a value from a function.";
 
@@ -392,12 +371,6 @@ def SPIRV_ReturnValueOp : SPIRV_Op<"ReturnValue", [InFunctionScope, NoSideEffect
     instruction is in.
 
     This instruction must be the last instruction in a block.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    return-value-op ::= `spirv.ReturnValue` ssa-use `:` spirv-type
-    ```
 
     #### Example:
 

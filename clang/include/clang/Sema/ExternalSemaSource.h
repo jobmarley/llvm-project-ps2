@@ -181,6 +181,9 @@ public:
                  SmallVectorImpl<std::pair<ValueDecl *,
                                            SourceLocation> > &Pending) {}
 
+  virtual void ReadPendingInstantiationsOfConstexprEntity(
+      const NamedDecl *D, llvm::SmallSetVector<NamedDecl *, 4> &Decls){};
+
   /// Read the set of late parsed template functions for this source.
   ///
   /// The external source should insert its own late parsed template functions
@@ -229,6 +232,11 @@ public:
                                                 QualType T) {
     return false;
   }
+
+  /// Notify the external source that a lambda was assigned a mangling number.
+  /// This enables the external source to track the correspondence between
+  /// lambdas and mangling numbers if necessary.
+  virtual void AssignedLambdaNumbering(const CXXRecordDecl *Lambda) {}
 
   /// LLVM-style RTTI.
   /// \{

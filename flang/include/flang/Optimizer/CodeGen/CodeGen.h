@@ -51,6 +51,12 @@ struct FIRToLLVMPassOptions {
   // that such programs would crash at runtime if the derived type descriptors
   // are required by the runtime, so this is only an option to help debugging.
   bool ignoreMissingTypeDescriptors = false;
+
+  // Generate TBAA information for FIR types and memory accessing operations.
+  bool applyTBAA = false;
+
+  // Force the usage of a unified tbaa tree in TBAABuilder.
+  bool forceUnifiedTBAATree = false;
 };
 
 /// Convert FIR to the LLVM IR dialect with default options.

@@ -13,23 +13,17 @@
 #ifndef LLVM_CLANG_AST_INTERP_EVALEMITTER_H
 #define LLVM_CLANG_AST_INTERP_EVALEMITTER_H
 
-#include "ByteCodeGenError.h"
-#include "Context.h"
-#include "InterpStack.h"
 #include "InterpState.h"
 #include "PrimType.h"
-#include "Program.h"
 #include "Source.h"
 #include "llvm/Support/Error.h"
 
 namespace clang {
-class FunctionDecl;
 namespace interp {
 class Context;
 class Function;
-class InterpState;
+class InterpStack;
 class Program;
-class SourceInfo;
 enum Opcode : uint32_t;
 
 /// An emitter which evaluates opcodes as they are emitted.
@@ -46,7 +40,7 @@ protected:
   EvalEmitter(Context &Ctx, Program &P, State &Parent, InterpStack &Stk,
               APValue &Result);
 
-  virtual ~EvalEmitter() {}
+  virtual ~EvalEmitter();
 
   /// Define a label.
   void emitLabel(LabelTy Label);
@@ -71,12 +65,16 @@ protected:
   Local createLocal(Descriptor *D);
 
   /// Returns the source location of the current opcode.
-  SourceInfo getSource(Function *F, CodePtr PC) const override {
-    return F ? F->getSource(PC) : CurrentSource;
+  SourceInfo getSource(const Function *F, CodePtr PC) const override {
+    return (F && F->hasBody()) ? F->getSource(PC) : CurrentSource;
   }
 
   /// Parameter indices.
-  llvm::DenseMap<const ParmVarDecl *, unsigned> Params;
+  llvm::DenseMap<const ParmVarDecl *, ParamOffset> Params;
+  /// Lambda captures.
+  llvm::DenseMap<const ValueDecl *, ParamOffset> LambdaCaptures;
+  /// Offset of the This parameter in a lambda record.
+  unsigned LambdaThisCapture = 0;
   /// Local descriptors.
   llvm::SmallVector<SmallVector<Local, 8>, 2> Descriptors;
 
@@ -93,11 +91,17 @@ private:
   /// Temporaries which require storage.
   llvm::DenseMap<unsigned, std::unique_ptr<char[]>> Locals;
 
+  Block *getLocal(unsigned Index) const {
+    auto It = Locals.find(Index);
+    assert(It != Locals.end() && "Missing local variable");
+    return reinterpret_cast<Block *>(It->second.get());
+  }
+
   // The emitter always tracks the current instruction and sets OpPC to a token
   // value which is mapped to the location of the opcode being evaluated.
   CodePtr OpPC;
   /// Location of a failure.
-  llvm::Optional<SourceLocation> BailLocation;
+  std::optional<SourceLocation> BailLocation;
   /// Location of the current instruction.
   SourceInfo CurrentSource;
 

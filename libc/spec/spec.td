@@ -37,6 +37,7 @@ class RestrictedPtrType<Type type> : Type {
 
 // Builtin types.
 def VarArgType : NamedType<"...">;
+def VaListType : NamedType<"va_list">;
 def VoidType : NamedType<"void">;
 def IntType : NamedType<"int">;
 def UnsignedIntType : NamedType<"unsigned int">;
@@ -48,6 +49,10 @@ def FloatType : NamedType<"float">;
 def DoubleType : NamedType<"double">;
 def LongDoubleType : NamedType<"long double">;
 def CharType : NamedType<"char">;
+def UnsignedCharType : NamedType<"unsigned char">;
+
+// TODO: Add compatibility layer to use C23 type _Float128 if possible.
+def Float128Type : NamedType<"__float128">;
 
 // Common types
 def VoidPtr : PtrType<VoidType>;
@@ -59,10 +64,16 @@ def SizeTType : NamedType<"size_t">;
 def SizeTPtr : PtrType<SizeTType>;
 def RestrictedSizeTPtr : RestrictedPtrType<SizeTType>;
 
+def WCharType : NamedType<"wchar_t">;
+def WIntType : NamedType<"wint_t">;
+
 def LongDoublePtr : PtrType<LongDoubleType>;
 
 def IntMaxTType : NamedType<"intmax_t">;
 def UIntMaxTType : NamedType<"uintmax_t">;
+
+def UInt16Type : NamedType<"uint16_t">;
+def UInt32Type : NamedType<"uint32_t">;
 
 def OffTType : NamedType<"off_t">;
 def OffTPtr : PtrType<OffTType>;
@@ -80,6 +91,7 @@ def ConstCharPtr : ConstType<CharPtr>;
 def CharRestrictedPtr : RestrictedPtrType<CharType>;
 def CharRestrictedPtrPtr : RestrictedPtrType<CharPtr>;
 def ConstCharRestrictedPtr : ConstType<CharRestrictedPtr>;
+def ConstCharRestrictedPtrPtr : PtrType<ConstCharRestrictedPtr>;
 
 def OnceFlagType : NamedType<"once_flag">;
 def OnceFlagTypePtr : PtrType<OnceFlagType>;
@@ -98,6 +110,7 @@ def IntPtr : PtrType<IntType>;
 def RestrictedIntPtr : RestrictedPtrType<IntType>;
 def FloatPtr : PtrType<FloatType>;
 def DoublePtr : PtrType<DoubleType>;
+def UnsignedCharPtr : PtrType<UnsignedCharType>;
 
 def SigHandlerT : NamedType<"__sighandler_t">;
 
@@ -115,11 +128,24 @@ def FILERestrictedPtr : RestrictedPtrType<FILE>;
 def PThreadTType : NamedType<"pthread_t">;
 
 def PidT : NamedType<"pid_t">;
+def RestrictedPidTPtr : RestrictedPtrType<PidT>;
+
 def StructRUsage : NamedType<"struct rusage">;
 def StructRUsagePtr : PtrType<StructRUsage>;
 
+def StructTimevalType : NamedType<"struct timeval">;
+def StructTimevalPtr : PtrType<StructTimevalType>;
+def RestrictedStructTimevalPtr : RestrictedPtrType<StructTimevalType>;
+
+def SuSecondsT : NamedType<"suseconds_t">;
+
 //added because __assert_fail needs it.
 def UnsignedType : NamedType<"unsigned">;
+
+def ActionType : NamedType<"ACTION">;
+def EntryType : NamedType<"ENTRY">;
+def EntryTypePtr : PtrType<EntryType>;
+def EntryTypePtrPtr : PtrType<EntryTypePtr>;
 
 class Macro<string name> {
   string Name = name;

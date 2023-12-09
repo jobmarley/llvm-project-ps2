@@ -15,6 +15,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "SPIRVModuleAnalysis.h"
+#include "MCTargetDesc/SPIRVBaseInfo.h"
+#include "MCTargetDesc/SPIRVMCTargetDesc.h"
 #include "SPIRV.h"
 #include "SPIRVSubtarget.h"
 #include "SPIRVTargetMachine.h"
@@ -92,7 +94,7 @@ void SPIRVModuleAnalysis::setBaseInfo(const Module &M) {
     MAI.MS[i].clear();
   MAI.RegisterAliasTable.clear();
   MAI.InstrsToDelete.clear();
-  MAI.FuncNameMap.clear();
+  MAI.FuncMap.clear();
   MAI.GlobalVarList.clear();
   MAI.ExtInstSetMap.clear();
   MAI.Reqs.clear();
@@ -106,11 +108,18 @@ void SPIRVModuleAnalysis::setBaseInfo(const Module &M) {
     MAI.Mem =
         static_cast<SPIRV::MemoryModel::MemoryModel>(getMetadataUInt(MemMD, 1));
   } else {
-    MAI.Mem = SPIRV::MemoryModel::OpenCL;
-    unsigned PtrSize = ST->getPointerSize();
-    MAI.Addr = PtrSize == 32   ? SPIRV::AddressingModel::Physical32
-               : PtrSize == 64 ? SPIRV::AddressingModel::Physical64
-                               : SPIRV::AddressingModel::Logical;
+    // TODO: Add support for VulkanMemoryModel.
+    MAI.Mem = ST->isOpenCLEnv() ? SPIRV::MemoryModel::OpenCL
+                                : SPIRV::MemoryModel::GLSL450;
+    if (MAI.Mem == SPIRV::MemoryModel::OpenCL) {
+      unsigned PtrSize = ST->getPointerSize();
+      MAI.Addr = PtrSize == 32   ? SPIRV::AddressingModel::Physical32
+                 : PtrSize == 64 ? SPIRV::AddressingModel::Physical64
+                                 : SPIRV::AddressingModel::Logical;
+    } else {
+      // TODO: Add support for PhysicalStorageBufferAddress.
+      MAI.Addr = SPIRV::AddressingModel::Logical;
+    }
   }
   // Get the OpenCL version number from metadata.
   // TODO: support other source languages.
@@ -148,9 +157,12 @@ void SPIRVModuleAnalysis::setBaseInfo(const Module &M) {
   MAI.Reqs.getAndAddRequirements(SPIRV::OperandCategory::AddressingModelOperand,
                                  MAI.Addr, *ST);
 
-  // TODO: check if it's required by default.
-  MAI.ExtInstSetMap[static_cast<unsigned>(SPIRV::InstructionSet::OpenCL_std)] =
-      Register::index2VirtReg(MAI.getNextID());
+  if (ST->isOpenCLEnv()) {
+    // TODO: check if it's required by default.
+    MAI.ExtInstSetMap[static_cast<unsigned>(
+        SPIRV::InstructionSet::OpenCL_std)] =
+        Register::index2VirtReg(MAI.getNextID());
+  }
 }
 
 // Collect MI which defines the register in the given machine function.
@@ -279,12 +291,12 @@ static bool findSameInstrInMS(const MachineInstr &A,
   return false;
 }
 
-// Look for IDs declared with Import linkage, and map the imported name string
+// Look for IDs declared with Import linkage, and map the corresponding function
 // to the register defining that variable (which will usually be the result of
 // an OpFunction). This lets us call externally imported functions using
 // the correct ID registers.
 void SPIRVModuleAnalysis::collectFuncNames(MachineInstr &MI,
-                                           const Function &F) {
+                                           const Function *F) {
   if (MI.getOpcode() == SPIRV::OpDecorate) {
     // If it's got Import linkage.
     auto Dec = MI.getOperand(1).getImm();
@@ -292,10 +304,10 @@ void SPIRVModuleAnalysis::collectFuncNames(MachineInstr &MI,
       auto Lnk = MI.getOperand(MI.getNumOperands() - 1).getImm();
       if (Lnk == static_cast<unsigned>(SPIRV::LinkageType::Import)) {
         // Map imported function name to function ID register.
-        std::string Name = getStringImm(MI, 2);
+        const Function *ImportedFunc =
+            F->getParent()->getFunction(getStringImm(MI, 2));
         Register Target = MI.getOperand(0).getReg();
-        // TODO: check defs from different MFs.
-        MAI.FuncNameMap[Name] = MAI.getRegisterAlias(MI.getMF(), Target);
+        MAI.FuncMap[ImportedFunc] = MAI.getRegisterAlias(MI.getMF(), Target);
       }
     }
   } else if (MI.getOpcode() == SPIRV::OpFunction) {
@@ -303,8 +315,7 @@ void SPIRVModuleAnalysis::collectFuncNames(MachineInstr &MI,
     Register Reg = MI.defs().begin()->getReg();
     Register GlobalReg = MAI.getRegisterAlias(MI.getMF(), Reg);
     assert(GlobalReg.isValid());
-    // TODO: check that it does not conflict with existing entries.
-    MAI.FuncNameMap[F.getGlobalIdentifier()] = GlobalReg;
+    MAI.FuncMap[F] = GlobalReg;
   }
 }
 
@@ -343,13 +354,13 @@ void SPIRVModuleAnalysis::processOtherInstrs(const Module &M) {
           collectOtherInstr(MI, MAI, SPIRV::MB_EntryPoints);
         } else if (TII->isDecorationInstr(MI)) {
           collectOtherInstr(MI, MAI, SPIRV::MB_Annotations);
-          collectFuncNames(MI, *F);
+          collectFuncNames(MI, &*F);
         } else if (TII->isConstantInstr(MI)) {
           // Now OpSpecConstant*s are not in DT,
           // but they need to be collected anyway.
           collectOtherInstr(MI, MAI, SPIRV::MB_TypeConstVars);
         } else if (OpCode == SPIRV::OpFunction) {
-          collectFuncNames(MI, *F);
+          collectFuncNames(MI, &*F);
         } else if (OpCode == SPIRV::OpTypeForwardPointer) {
           collectOtherInstr(MI, MAI, SPIRV::MB_TypeConstVars, false);
         }
@@ -384,47 +395,6 @@ void SPIRVModuleAnalysis::numberRegistersGlobally(const Module &M) {
           MAI.ExtInstSetMap[Set] = Register::index2VirtReg(MAI.getNextID());
       }
     }
-  }
-}
-
-// Find OpIEqual and OpBranchConditional instructions originating from
-// OpSwitches, mark them skipped for emission. Also mark MBB skipped if it
-// contains only these instructions.
-static void processSwitches(const Module &M, SPIRV::ModuleAnalysisInfo &MAI,
-                            MachineModuleInfo *MMI) {
-  DenseSet<Register> SwitchRegs;
-  for (auto F = M.begin(), E = M.end(); F != E; ++F) {
-    MachineFunction *MF = MMI->getMachineFunction(*F);
-    if (!MF)
-      continue;
-    for (MachineBasicBlock &MBB : *MF)
-      for (MachineInstr &MI : MBB) {
-        if (MAI.getSkipEmission(&MI))
-          continue;
-        if (MI.getOpcode() == SPIRV::OpSwitch) {
-          assert(MI.getOperand(0).isReg());
-          SwitchRegs.insert(MI.getOperand(0).getReg());
-        }
-        if (MI.getOpcode() == SPIRV::OpISubS &&
-            SwitchRegs.contains(MI.getOperand(2).getReg())) {
-          SwitchRegs.insert(MI.getOperand(0).getReg());
-          MAI.setSkipEmission(&MI);
-        }
-        if ((MI.getOpcode() != SPIRV::OpIEqual &&
-             MI.getOpcode() != SPIRV::OpULessThanEqual) ||
-            !MI.getOperand(2).isReg() ||
-            !SwitchRegs.contains(MI.getOperand(2).getReg()))
-          continue;
-        Register CmpReg = MI.getOperand(0).getReg();
-        MachineInstr *CBr = MI.getNextNode();
-        assert(CBr && CBr->getOpcode() == SPIRV::OpBranchConditional &&
-               CBr->getOperand(0).isReg() &&
-               CBr->getOperand(0).getReg() == CmpReg);
-        MAI.setSkipEmission(&MI);
-        MAI.setSkipEmission(CBr);
-        if (&MBB.front() == &MI && &MBB.back() == CBr)
-          MAI.MBBsToSkip.insert(&MBB);
-      }
   }
 }
 
@@ -536,7 +506,7 @@ void SPIRV::RequirementHandler::checkSatisfiable(
   for (auto Ext : AllExtensions) {
     if (ST.canUseExtension(Ext))
       continue;
-    LLVM_DEBUG(dbgs() << "Extension not suported: "
+    LLVM_DEBUG(dbgs() << "Extension not supported: "
                       << getSymbolicOperandMnemonic(
                              OperandCategory::ExtensionOperand, Ext)
                       << "\n");
@@ -555,12 +525,31 @@ void SPIRV::RequirementHandler::addAvailableCaps(const CapabilityList &ToAdd) {
           SPIRV::OperandCategory::CapabilityOperand, Cap));
 }
 
+void SPIRV::RequirementHandler::removeCapabilityIf(
+    const Capability::Capability ToRemove,
+    const Capability::Capability IfPresent) {
+  if (AllCaps.contains(IfPresent))
+    AllCaps.erase(ToRemove);
+}
+
 namespace llvm {
 namespace SPIRV {
 void RequirementHandler::initAvailableCapabilities(const SPIRVSubtarget &ST) {
-  // TODO: Implemented for other targets other then OpenCL.
-  if (!ST.isOpenCLEnv())
+  if (ST.isOpenCLEnv()) {
+    initAvailableCapabilitiesForOpenCL(ST);
     return;
+  }
+
+  if (ST.isVulkanEnv()) {
+    initAvailableCapabilitiesForVulkan(ST);
+    return;
+  }
+
+  report_fatal_error("Unimplemented environment for SPIR-V generation.");
+}
+
+void RequirementHandler::initAvailableCapabilitiesForOpenCL(
+    const SPIRVSubtarget &ST) {
   // Add the min requirements for different OpenCL and SPIR-V versions.
   addAvailableCaps({Capability::Addresses, Capability::Float16Buffer,
                     Capability::Int16, Capability::Int8, Capability::Kernel,
@@ -594,8 +583,24 @@ void RequirementHandler::initAvailableCapabilities(const SPIRVSubtarget &ST) {
   // TODO: verify if this needs some checks.
   addAvailableCaps({Capability::Float16, Capability::Float64});
 
+  // Add capabilities enabled by extensions.
+  for (auto Extension : ST.getAllAvailableExtensions()) {
+    CapabilityList EnabledCapabilities =
+        getCapabilitiesEnabledByExtension(Extension);
+    addAvailableCaps(EnabledCapabilities);
+  }
+
   // TODO: add OpenCL extensions.
 }
+
+void RequirementHandler::initAvailableCapabilitiesForVulkan(
+    const SPIRVSubtarget &ST) {
+  addAvailableCaps({Capability::Shader, Capability::Linkage});
+
+  // Provided by Vulkan version 1.0.
+  addAvailableCaps({Capability::Int16, Capability::Int64, Capability::Float64});
+}
+
 } // namespace SPIRV
 } // namespace llvm
 
@@ -738,6 +743,16 @@ void addInstrRequirements(const MachineInstr &MI,
     break;
   }
   case SPIRV::OpBitReverse:
+  case SPIRV::OpBitFieldInsert:
+  case SPIRV::OpBitFieldSExtract:
+  case SPIRV::OpBitFieldUExtract:
+    if (!ST.canUseExtension(SPIRV::Extension::SPV_KHR_bit_instructions)) {
+      Reqs.addCapability(SPIRV::Capability::Shader);
+      break;
+    }
+    Reqs.addExtension(SPIRV::Extension::SPV_KHR_bit_instructions);
+    Reqs.addCapability(SPIRV::Capability::BitInstructions);
+    break;
   case SPIRV::OpTypeRuntimeArray:
     Reqs.addCapability(SPIRV::Capability::Shader);
     break;
@@ -888,9 +903,22 @@ void addInstrRequirements(const MachineInstr &MI,
   case SPIRV::OpGroupNonUniformBallotFindMSB:
     Reqs.addCapability(SPIRV::Capability::GroupNonUniformBallot);
     break;
+  case SPIRV::OpAssumeTrueKHR:
+  case SPIRV::OpExpectKHR:
+    if (ST.canUseExtension(SPIRV::Extension::SPV_KHR_expect_assume)) {
+      Reqs.addExtension(SPIRV::Extension::SPV_KHR_expect_assume);
+      Reqs.addCapability(SPIRV::Capability::ExpectAssumeKHR);
+    }
+    break;
   default:
     break;
   }
+
+  // If we require capability Shader, then we can remove the requirement for
+  // the BitInstructions capability, since Shader is a superset capability
+  // of BitInstructions.
+  Reqs.removeCapabilityIf(SPIRV::Capability::BitInstructions,
+                          SPIRV::Capability::Shader);
 }
 
 static void collectReqs(const Module &M, SPIRV::ModuleAnalysisInfo &MAI,
@@ -928,6 +956,11 @@ static void collectReqs(const Module &M, SPIRV::ModuleAnalysisInfo &MAI,
       MAI.Reqs.getAndAddRequirements(
           SPIRV::OperandCategory::ExecutionModeOperand,
           SPIRV::ExecutionMode::LocalSize, ST);
+    if (F.getFnAttribute("hlsl.numthreads").isValid()) {
+      MAI.Reqs.getAndAddRequirements(
+          SPIRV::OperandCategory::ExecutionModeOperand,
+          SPIRV::ExecutionMode::LocalSize, ST);
+    }
     if (F.getMetadata("work_group_size_hint"))
       MAI.Reqs.getAndAddRequirements(
           SPIRV::OperandCategory::ExecutionModeOperand,
@@ -940,6 +973,13 @@ static void collectReqs(const Module &M, SPIRV::ModuleAnalysisInfo &MAI,
       MAI.Reqs.getAndAddRequirements(
           SPIRV::OperandCategory::ExecutionModeOperand,
           SPIRV::ExecutionMode::VecTypeHint, ST);
+
+    if (F.hasOptNone() &&
+        ST.canUseExtension(SPIRV::Extension::SPV_INTEL_optnone)) {
+      // Output OpCapability OptNoneINTEL.
+      MAI.Reqs.addExtension(SPIRV::Extension::SPV_INTEL_optnone);
+      MAI.Reqs.addCapability(SPIRV::Capability::OptNoneINTEL);
+    }
   }
 }
 
@@ -1020,8 +1060,6 @@ bool SPIRVModuleAnalysis::runOnModule(Module &M) {
   addDecorations(M, *TII, MMI, *ST, MAI);
 
   collectReqs(M, MAI, MMI, *ST);
-
-  processSwitches(M, MAI, MMI);
 
   // Process type/const/global var/func decl instructions, number their
   // destination registers from 0 to N, collect Extensions and Capabilities.

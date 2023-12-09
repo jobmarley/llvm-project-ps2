@@ -1,6 +1,6 @@
 // REQUIRES: powerpc-registered-target
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +altivec -target-feature +power8-vector -triple powerpc64-unknown-unknown -emit-llvm %s -o - | FileCheck %s
-// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +altivec -target-feature +power8-vector -triple powerpc64le-unknown-unknown -emit-llvm %s -o - | FileCheck %s -check-prefix=CHECK-LE
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +altivec -target-feature +isa-v207-instructions -target-feature +power8-vector -triple powerpc64-unknown-unknown -emit-llvm %s -o - | FileCheck %s
+// RUN: %clang_cc1 -flax-vector-conversions=none -target-feature +altivec -target-feature +isa-v207-instructions -target-feature +power8-vector -triple powerpc64le-unknown-unknown -emit-llvm %s -o - | FileCheck %s -check-prefix=CHECK-LE
 // RUN: not %clang_cc1 -target-feature +altivec -target-feature +vsx -triple powerpc64-unknown-unknown -emit-llvm %s -o - 2>&1 | FileCheck %s -check-prefix=CHECK-PPC
 // Added -target-feature +vsx above to avoid errors about "vector double" and to
 // generate the correct errors for functions that are only overloaded with VSX
@@ -233,7 +233,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <16 x i8>
 // CHECK-LE: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -244,7 +243,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <16 x i8>
 // CHECK-LE: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -255,7 +253,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <16 x i8>
 // CHECK-LE: [[T1:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <16 x i8> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -266,7 +263,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <8 x i16>
 // CHECK-LE: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -277,7 +273,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <8 x i16>
 // CHECK-LE: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -288,7 +283,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <8 x i16>
 // CHECK-LE: [[T1:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <8 x i16> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -314,7 +308,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <2 x i64>
 // CHECK-LE: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -325,7 +318,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <2 x i64>
 // CHECK-LE: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -336,7 +328,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <2 x i64>
 // CHECK-LE: [[T1:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <2 x i64> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -347,7 +338,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <4 x float> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <4 x float> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <4 x float>
 // CHECK-LE: [[T1:%.+]] = bitcast <4 x float> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <4 x float> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
@@ -358,7 +348,6 @@ void test1() {
 // CHECK: [[T1:%.+]] = bitcast <2 x double> {{.+}} to <4 x i32>
 // CHECK: [[T2:%.+]] = bitcast <2 x double> {{.+}} to <4 x i32>
 // CHECK: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])
-// CHECK: bitcast <4 x i32> [[T3]] to <2 x double>
 // CHECK-LE: [[T1:%.+]] = bitcast <2 x double> {{.+}} to <4 x i32>
 // CHECK-LE: [[T2:%.+]] = bitcast <2 x double> {{.+}} to <4 x i32>
 // CHECK-LE: [[T3:%.+]] = call <4 x i32> @llvm.ppc.vsx.xxleqv(<4 x i32> [[T1]], <4 x i32> [[T2]])

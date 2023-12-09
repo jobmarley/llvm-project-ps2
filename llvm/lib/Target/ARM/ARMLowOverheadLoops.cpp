@@ -60,7 +60,6 @@
 #include "Thumb2InstrInfo.h"
 #include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -426,11 +425,6 @@ namespace {
     // Check that any values available outside of the loop will be the same
     // after tail predication conversion.
     bool ValidateLiveOuts();
-
-    // Is it safe to define LR with DLS/WLS?
-    // LR can be defined if it is the operand to start, because it's the same
-    // value, or if it's going to be equivalent to the operand to Start.
-    MachineInstr *isSafeToDefineLR();
 
     // Check the branch targets are within range and we satisfy our
     // restrictions.
@@ -907,7 +901,7 @@ static bool producesFalseLanesZero(MachineInstr &MI,
       continue;
     // Skip the lr predicate reg
     int PIdx = llvm::findFirstVPTPredOperandIdx(MI);
-    if (PIdx != -1 && (int)MI.getOperandNo(&MO) == PIdx + 2)
+    if (PIdx != -1 && (int)MO.getOperandNo() == PIdx + 2)
       continue;
 
     // Check that this instruction will produce zeros in its false lanes:
@@ -916,6 +910,8 @@ static bool producesFalseLanesZero(MachineInstr &MI,
     //   false lane zeros, so we can ignore the uses.
     SmallPtrSet<MachineInstr *, 2> Defs;
     RDA.getGlobalReachingDefs(&MI, MO.getReg(), Defs);
+    if (Defs.empty())
+      return false;
     for (auto *Def : Defs) {
       if (Def == &MI || FalseLanesZero.count(Def) || IsZeroInit(Def))
         continue;
@@ -1247,7 +1243,7 @@ bool LowOverheadLoop::ValidateMVEInst(MachineInstr *MI) {
   const MCInstrDesc &MCID = MI->getDesc();
   bool IsUse = false;
   unsigned LastOpIdx = MI->getNumOperands() - 1;
-  for (auto &Op : enumerate(reverse(MCID.operands()))) {
+  for (const auto &Op : enumerate(reverse(MCID.operands()))) {
     const MachineOperand &MO = MI->getOperand(LastOpIdx - Op.index());
     if (!MO.isReg() || !MO.isUse() || MO.getReg() != ARM::VPR)
       continue;

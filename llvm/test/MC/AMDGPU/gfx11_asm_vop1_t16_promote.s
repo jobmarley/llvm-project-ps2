@@ -1,5 +1,5 @@
-// RUN: llvm-mc -arch=amdgcn -mcpu=gfx1100 -mattr=+wavefrontsize32,-wavefrontsize64 -show-encoding %s | FileCheck --check-prefix=GFX11 --implicit-check-not=_e32 %s
-// RUN: llvm-mc -arch=amdgcn -mcpu=gfx1100 -mattr=-wavefrontsize32,+wavefrontsize64 -show-encoding %s | FileCheck --check-prefix=GFX11 --implicit-check-not=_e32 %s
+// RUN: llvm-mc -triple=amdgcn -mcpu=gfx1100 -mattr=+wavefrontsize32,-wavefrontsize64 -show-encoding %s | FileCheck --check-prefix=GFX11 --implicit-check-not=_e32 %s
+// RUN: llvm-mc -triple=amdgcn -mcpu=gfx1100 -mattr=-wavefrontsize32,+wavefrontsize64 -show-encoding %s | FileCheck --check-prefix=GFX11 --implicit-check-not=_e32 %s
 
 v_ceil_f16 v128, 0xfe0b
 // GFX11: v_ceil_f16_e64
@@ -919,6 +919,9 @@ v_rsq_f16 v255, vcc_lo
 v_rsq_f16 v5, v199
 // GFX11: v_rsq_f16_e64
 
+v_sat_pk_u8_i16 v199, v5
+// GFX11: v_sat_pk_u8_i16_e64
+
 v_sin_f16 v128, 0xfe0b
 // GFX11: v_sin_f16_e64
 
@@ -1240,6 +1243,9 @@ v_rsq_f16 v255, v127 quad_perm:[3,2,1,0]
 v_rsq_f16 v5, v199 quad_perm:[3,2,1,0]
 // GFX11: v_rsq_f16_e64
 
+v_sat_pk_u8_i16 v199, v5 quad_perm:[3,2,1,0]
+// GFX11: v_sat_pk_u8_i16_e64
+
 v_sin_f16 v255, v1 quad_perm:[3,2,1,0]
 // GFX11: v_sin_f16_e64
 
@@ -1443,6 +1449,9 @@ v_rsq_f16 v255, v127 dpp8:[7,6,5,4,3,2,1,0]
 
 v_rsq_f16 v5, v199 dpp8:[7,6,5,4,3,2,1,0]
 // GFX11: v_rsq_f16_e64
+
+v_sat_pk_u8_i16 v199, v5 dpp8:[7,6,5,4,3,2,1,0]
+// GFX11: v_sat_pk_u8_i16_e64
 
 v_sin_f16 v255, v1 dpp8:[7,6,5,4,3,2,1,0]
 // GFX11: v_sin_f16_e64

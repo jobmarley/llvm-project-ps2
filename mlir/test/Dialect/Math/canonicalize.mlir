@@ -1,4 +1,4 @@
-// RUN: mlir-opt %s -canonicalize | FileCheck %s
+// RUN: mlir-opt %s -canonicalize="test-convergence" | FileCheck %s
 
 // CHECK-LABEL: @ceil_fold
 // CHECK: %[[cst:.+]] = arith.constant 1.000000e+00 : f32
@@ -449,7 +449,7 @@ func.func @trunc_fold_vec() -> (vector<4xf32>) {
 }
 
 // CHECK-LABEL: @sin_fold
-// CHECK-NEXT: %[[cst:.+]] = arith.constant 0.84{{[0-9]+}} : f32
+// CHECK-NEXT: %[[cst:.+]] = arith.constant {{0.84[0-9]+|8.4[0-9]+e-01}} : f32
 // CHECK-NEXT:   return %[[cst]]
 func.func @sin_fold() -> f32 {
   %c = arith.constant 1.0 : f32
@@ -458,7 +458,7 @@ func.func @sin_fold() -> f32 {
 }
 
 // CHECK-LABEL: @sin_fold_vec
-// CHECK-NEXT: %[[cst:.+]] = arith.constant dense<[0.000000e+00, 0.84{{[0-9]+}}, 0.000000e+00, 0.84{{[0-9]+}}]> : vector<4xf32>
+// CHECK-NEXT: %[[cst:.+]] = arith.constant dense<[0.000000e+00, {{0.84[0-9]+|8.4[0-9]+e-01}}, 0.000000e+00, {{0.84[0-9]+|8.4[0-9]+e-01}}]> : vector<4xf32>
 // CHECK-NEXT:   return %[[cst]]
 func.func @sin_fold_vec() -> (vector<4xf32>) {
   %v1 = arith.constant dense<[0.0, 1.0, 0.0, 1.0]> : vector<4xf32>
@@ -467,7 +467,7 @@ func.func @sin_fold_vec() -> (vector<4xf32>) {
 }
 
 // CHECK-LABEL: @erf_fold
-// CHECK-NEXT: %[[cst:.+]] = arith.constant 0.84{{[0-9]+}} : f32
+// CHECK-NEXT: %[[cst:.+]] = arith.constant {{0.84[0-9]+|8.4[0-9]+e-01}} : f32
 // CHECK-NEXT:   return %[[cst]]
 func.func @erf_fold() -> f32 {
   %c = arith.constant 1.0 : f32
@@ -476,10 +476,19 @@ func.func @erf_fold() -> f32 {
 }
 
 // CHECK-LABEL: @erf_fold_vec
-// CHECK-NEXT: %[[cst:.+]] = arith.constant dense<[0.000000e+00, 0.84{{[0-9]+}}, 0.000000e+00, 0.84{{[0-9]+}}]> : vector<4xf32>
+// CHECK-NEXT: %[[cst:.+]] = arith.constant dense<[0.000000e+00, {{0.84[0-9]+|8.4[0-9]+e-01}}, 0.000000e+00, {{0.84[0-9]+|8.4[0-9]+e-01}}]> : vector<4xf32>
 // CHECK-NEXT:   return %[[cst]]
 func.func @erf_fold_vec() -> (vector<4xf32>) {
   %v1 = arith.constant dense<[0.0, 1.0, 0.0, 1.0]> : vector<4xf32>
   %0 = math.erf %v1 : vector<4xf32>
   return %0 : vector<4xf32>
+}
+
+// CHECK-LABEL: @abs_poison
+//       CHECK:   %[[P:.*]] = ub.poison : f32
+//       CHECK:   return %[[P]]
+func.func @abs_poison() -> f32 {
+  %0 = ub.poison : f32
+  %1 = math.absf %0 : f32
+  return %1 : f32
 }

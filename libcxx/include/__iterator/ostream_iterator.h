@@ -11,11 +11,12 @@
 #define _LIBCPP___ITERATOR_OSTREAM_ITERATOR_H
 
 #include <__config>
+#include <__fwd/ostream.h>
+#include <__fwd/string.h>
 #include <__iterator/iterator.h>
 #include <__iterator/iterator_traits.h>
 #include <__memory/addressof.h>
 #include <cstddef>
-#include <iosfwd> // for forward declarations of char_traits and basic_ostream
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -34,7 +35,7 @@ _LIBCPP_SUPPRESS_DEPRECATED_POP
 public:
     typedef output_iterator_tag             iterator_category;
     typedef void                            value_type;
-#if _LIBCPP_STD_VER > 17
+#if _LIBCPP_STD_VER >= 20
     typedef ptrdiff_t                       difference_type;
 #else
     typedef void                            difference_type;

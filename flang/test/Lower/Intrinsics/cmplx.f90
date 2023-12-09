@@ -3,7 +3,7 @@
 ! a disassociated pointer, or an optional argument.
 ! CMPLX without such argument is re-written by the front-end as a
 ! complex constructor that is tested elsewhere.
-! RUN: bbc -emit-fir %s -o - | FileCheck %s
+! RUN: bbc -emit-fir -hlfir=false %s -o - | FileCheck %s
 
 ! CHECK-LABEL: func @_QPcmplx_test_scalar_ptr(
 ! CHECK-SAME:  %[[VAL_0:.*]]: !fir.ref<f32>
@@ -92,7 +92,7 @@ subroutine cmplx_test_pointer_result(x, y)
     end function
   end interface
   print *, cmplx(x, return_pointer())
-! CHECK:  %[[VAL_9:.*]] = fir.call @_QPreturn_pointer() : () -> !fir.box<!fir.ptr<f32>>
+! CHECK:  %[[VAL_9:.*]] = fir.call @_QPreturn_pointer() {{.*}}: () -> !fir.box<!fir.ptr<f32>>
 ! CHECK:  fir.save_result %[[VAL_9]] to %[[VAL_2:.*]] : !fir.box<!fir.ptr<f32>>, !fir.ref<!fir.box<!fir.ptr<f32>>>
 ! CHECK:  %[[VAL_10:.*]] = fir.load %[[VAL_2]] : !fir.ref<!fir.box<!fir.ptr<f32>>>
 ! CHECK:  %[[VAL_11:.*]] = fir.box_addr %[[VAL_10]] : (!fir.box<!fir.ptr<f32>>) -> !fir.ptr<f32>

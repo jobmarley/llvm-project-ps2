@@ -9,6 +9,7 @@
 #include "unit.h"
 #include "io-error.h"
 #include "lock.h"
+#include "tools.h"
 #include "unit-map.h"
 #include <cstdio>
 #include <limits>
@@ -89,7 +90,7 @@ ExternalFileUnit &ExternalFileUnit::NewUnit(
   return unit;
 }
 
-void ExternalFileUnit::OpenUnit(std::optional<OpenStatus> status,
+bool ExternalFileUnit::OpenUnit(std::optional<OpenStatus> status,
     std::optional<Action> action, Position position, OwningPtr<char> &&newPath,
     std::size_t newPathLength, Convert convert, IoErrorHandler &handler) {
   if (convert == Convert::Unknown) {
@@ -98,24 +99,26 @@ void ExternalFileUnit::OpenUnit(std::optional<OpenStatus> status,
   swapEndianness_ = convert == Convert::Swap ||
       (convert == Convert::LittleEndian && !isHostLittleEndian) ||
       (convert == Convert::BigEndian && isHostLittleEndian);
+  bool impliedClose{false};
   if (IsConnected()) {
     bool isSamePath{newPath.get() && path() && pathLength() == newPathLength &&
         std::memcmp(path(), newPath.get(), newPathLength) == 0};
     if (status && *status != OpenStatus::Old && isSamePath) {
       handler.SignalError("OPEN statement for connected unit may not have "
                           "explicit STATUS= other than 'OLD'");
-      return;
+      return impliedClose;
     }
     if (!newPath.get() || isSamePath) {
       // OPEN of existing unit, STATUS='OLD' or unspecified, not new FILE=
       newPath.reset();
-      return;
+      return impliedClose;
     }
     // Otherwise, OPEN on open unit with new FILE= implies CLOSE
     DoImpliedEndfile(handler);
     FlushOutput(handler);
     TruncateFrame(0, handler);
     Close(CloseStatus::Keep, handler);
+    impliedClose = true;
   }
   if (newPath.get() && newPathLength > 0) {
     if (const auto *already{
@@ -124,7 +127,7 @@ void ExternalFileUnit::OpenUnit(std::optional<OpenStatus> status,
           "OPEN(UNIT=%d,FILE='%.*s'): file is already connected to unit %d",
           unitNumber_, static_cast<int>(newPathLength), newPath.get(),
           already->unitNumber_);
-      return;
+      return impliedClose;
     }
   }
   set_path(std::move(newPath), newPathLength);
@@ -165,6 +168,7 @@ void ExternalFileUnit::OpenUnit(std::optional<OpenStatus> status,
       currentRecordNumber = *endfileRecordNumber;
     }
   }
+  return impliedClose;
 }
 
 void ExternalFileUnit::OpenAnonymousUnit(std::optional<OpenStatus> status,
@@ -417,8 +421,7 @@ bool ExternalFileUnit::SetVariableFormattedRecordLength() {
   } else if (FrameLength() > recordOffsetInFrame_) {
     const char *record{Frame() + recordOffsetInFrame_};
     std::size_t bytes{FrameLength() - recordOffsetInFrame_};
-    if (const char *nl{
-            reinterpret_cast<const char *>(std::memchr(record, '\n', bytes))}) {
+    if (const char *nl{FindCharacter(record, '\n', bytes)}) {
       recordLength = nl - record;
       if (*recordLength > 0 && record[*recordLength - 1] == '\r') {
         --*recordLength;
@@ -621,6 +624,7 @@ void ExternalFileUnit::FlushOutput(IoErrorHandler &handler) {
       // needs to advance frameOffsetInFile_ to prevent attempts at
       // impossible seeks
       CommitWrites();
+      leftTabLimit.reset();
     }
   }
   Flush(handler);
@@ -714,8 +718,7 @@ bool ExternalFileUnit::SetDirectRec(
 void ExternalFileUnit::EndIoStatement() {
   io_.reset();
   u_.emplace<std::monostate>();
-  CriticalSection critical{lock_};
-  isBusy_ = false;
+  lock_.Drop();
 }
 
 void ExternalFileUnit::BeginSequentialVariableUnformattedInputRecord(
@@ -843,7 +846,7 @@ void ExternalFileUnit::BackspaceVariableUnformattedRecord(
 // There's no portable memrchr(), unfortunately, and strrchr() would
 // fail on a record with a NUL, so we have to do it the hard way.
 static const char *FindLastNewline(const char *str, std::size_t length) {
-  for (const char *p{str + length}; p-- > str;) {
+  for (const char *p{str + length}; p >= str; p--) {
     if (*p == '\n') {
       return p;
     }
@@ -893,6 +896,12 @@ void ExternalFileUnit::BackspaceVariableFormattedRecord(
 }
 
 void ExternalFileUnit::DoImpliedEndfile(IoErrorHandler &handler) {
+  if (!impliedEndfile_ && direction_ == Direction::Output && IsRecordFile() &&
+      access != Access::Direct && leftTabLimit) {
+    // Complete partial record after non-advancing write before
+    // positioning or closing the unit.  Usually sets impliedEndfile_.
+    AdvanceRecord(handler);
+  }
   if (impliedEndfile_) {
     impliedEndfile_ = false;
     if (access != Access::Direct && IsRecordFile() && mayPosition()) {
@@ -905,7 +914,7 @@ void ExternalFileUnit::DoEndfile(IoErrorHandler &handler) {
   if (IsRecordFile() && access != Access::Direct) {
     furthestPositionInRecord =
         std::max(positionInRecord, furthestPositionInRecord);
-    if (furthestPositionInRecord > 0) {
+    if (leftTabLimit) {
       // Last read/write was non-advancing, so AdvanceRecord() was not called.
       leftTabLimit.reset();
       ++currentRecordNumber;

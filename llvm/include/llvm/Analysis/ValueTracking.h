@@ -15,10 +15,11 @@
 #define LLVM_ANALYSIS_VALUETRACKING_H
 
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/Optional.h"
-#include "llvm/ADT/SmallSet.h"
+#include "llvm/Analysis/SimplifyQuery.h"
+#include "llvm/Analysis/WithCache.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/FMF.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Intrinsics.h"
 #include <cassert>
@@ -39,7 +40,6 @@ struct KnownBits;
 class Loop;
 class LoopInfo;
 class MDNode;
-class OptimizationRemarkEmitter;
 class StringRef;
 class TargetLibraryInfo;
 class Value;
@@ -58,23 +58,6 @@ void computeKnownBits(const Value *V, KnownBits &Known, const DataLayout &DL,
                       unsigned Depth = 0, AssumptionCache *AC = nullptr,
                       const Instruction *CxtI = nullptr,
                       const DominatorTree *DT = nullptr,
-                      OptimizationRemarkEmitter *ORE = nullptr,
-                      bool UseInstrInfo = true);
-
-/// Determine which bits of V are known to be either zero or one and return
-/// them in the KnownZero/KnownOne bit sets.
-///
-/// This function is defined on values with integer type, values with pointer
-/// type, and vectors of integers.  In the case
-/// where V is a vector, the known zero and known one values are the
-/// same width as the vector element, and the bit is set only if it is true
-/// for all of the demanded elements in the vector.
-void computeKnownBits(const Value *V, const APInt &DemandedElts,
-                      KnownBits &Known, const DataLayout &DL,
-                      unsigned Depth = 0, AssumptionCache *AC = nullptr,
-                      const Instruction *CxtI = nullptr,
-                      const DominatorTree *DT = nullptr,
-                      OptimizationRemarkEmitter *ORE = nullptr,
                       bool UseInstrInfo = true);
 
 /// Returns the known bits rather than passing by reference.
@@ -82,7 +65,6 @@ KnownBits computeKnownBits(const Value *V, const DataLayout &DL,
                            unsigned Depth = 0, AssumptionCache *AC = nullptr,
                            const Instruction *CxtI = nullptr,
                            const DominatorTree *DT = nullptr,
-                           OptimizationRemarkEmitter *ORE = nullptr,
                            bool UseInstrInfo = true);
 
 /// Returns the known bits rather than passing by reference.
@@ -91,20 +73,36 @@ KnownBits computeKnownBits(const Value *V, const APInt &DemandedElts,
                            AssumptionCache *AC = nullptr,
                            const Instruction *CxtI = nullptr,
                            const DominatorTree *DT = nullptr,
-                           OptimizationRemarkEmitter *ORE = nullptr,
                            bool UseInstrInfo = true);
+
+KnownBits computeKnownBits(const Value *V, const APInt &DemandedElts,
+                           unsigned Depth, const SimplifyQuery &Q);
+
+KnownBits computeKnownBits(const Value *V, unsigned Depth,
+                           const SimplifyQuery &Q);
+
+void computeKnownBits(const Value *V, KnownBits &Known, unsigned Depth,
+                      const SimplifyQuery &Q);
 
 /// Compute known bits from the range metadata.
 /// \p KnownZero the set of bits that are known to be zero
 /// \p KnownOne the set of bits that are known to be one
 void computeKnownBitsFromRangeMetadata(const MDNode &Ranges, KnownBits &Known);
 
+/// Merge bits known from context-dependent facts into Known.
+void computeKnownBitsFromContext(const Value *V, KnownBits &Known,
+                                 unsigned Depth, const SimplifyQuery &Q);
+
+/// Using KnownBits LHS/RHS produce the known bits for logic op (and/xor/or).
+KnownBits analyzeKnownBitsFromAndXorOr(const Operator *I,
+                                       const KnownBits &KnownLHS,
+                                       const KnownBits &KnownRHS,
+                                       unsigned Depth, const SimplifyQuery &SQ);
+
 /// Return true if LHS and RHS have no common bits set.
-bool haveNoCommonBitsSet(const Value *LHS, const Value *RHS,
-                         const DataLayout &DL, AssumptionCache *AC = nullptr,
-                         const Instruction *CxtI = nullptr,
-                         const DominatorTree *DT = nullptr,
-                         bool UseInstrInfo = true);
+bool haveNoCommonBitsSet(const WithCache<const Value *> &LHSCache,
+                         const WithCache<const Value *> &RHSCache,
+                         const SimplifyQuery &SQ);
 
 /// Return true if the given value is known to have exactly one bit set when
 /// defined. For vectors return true if every element is known to be a power
@@ -139,27 +137,18 @@ bool isKnownNonZero(const Value *V, const DataLayout &DL, unsigned Depth = 0,
 bool isKnownNegation(const Value *X, const Value *Y, bool NeedNSW = false);
 
 /// Returns true if the give value is known to be non-negative.
-bool isKnownNonNegative(const Value *V, const DataLayout &DL,
-                        unsigned Depth = 0, AssumptionCache *AC = nullptr,
-                        const Instruction *CxtI = nullptr,
-                        const DominatorTree *DT = nullptr,
-                        bool UseInstrInfo = true);
+bool isKnownNonNegative(const Value *V, const SimplifyQuery &SQ,
+                        unsigned Depth = 0);
 
 /// Returns true if the given value is known be positive (i.e. non-negative
 /// and non-zero).
-bool isKnownPositive(const Value *V, const DataLayout &DL, unsigned Depth = 0,
-                     AssumptionCache *AC = nullptr,
-                     const Instruction *CxtI = nullptr,
-                     const DominatorTree *DT = nullptr,
-                     bool UseInstrInfo = true);
+bool isKnownPositive(const Value *V, const SimplifyQuery &SQ,
+                     unsigned Depth = 0);
 
 /// Returns true if the given value is known be negative (i.e. non-positive
 /// and non-zero).
-bool isKnownNegative(const Value *V, const DataLayout &DL, unsigned Depth = 0,
-                     AssumptionCache *AC = nullptr,
-                     const Instruction *CxtI = nullptr,
-                     const DominatorTree *DT = nullptr,
-                     bool UseInstrInfo = true);
+bool isKnownNegative(const Value *V, const SimplifyQuery &DL,
+                     unsigned Depth = 0);
 
 /// Return true if the given values are known to be non-equal when defined.
 /// Supports scalar integer types only.
@@ -178,11 +167,8 @@ bool isKnownNonEqual(const Value *V1, const Value *V2, const DataLayout &DL,
 /// where V is a vector, the mask, known zero, and known one values are the
 /// same width as the vector element, and the bit is set only if it is true
 /// for all of the elements in the vector.
-bool MaskedValueIsZero(const Value *V, const APInt &Mask, const DataLayout &DL,
-                       unsigned Depth = 0, AssumptionCache *AC = nullptr,
-                       const Instruction *CxtI = nullptr,
-                       const DominatorTree *DT = nullptr,
-                       bool UseInstrInfo = true);
+bool MaskedValueIsZero(const Value *V, const APInt &Mask,
+                       const SimplifyQuery &DL, unsigned Depth = 0);
 
 /// Return the number of times the sign bit of the register is replicated into
 /// the other bits. We know that at least 1 bit is always equal to the sign
@@ -211,10 +197,300 @@ unsigned ComputeMaxSignificantBits(const Value *Op, const DataLayout &DL,
 Intrinsic::ID getIntrinsicForCallSite(const CallBase &CB,
                                       const TargetLibraryInfo *TLI);
 
+/// Returns a pair of values, which if passed to llvm.is.fpclass, returns the
+/// same result as an fcmp with the given operands.
+///
+/// If \p LookThroughSrc is true, consider the input value when computing the
+/// mask.
+///
+/// If \p LookThroughSrc is false, ignore the source value (i.e. the first pair
+/// element will always be LHS.
+std::pair<Value *, FPClassTest> fcmpToClassTest(CmpInst::Predicate Pred,
+                                                const Function &F, Value *LHS,
+                                                Value *RHS,
+                                                bool LookThroughSrc = true);
+std::pair<Value *, FPClassTest> fcmpToClassTest(CmpInst::Predicate Pred,
+                                                const Function &F, Value *LHS,
+                                                const APFloat *ConstRHS,
+                                                bool LookThroughSrc = true);
+
+struct KnownFPClass {
+  /// Floating-point classes the value could be one of.
+  FPClassTest KnownFPClasses = fcAllFlags;
+
+  /// std::nullopt if the sign bit is unknown, true if the sign bit is
+  /// definitely set or false if the sign bit is definitely unset.
+  std::optional<bool> SignBit;
+
+  /// Return true if it's known this can never be one of the mask entries.
+  bool isKnownNever(FPClassTest Mask) const {
+    return (KnownFPClasses & Mask) == fcNone;
+  }
+
+  bool isUnknown() const {
+    return KnownFPClasses == fcAllFlags && !SignBit;
+  }
+
+  /// Return true if it's known this can never be a nan.
+  bool isKnownNeverNaN() const {
+    return isKnownNever(fcNan);
+  }
+
+  /// Return true if it's known this can never be an infinity.
+  bool isKnownNeverInfinity() const {
+    return isKnownNever(fcInf);
+  }
+
+  /// Return true if it's known this can never be +infinity.
+  bool isKnownNeverPosInfinity() const {
+    return isKnownNever(fcPosInf);
+  }
+
+  /// Return true if it's known this can never be -infinity.
+  bool isKnownNeverNegInfinity() const {
+    return isKnownNever(fcNegInf);
+  }
+
+  /// Return true if it's known this can never be a subnormal
+  bool isKnownNeverSubnormal() const {
+    return isKnownNever(fcSubnormal);
+  }
+
+  /// Return true if it's known this can never be a positive subnormal
+  bool isKnownNeverPosSubnormal() const {
+    return isKnownNever(fcPosSubnormal);
+  }
+
+  /// Return true if it's known this can never be a negative subnormal
+  bool isKnownNeverNegSubnormal() const {
+    return isKnownNever(fcNegSubnormal);
+  }
+
+  /// Return true if it's known this can never be a zero. This means a literal
+  /// [+-]0, and does not include denormal inputs implicitly treated as [+-]0.
+  bool isKnownNeverZero() const {
+    return isKnownNever(fcZero);
+  }
+
+  /// Return true if it's known this can never be a literal positive zero.
+  bool isKnownNeverPosZero() const {
+    return isKnownNever(fcPosZero);
+  }
+
+  /// Return true if it's known this can never be a negative zero. This means a
+  /// literal -0 and does not include denormal inputs implicitly treated as -0.
+  bool isKnownNeverNegZero() const {
+    return isKnownNever(fcNegZero);
+  }
+
+  /// Return true if it's know this can never be interpreted as a zero. This
+  /// extends isKnownNeverZero to cover the case where the assumed
+  /// floating-point mode for the function interprets denormals as zero.
+  bool isKnownNeverLogicalZero(const Function &F, Type *Ty) const;
+
+  /// Return true if it's know this can never be interpreted as a negative zero.
+  bool isKnownNeverLogicalNegZero(const Function &F, Type *Ty) const;
+
+  /// Return true if it's know this can never be interpreted as a positive zero.
+  bool isKnownNeverLogicalPosZero(const Function &F, Type *Ty) const;
+
+  static constexpr FPClassTest OrderedLessThanZeroMask =
+      fcNegSubnormal | fcNegNormal | fcNegInf;
+  static constexpr FPClassTest OrderedGreaterThanZeroMask =
+      fcPosSubnormal | fcPosNormal | fcPosInf;
+
+  /// Return true if we can prove that the analyzed floating-point value is
+  /// either NaN or never less than -0.0.
+  ///
+  ///      NaN --> true
+  ///       +0 --> true
+  ///       -0 --> true
+  ///   x > +0 --> true
+  ///   x < -0 --> false
+  bool cannotBeOrderedLessThanZero() const {
+    return isKnownNever(OrderedLessThanZeroMask);
+  }
+
+  /// Return true if we can prove that the analyzed floating-point value is
+  /// either NaN or never greater than -0.0.
+  ///      NaN --> true
+  ///       +0 --> true
+  ///       -0 --> true
+  ///   x > +0 --> false
+  ///   x < -0 --> true
+  bool cannotBeOrderedGreaterThanZero() const {
+    return isKnownNever(OrderedGreaterThanZeroMask);
+  }
+
+  KnownFPClass &operator|=(const KnownFPClass &RHS) {
+    KnownFPClasses = KnownFPClasses | RHS.KnownFPClasses;
+
+    if (SignBit != RHS.SignBit)
+      SignBit = std::nullopt;
+    return *this;
+  }
+
+  void knownNot(FPClassTest RuleOut) {
+    KnownFPClasses = KnownFPClasses & ~RuleOut;
+  }
+
+  void fneg() {
+    KnownFPClasses = llvm::fneg(KnownFPClasses);
+    if (SignBit)
+      SignBit = !*SignBit;
+  }
+
+  void fabs() {
+    if (KnownFPClasses & fcNegZero)
+      KnownFPClasses |= fcPosZero;
+
+    if (KnownFPClasses & fcNegInf)
+      KnownFPClasses |= fcPosInf;
+
+    if (KnownFPClasses & fcNegSubnormal)
+      KnownFPClasses |= fcPosSubnormal;
+
+    if (KnownFPClasses & fcNegNormal)
+      KnownFPClasses |= fcPosNormal;
+
+    signBitMustBeZero();
+  }
+
+  /// Return true if the sign bit must be 0, ignoring the sign of nans.
+  bool signBitIsZeroOrNaN() const {
+    return isKnownNever(fcNegative);
+  }
+
+  /// Assume the sign bit is zero.
+  void signBitMustBeZero() {
+    KnownFPClasses &= (fcPositive | fcNan);
+    SignBit = false;
+  }
+
+  void copysign(const KnownFPClass &Sign) {
+    // Don't know anything about the sign of the source. Expand the possible set
+    // to its opposite sign pair.
+    if (KnownFPClasses & fcZero)
+      KnownFPClasses |= fcZero;
+    if (KnownFPClasses & fcSubnormal)
+      KnownFPClasses |= fcSubnormal;
+    if (KnownFPClasses & fcNormal)
+      KnownFPClasses |= fcNormal;
+    if (KnownFPClasses & fcInf)
+      KnownFPClasses |= fcInf;
+
+    // Sign bit is exactly preserved even for nans.
+    SignBit = Sign.SignBit;
+
+    // Clear sign bits based on the input sign mask.
+    if (Sign.isKnownNever(fcPositive | fcNan) || (SignBit && *SignBit))
+      KnownFPClasses &= (fcNegative | fcNan);
+    if (Sign.isKnownNever(fcNegative | fcNan) || (SignBit && !*SignBit))
+      KnownFPClasses &= (fcPositive | fcNan);
+  }
+
+  // Propagate knowledge that a non-NaN source implies the result can also not
+  // be a NaN. For unconstrained operations, signaling nans are not guaranteed
+  // to be quieted but cannot be introduced.
+  void propagateNaN(const KnownFPClass &Src, bool PreserveSign = false) {
+    if (Src.isKnownNever(fcNan)) {
+      knownNot(fcNan);
+      if (PreserveSign)
+        SignBit = Src.SignBit;
+    } else if (Src.isKnownNever(fcSNan))
+      knownNot(fcSNan);
+  }
+
+  /// Propagate knowledge from a source value that could be a denormal or
+  /// zero. We have to be conservative since output flushing is not guaranteed,
+  /// so known-never-zero may not hold.
+  ///
+  /// This assumes a copy-like operation and will replace any currently known
+  /// information.
+  void propagateDenormal(const KnownFPClass &Src, const Function &F, Type *Ty);
+
+  /// Report known classes if \p Src is evaluated through a potentially
+  /// canonicalizing operation. We can assume signaling nans will not be
+  /// introduced, but cannot assume a denormal will be flushed under FTZ/DAZ.
+  ///
+  /// This assumes a copy-like operation and will replace any currently known
+  /// information.
+  void propagateCanonicalizingSrc(const KnownFPClass &Src, const Function &F,
+                                  Type *Ty);
+
+  void resetAll() { *this = KnownFPClass(); }
+};
+
+inline KnownFPClass operator|(KnownFPClass LHS, const KnownFPClass &RHS) {
+  LHS |= RHS;
+  return LHS;
+}
+
+inline KnownFPClass operator|(const KnownFPClass &LHS, KnownFPClass &&RHS) {
+  RHS |= LHS;
+  return std::move(RHS);
+}
+
+/// Determine which floating-point classes are valid for \p V, and return them
+/// in KnownFPClass bit sets.
+///
+/// This function is defined on values with floating-point type, values vectors
+/// of floating-point type, and arrays of floating-point type.
+
+/// \p InterestedClasses is a compile time optimization hint for which floating
+/// point classes should be queried. Queries not specified in \p
+/// InterestedClasses should be reliable if they are determined during the
+/// query.
+KnownFPClass computeKnownFPClass(
+    const Value *V, const APInt &DemandedElts, const DataLayout &DL,
+    FPClassTest InterestedClasses = fcAllFlags, unsigned Depth = 0,
+    const TargetLibraryInfo *TLI = nullptr, AssumptionCache *AC = nullptr,
+    const Instruction *CxtI = nullptr, const DominatorTree *DT = nullptr,
+    bool UseInstrInfo = true);
+
+KnownFPClass computeKnownFPClass(
+    const Value *V, const DataLayout &DL,
+    FPClassTest InterestedClasses = fcAllFlags, unsigned Depth = 0,
+    const TargetLibraryInfo *TLI = nullptr, AssumptionCache *AC = nullptr,
+    const Instruction *CxtI = nullptr, const DominatorTree *DT = nullptr,
+    bool UseInstrInfo = true);
+
+/// Wrapper to account for known fast math flags at the use instruction.
+inline KnownFPClass computeKnownFPClass(
+    const Value *V, FastMathFlags FMF, const DataLayout &DL,
+    FPClassTest InterestedClasses = fcAllFlags, unsigned Depth = 0,
+    const TargetLibraryInfo *TLI = nullptr, AssumptionCache *AC = nullptr,
+    const Instruction *CxtI = nullptr, const DominatorTree *DT = nullptr,
+    bool UseInstrInfo = true) {
+  if (FMF.noNaNs())
+    InterestedClasses &= ~fcNan;
+  if (FMF.noInfs())
+    InterestedClasses &= ~fcInf;
+
+  KnownFPClass Result = computeKnownFPClass(V, DL, InterestedClasses, Depth,
+                                            TLI, AC, CxtI, DT, UseInstrInfo);
+
+  if (FMF.noNaNs())
+    Result.KnownFPClasses &= ~fcNan;
+  if (FMF.noInfs())
+    Result.KnownFPClasses &= ~fcInf;
+  return Result;
+}
+
 /// Return true if we can prove that the specified FP value is never equal to
-/// -0.0.
-bool CannotBeNegativeZero(const Value *V, const TargetLibraryInfo *TLI,
-                          unsigned Depth = 0);
+/// -0.0. Users should use caution when considering PreserveSign
+/// denormal-fp-math.
+inline bool cannotBeNegativeZero(const Value *V, const DataLayout &DL,
+                                 const TargetLibraryInfo *TLI = nullptr,
+                                 unsigned Depth = 0,
+                                 AssumptionCache *AC = nullptr,
+                                 const Instruction *CtxI = nullptr,
+                                 const DominatorTree *DT = nullptr,
+                                 bool UseInstrInfo = true) {
+  KnownFPClass Known = computeKnownFPClass(V, DL, fcNegZero, Depth, TLI, AC,
+                                           CtxI, DT, UseInstrInfo);
+  return Known.isKnownNeverNegZero();
+}
 
 /// Return true if we can prove that the specified FP value is either NaN or
 /// never less than -0.0.
@@ -224,19 +500,58 @@ bool CannotBeNegativeZero(const Value *V, const TargetLibraryInfo *TLI,
 ///       -0 --> true
 ///   x > +0 --> true
 ///   x < -0 --> false
-bool CannotBeOrderedLessThanZero(const Value *V, const TargetLibraryInfo *TLI);
+inline bool cannotBeOrderedLessThanZero(const Value *V, const DataLayout &DL,
+                                        const TargetLibraryInfo *TLI = nullptr,
+                                        unsigned Depth = 0,
+                                        AssumptionCache *AC = nullptr,
+                                        const Instruction *CtxI = nullptr,
+                                        const DominatorTree *DT = nullptr,
+                                        bool UseInstrInfo = true) {
+  KnownFPClass Known =
+      computeKnownFPClass(V, DL, KnownFPClass::OrderedLessThanZeroMask, Depth,
+                          TLI, AC, CtxI, DT, UseInstrInfo);
+  return Known.cannotBeOrderedLessThanZero();
+}
 
 /// Return true if the floating-point scalar value is not an infinity or if
 /// the floating-point vector value has no infinities. Return false if a value
 /// could ever be infinity.
-bool isKnownNeverInfinity(const Value *V, const TargetLibraryInfo *TLI,
-                          unsigned Depth = 0);
+inline bool isKnownNeverInfinity(const Value *V, const DataLayout &DL,
+                                 const TargetLibraryInfo *TLI = nullptr,
+                                 unsigned Depth = 0,
+                                 AssumptionCache *AC = nullptr,
+                                 const Instruction *CtxI = nullptr,
+                                 const DominatorTree *DT = nullptr,
+                                 bool UseInstrInfo = true) {
+  KnownFPClass Known = computeKnownFPClass(V, DL, fcInf, Depth, TLI, AC, CtxI,
+                                           DT, UseInstrInfo);
+  return Known.isKnownNeverInfinity();
+}
+
+/// Return true if the floating-point value can never contain a NaN or infinity.
+inline bool isKnownNeverInfOrNaN(
+    const Value *V, const DataLayout &DL, const TargetLibraryInfo *TLI,
+    unsigned Depth = 0, AssumptionCache *AC = nullptr,
+    const Instruction *CtxI = nullptr, const DominatorTree *DT = nullptr,
+    bool UseInstrInfo = true) {
+  KnownFPClass Known = computeKnownFPClass(V, DL, fcInf | fcNan, Depth, TLI, AC,
+                                           CtxI, DT, UseInstrInfo);
+  return Known.isKnownNeverNaN() && Known.isKnownNeverInfinity();
+}
 
 /// Return true if the floating-point scalar value is not a NaN or if the
 /// floating-point vector value has no NaN elements. Return false if a value
 /// could ever be NaN.
-bool isKnownNeverNaN(const Value *V, const TargetLibraryInfo *TLI,
-                     unsigned Depth = 0);
+inline bool isKnownNeverNaN(const Value *V, const DataLayout &DL,
+                            const TargetLibraryInfo *TLI, unsigned Depth = 0,
+                            AssumptionCache *AC = nullptr,
+                            const Instruction *CtxI = nullptr,
+                            const DominatorTree *DT = nullptr,
+                            bool UseInstrInfo = true) {
+  KnownFPClass Known = computeKnownFPClass(V, DL, fcNan, Depth, TLI, AC, CtxI,
+                                           DT, UseInstrInfo);
+  return Known.isKnownNeverNaN();
+}
 
 /// Return true if we can prove that the specified FP value's sign bit is 0.
 ///
@@ -245,7 +560,8 @@ bool isKnownNeverNaN(const Value *V, const TargetLibraryInfo *TLI,
 ///       -0 --> false
 ///   x > +0 --> true
 ///   x < -0 --> false
-bool SignBitMustBeZero(const Value *V, const TargetLibraryInfo *TLI);
+bool SignBitMustBeZero(const Value *V, const DataLayout &DL,
+                       const TargetLibraryInfo *TLI);
 
 /// If the specified value can be set by repeating the same byte in memory,
 /// return the i8 value that it is represented with. This is true for all i8
@@ -328,7 +644,7 @@ bool getConstantDataArrayInfo(const Value *V, ConstantDataArraySlice &Slice,
 /// character by default. If TrimAtNul is set to false, then this returns any
 /// trailing null characters as well as any other characters that come after
 /// it.
-bool getConstantStringInfo(const Value *V, StringRef &Str, uint64_t Offset = 0,
+bool getConstantStringInfo(const Value *V, StringRef &Str,
                            bool TrimAtNul = true);
 
 /// If we can compute the length of the string pointed to by the specified
@@ -510,50 +826,33 @@ enum class OverflowResult {
 };
 
 OverflowResult computeOverflowForUnsignedMul(const Value *LHS, const Value *RHS,
-                                             const DataLayout &DL,
-                                             AssumptionCache *AC,
-                                             const Instruction *CxtI,
-                                             const DominatorTree *DT,
-                                             bool UseInstrInfo = true);
+                                             const SimplifyQuery &SQ);
 OverflowResult computeOverflowForSignedMul(const Value *LHS, const Value *RHS,
-                                           const DataLayout &DL,
-                                           AssumptionCache *AC,
-                                           const Instruction *CxtI,
-                                           const DominatorTree *DT,
-                                           bool UseInstrInfo = true);
-OverflowResult computeOverflowForUnsignedAdd(const Value *LHS, const Value *RHS,
-                                             const DataLayout &DL,
-                                             AssumptionCache *AC,
-                                             const Instruction *CxtI,
-                                             const DominatorTree *DT,
-                                             bool UseInstrInfo = true);
-OverflowResult computeOverflowForSignedAdd(const Value *LHS, const Value *RHS,
-                                           const DataLayout &DL,
-                                           AssumptionCache *AC = nullptr,
-                                           const Instruction *CxtI = nullptr,
-                                           const DominatorTree *DT = nullptr);
+                                           const SimplifyQuery &SQ);
+OverflowResult
+computeOverflowForUnsignedAdd(const WithCache<const Value *> &LHS,
+                              const WithCache<const Value *> &RHS,
+                              const SimplifyQuery &SQ);
+OverflowResult computeOverflowForSignedAdd(const WithCache<const Value *> &LHS,
+                                           const WithCache<const Value *> &RHS,
+                                           const SimplifyQuery &SQ);
 /// This version also leverages the sign bit of Add if known.
 OverflowResult computeOverflowForSignedAdd(const AddOperator *Add,
-                                           const DataLayout &DL,
-                                           AssumptionCache *AC = nullptr,
-                                           const Instruction *CxtI = nullptr,
-                                           const DominatorTree *DT = nullptr);
+                                           const SimplifyQuery &SQ);
 OverflowResult computeOverflowForUnsignedSub(const Value *LHS, const Value *RHS,
-                                             const DataLayout &DL,
-                                             AssumptionCache *AC,
-                                             const Instruction *CxtI,
-                                             const DominatorTree *DT);
+                                             const SimplifyQuery &SQ);
 OverflowResult computeOverflowForSignedSub(const Value *LHS, const Value *RHS,
-                                           const DataLayout &DL,
-                                           AssumptionCache *AC,
-                                           const Instruction *CxtI,
-                                           const DominatorTree *DT);
+                                           const SimplifyQuery &SQ);
 
 /// Returns true if the arithmetic part of the \p WO 's result is
 /// used only along the paths control dependent on the computation
 /// not overflowing, \p WO being an <op>.with.overflow intrinsic.
 bool isOverflowIntrinsicNoWrap(const WithOverflowInst *WO,
                                const DominatorTree &DT);
+
+/// Determine the possible constant range of vscale with the given bit width,
+/// based on the vscale_range function attribute.
+ConstantRange getVScaleRange(const Function *F, unsigned BitWidth);
 
 /// Determine the possible constant range of an integer or vector of integer
 /// value. This is intended as a cheap, non-recursive check.
@@ -604,31 +903,33 @@ bool isGuaranteedToTransferExecutionToSuccessor(
 bool isGuaranteedToExecuteForEveryIteration(const Instruction *I,
                                             const Loop *L);
 
-/// Return true if I yields poison or raises UB if any of its operands is
-/// poison.
-/// Formally, given I = `r = op v1 v2 .. vN`, propagatesPoison returns true
-/// if, for all i, r is evaluated to poison or op raises UB if vi = poison.
-/// If vi is a vector or an aggregate and r is a single value, any poison
-/// element in vi should make r poison or raise UB.
+/// Return true if \p PoisonOp's user yields poison or raises UB if its
+/// operand \p PoisonOp is poison.
+///
+/// If \p PoisonOp is a vector or an aggregate and the operation's result is a
+/// single value, any poison element in /p PoisonOp should make the result
+/// poison or raise UB.
+///
 /// To filter out operands that raise UB on poison, you can use
 /// getGuaranteedNonPoisonOp.
-bool propagatesPoison(const Operator *I);
+bool propagatesPoison(const Use &PoisonOp);
 
 /// Insert operands of I into Ops such that I will trigger undefined behavior
 /// if I is executed and that operand has a poison value.
 void getGuaranteedNonPoisonOps(const Instruction *I,
-                               SmallPtrSetImpl<const Value *> &Ops);
+                               SmallVectorImpl<const Value *> &Ops);
+
 /// Insert operands of I into Ops such that I will trigger undefined behavior
 /// if I is executed and that operand is not a well-defined value
 /// (i.e. has undef bits or poison).
 void getGuaranteedWellDefinedOps(const Instruction *I,
-                                 SmallPtrSetImpl<const Value *> &Ops);
+                                 SmallVectorImpl<const Value *> &Ops);
 
 /// Return true if the given instruction must trigger undefined behavior
 /// when I is executed with any operands which appear in KnownPoison holding
 /// a poison value at the point of execution.
 bool mustTriggerUB(const Instruction *I,
-                   const SmallSet<const Value *, 16> &KnownPoison);
+                   const SmallPtrSetImpl<const Value *> &KnownPoison);
 
 /// Return true if this function can prove that if Inst is executed
 /// and yields a poison value or undef bits, then that will trigger
@@ -648,16 +949,18 @@ bool programUndefinedIfPoison(const Instruction *Inst);
 /// true. If Op raises immediate UB but never creates poison or undef
 /// (e.g. sdiv I, 0), canCreatePoison returns false.
 ///
-/// \p ConsiderFlags controls whether poison producing flags on the
-/// instruction are considered.  This can be used to see if the instruction
-/// could still introduce undef or poison even without poison generating flags
-/// which might be on the instruction.  (i.e. could the result of
-/// Op->dropPoisonGeneratingFlags() still create poison or undef)
+/// \p ConsiderFlagsAndMetadata controls whether poison producing flags and
+/// metadata on the instruction are considered.  This can be used to see if the
+/// instruction could still introduce undef or poison even without poison
+/// generating flags and metadata which might be on the instruction.
+/// (i.e. could the result of Op->dropPoisonGeneratingFlags() still create
+/// poison or undef)
 ///
 /// canCreatePoison returns true if Op can create poison from non-poison
 /// operands.
-bool canCreateUndefOrPoison(const Operator *Op, bool ConsiderFlags = true);
-bool canCreatePoison(const Operator *Op, bool ConsiderFlags = true);
+bool canCreateUndefOrPoison(const Operator *Op,
+                            bool ConsiderFlagsAndMetadata = true);
+bool canCreatePoison(const Operator *Op, bool ConsiderFlagsAndMetadata = true);
 
 /// Return true if V is poison given that ValAssumedPoison is already poison.
 /// For example, if ValAssumedPoison is `icmp X, 10` and V is `icmp X, 5`,
@@ -682,6 +985,17 @@ bool isGuaranteedNotToBePoison(const Value *V, AssumptionCache *AC = nullptr,
                                const Instruction *CtxI = nullptr,
                                const DominatorTree *DT = nullptr,
                                unsigned Depth = 0);
+
+/// Return true if undefined behavior would provable be executed on the path to
+/// OnPathTo if Root produced a posion result.  Note that this doesn't say
+/// anything about whether OnPathTo is actually executed or whether Root is
+/// actually poison.  This can be used to assess whether a new use of Root can
+/// be added at a location which is control equivalent with OnPathTo (such as
+/// immediately before it) without introducing UB which didn't previously
+/// exist.  Note that a false result conveys no information.
+bool mustExecuteUBIfPoisonOnPathTo(Instruction *Root,
+                                   Instruction *OnPathTo,
+                                   DominatorTree *DT);
 
 /// Specific patterns of select instructions we can match.
 enum SelectPatternFlavor {
@@ -769,10 +1083,6 @@ SelectPatternFlavor getInverseMinMaxFlavor(SelectPatternFlavor SPF);
 
 Intrinsic::ID getInverseMinMaxIntrinsic(Intrinsic::ID MinMaxID);
 
-/// Return the canonical inverse comparison predicate for the specified
-/// minimum/maximum flavor.
-CmpInst::Predicate getInverseMinMaxPred(SelectPatternFlavor SPF);
-
 /// Return the minimum or maximum constant value for the specified integer
 /// min/max flavor and type.
 APInt getMinMaxLimit(SelectPatternFlavor SPF, unsigned BitWidth);
@@ -817,38 +1127,35 @@ bool matchSimpleRecurrence(const BinaryOperator *I, PHINode *&P, Value *&Start,
                            Value *&Step);
 
 /// Return true if RHS is known to be implied true by LHS.  Return false if
-/// RHS is known to be implied false by LHS.  Otherwise, return None if no
-/// implication can be made.
-/// A & B must be i1 (boolean) values or a vector of such values. Note that
-/// the truth table for implication is the same as <=u on i1 values (but not
+/// RHS is known to be implied false by LHS.  Otherwise, return std::nullopt if
+/// no implication can be made. A & B must be i1 (boolean) values or a vector of
+/// such values. Note that the truth table for implication is the same as <=u on
+/// i1 values (but not
 /// <=s!).  The truth table for both is:
 ///    | T | F (B)
 ///  T | T | F
 ///  F | T | T
 /// (A)
-Optional<bool> isImpliedCondition(const Value *LHS, const Value *RHS,
-                                  const DataLayout &DL, bool LHSIsTrue = true,
-                                  unsigned Depth = 0);
-Optional<bool> isImpliedCondition(const Value *LHS, CmpInst::Predicate RHSPred,
-                                  const Value *RHSOp0, const Value *RHSOp1,
-                                  const DataLayout &DL, bool LHSIsTrue = true,
-                                  unsigned Depth = 0);
+std::optional<bool> isImpliedCondition(const Value *LHS, const Value *RHS,
+                                       const DataLayout &DL,
+                                       bool LHSIsTrue = true,
+                                       unsigned Depth = 0);
+std::optional<bool> isImpliedCondition(const Value *LHS,
+                                       CmpInst::Predicate RHSPred,
+                                       const Value *RHSOp0, const Value *RHSOp1,
+                                       const DataLayout &DL,
+                                       bool LHSIsTrue = true,
+                                       unsigned Depth = 0);
 
 /// Return the boolean condition value in the context of the given instruction
 /// if it is known based on dominating conditions.
-Optional<bool> isImpliedByDomCondition(const Value *Cond,
-                                       const Instruction *ContextI,
-                                       const DataLayout &DL);
-Optional<bool> isImpliedByDomCondition(CmpInst::Predicate Pred,
-                                       const Value *LHS, const Value *RHS,
-                                       const Instruction *ContextI,
-                                       const DataLayout &DL);
-
-/// If Ptr1 is provably equal to Ptr2 plus a constant offset, return that
-/// offset. For example, Ptr1 might be &A[42], and Ptr2 might be &A[40]. In
-/// this case offset would be -8.
-Optional<int64_t> isPointerOffset(const Value *Ptr1, const Value *Ptr2,
-                                  const DataLayout &DL);
+std::optional<bool> isImpliedByDomCondition(const Value *Cond,
+                                            const Instruction *ContextI,
+                                            const DataLayout &DL);
+std::optional<bool> isImpliedByDomCondition(CmpInst::Predicate Pred,
+                                            const Value *LHS, const Value *RHS,
+                                            const Instruction *ContextI,
+                                            const DataLayout &DL);
 } // end namespace llvm
 
 #endif // LLVM_ANALYSIS_VALUETRACKING_H

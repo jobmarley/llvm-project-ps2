@@ -13,8 +13,10 @@
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 
+#include "mlir/Conversion/ConvertToLLVM/ToLLVMInterface.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Conversion/LLVMCommon/PrintCallHelper.h"
 #include "mlir/Conversion/LLVMCommon/VectorPattern.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
@@ -27,7 +29,7 @@
 #include <functional>
 
 namespace mlir {
-#define GEN_PASS_DEF_CONVERTCONTROLFLOWTOLLVM
+#define GEN_PASS_DEF_CONVERTCONTROLFLOWTOLLVMPASS
 #include "mlir/Conversion/Passes.h.inc"
 } // namespace mlir
 
@@ -41,33 +43,42 @@ namespace {
 /// ignored by the default lowering but should be propagated by any custom
 /// lowering.
 struct AssertOpLowering : public ConvertOpToLLVMPattern<cf::AssertOp> {
-  using ConvertOpToLLVMPattern<cf::AssertOp>::ConvertOpToLLVMPattern;
+  explicit AssertOpLowering(LLVMTypeConverter &typeConverter,
+                            bool abortOnFailedAssert = true)
+      : ConvertOpToLLVMPattern<cf::AssertOp>(typeConverter, /*benefit=*/1),
+        abortOnFailedAssert(abortOnFailedAssert) {}
 
   LogicalResult
   matchAndRewrite(cf::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-
-    // Insert the `abort` declaration if necessary.
     auto module = op->getParentOfType<ModuleOp>();
-    auto abortFunc = module.lookupSymbol<LLVM::LLVMFuncOp>("abort");
-    if (!abortFunc) {
-      OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(module.getBody());
-      auto abortFuncTy = LLVM::LLVMFunctionType::get(getVoidType(), {});
-      abortFunc = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
-                                                    "abort", abortFuncTy);
-    }
 
     // Split block at `assert` operation.
     Block *opBlock = rewriter.getInsertionBlock();
     auto opPosition = rewriter.getInsertionPoint();
     Block *continuationBlock = rewriter.splitBlock(opBlock, opPosition);
 
-    // Generate IR to call `abort`.
+    // Failed block: Generate IR to print the message and call `abort`.
     Block *failureBlock = rewriter.createBlock(opBlock->getParent());
-    rewriter.create<LLVM::CallOp>(loc, abortFunc, llvm::None);
-    rewriter.create<LLVM::UnreachableOp>(loc);
+    LLVM::createPrintStrCall(rewriter, loc, module, "assert_msg", op.getMsg(),
+                             *getTypeConverter(), /*addNewLine=*/false,
+                             /*runtimeFunctionName=*/"puts");
+    if (abortOnFailedAssert) {
+      // Insert the `abort` declaration if necessary.
+      auto abortFunc = module.lookupSymbol<LLVM::LLVMFuncOp>("abort");
+      if (!abortFunc) {
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(module.getBody());
+        auto abortFuncTy = LLVM::LLVMFunctionType::get(getVoidType(), {});
+        abortFunc = rewriter.create<LLVM::LLVMFuncOp>(rewriter.getUnknownLoc(),
+                                                      "abort", abortFuncTy);
+      }
+      rewriter.create<LLVM::CallOp>(loc, abortFunc, std::nullopt);
+      rewriter.create<LLVM::UnreachableOp>(loc);
+    } else {
+      rewriter.create<LLVM::BrOp>(loc, ValueRange(), continuationBlock);
+    }
 
     // Generate assertion test.
     rewriter.setInsertionPointToEnd(opBlock);
@@ -76,6 +87,11 @@ struct AssertOpLowering : public ConvertOpToLLVMPattern<cf::AssertOp> {
 
     return success();
   }
+
+private:
+  /// If set to `false`, messages are printed but program execution continues.
+  /// This is useful for testing asserts.
+  bool abortOnFailedAssert = true;
 };
 
 /// The cf->LLVM lowerings for branching ops require that the blocks they jump
@@ -195,6 +211,12 @@ void mlir::cf::populateControlFlowToLLVMConversionPatterns(
   // clang-format on
 }
 
+void mlir::cf::populateAssertToLLVMConversionPattern(
+    LLVMTypeConverter &converter, RewritePatternSet &patterns,
+    bool abortOnFailure) {
+  patterns.add<AssertOpLowering>(converter, abortOnFailure);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Definition
 //===----------------------------------------------------------------------===//
@@ -202,8 +224,9 @@ void mlir::cf::populateControlFlowToLLVMConversionPatterns(
 namespace {
 /// A pass converting MLIR operations into the LLVM IR dialect.
 struct ConvertControlFlowToLLVM
-    : public impl::ConvertControlFlowToLLVMBase<ConvertControlFlowToLLVM> {
-  ConvertControlFlowToLLVM() = default;
+    : public impl::ConvertControlFlowToLLVMPassBase<ConvertControlFlowToLLVM> {
+
+  using Base::Base;
 
   /// Run the dialect converter on the module.
   void runOnOperation() override {
@@ -224,6 +247,33 @@ struct ConvertControlFlowToLLVM
 };
 } // namespace
 
-std::unique_ptr<Pass> mlir::cf::createConvertControlFlowToLLVMPass() {
-  return std::make_unique<ConvertControlFlowToLLVM>();
+//===----------------------------------------------------------------------===//
+// ConvertToLLVMPatternInterface implementation
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Implement the interface to convert MemRef to LLVM.
+struct ControlFlowToLLVMDialectInterface
+    : public ConvertToLLVMPatternInterface {
+  using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
+  void loadDependentDialects(MLIRContext *context) const final {
+    context->loadDialect<LLVM::LLVMDialect>();
+  }
+
+  /// Hook for derived dialect interface to provide conversion patterns
+  /// and mark dialect legal for the conversion target.
+  void populateConvertToLLVMConversionPatterns(
+      ConversionTarget &target, LLVMTypeConverter &typeConverter,
+      RewritePatternSet &patterns) const final {
+    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter,
+                                                          patterns);
+  }
+};
+} // namespace
+
+void mlir::cf::registerConvertControlFlowToLLVMInterface(
+    DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, cf::ControlFlowDialect *dialect) {
+    dialect->addInterfaces<ControlFlowToLLVMDialectInterface>();
+  });
 }

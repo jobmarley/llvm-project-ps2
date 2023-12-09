@@ -16,6 +16,7 @@
 #include "lldb/Core/Module.h"
 #include "lldb/Target/Process.h"
 #include "lldb/Target/Target.h"
+#include <optional>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -34,14 +35,14 @@ Error TraceIntelPTBundleLoader::ParseModule(Target &target,
   auto do_parse = [&]() -> Error {
     FileSpec system_file_spec(module.system_path);
 
-    FileSpec local_file_spec(module.file.hasValue() ? *module.file
-                                                    : module.system_path);
+    FileSpec local_file_spec(module.file.has_value() ? *module.file
+                                                     : module.system_path);
 
     ModuleSpec module_spec;
     module_spec.GetFileSpec() = local_file_spec;
     module_spec.GetPlatformFileSpec() = system_file_spec;
 
-    if (module.uuid.hasValue())
+    if (module.uuid.has_value())
       module_spec.GetUUID().SetFromStringRef(*module.uuid);
 
     Status error;
@@ -78,7 +79,7 @@ TraceIntelPTBundleLoader::ParseThread(Process &process,
                                       const JSONThread &thread) {
   lldb::tid_t tid = static_cast<lldb::tid_t>(thread.tid);
 
-  Optional<FileSpec> trace_file;
+  std::optional<FileSpec> trace_file;
   if (thread.ipt_trace)
     trace_file = FileSpec(*thread.ipt_trace);
 
@@ -102,10 +103,11 @@ TraceIntelPTBundleLoader::CreateEmptyProcess(lldb::pid_t pid,
   ParsedProcess parsed_process;
   parsed_process.target_sp = target_sp;
 
-  ProcessSP process_sp = target_sp->CreateProcess(
-      /*listener*/ nullptr, "trace",
-      /*crash_file*/ nullptr,
-      /*can_connect*/ false);
+  // This should instead try to directly create an instance of ProcessTrace.
+  // ProcessSP process_sp = target_sp->CreateProcess(
+  //    /*listener*/ nullptr, "trace",
+  //    /*crash_file*/ nullptr,
+  //    /*can_connect*/ false);
 
   process_sp->SetID(static_cast<lldb::pid_t>(pid));
 
@@ -241,6 +243,8 @@ StringRef TraceIntelPTBundleLoader::GetSchema() {
       "pid": integer,
       "triple"?: string,
           // Optional clang/llvm target triple.
+          // This must be provided if the trace will be created not using the
+          // CLI or on a machine other than where the target was traced.
       "threads": [
           // A list of known threads for the given process. When context switch
           // data is provided, LLDB will automatically create threads for the
@@ -282,7 +286,7 @@ StringRef TraceIntelPTBundleLoader::GetSchema() {
   "tscPerfZeroConversion"?: {
     // Values used to convert between TSCs and nanoseconds. See the time_zero
     // section in https://man7.org/linux/man-pages/man2/perf_event_open.2.html
-    // for for information.
+    // for information.
 
     "timeMult": integer,
     "timeShift": integer,

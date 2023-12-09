@@ -283,7 +283,7 @@ void InitThreads() {
 bool MemIsApp(uptr p) {
 // Memory outside the alias range has non-zero tags.
 #  if !defined(HWASAN_ALIASING_MODE)
-  CHECK(GetTagFromPointer(p) == 0);
+  CHECK_EQ(GetTagFromPointer(p), 0);
 #  endif
 
   return (p >= kHighMemStart && p <= kHighMemEnd) ||
@@ -293,18 +293,6 @@ bool MemIsApp(uptr p) {
 void InstallAtExitHandler() { atexit(HwasanAtExit); }
 
 // ---------------------- TSD ---------------- {{{1
-
-extern "C" void __hwasan_thread_enter() {
-  hwasanThreadList().CreateCurrentThread()->EnsureRandomStateInited();
-}
-
-extern "C" void __hwasan_thread_exit() {
-  Thread *t = GetCurrentThread();
-  // Make sure that signal handler can not see a stale current thread pointer.
-  atomic_signal_fence(memory_order_seq_cst);
-  if (t)
-    hwasanThreadList().ReleaseThread(t);
-}
 
 #  if HWASAN_WITH_INTERCEPTORS
 static pthread_key_t tsd_key;
@@ -541,6 +529,38 @@ void HwasanInstallAtForkHandler() {
   pthread_atfork(before, after, after);
 }
 
+void InstallAtExitCheckLeaks() {
+  if (CAN_SANITIZE_LEAKS) {
+    if (common_flags()->detect_leaks && common_flags()->leak_check_at_exit) {
+      if (flags()->halt_on_error)
+        Atexit(__lsan::DoLeakCheck);
+      else
+        Atexit(__lsan::DoRecoverableLeakCheckVoid);
+    }
+  }
+}
+
 }  // namespace __hwasan
+
+using namespace __hwasan;
+
+extern "C" void __hwasan_thread_enter() {
+  hwasanThreadList().CreateCurrentThread()->EnsureRandomStateInited();
+}
+
+extern "C" void __hwasan_thread_exit() {
+  Thread *t = GetCurrentThread();
+  // Make sure that signal handler can not see a stale current thread pointer.
+  atomic_signal_fence(memory_order_seq_cst);
+  if (t) {
+    // Block async signals on the thread as the handler can be instrumented.
+    // After this point instrumented code can't access essential data from TLS
+    // and will crash.
+    // Bionic already calls __hwasan_thread_exit with blocked signals.
+    if (SANITIZER_GLIBC)
+      BlockSignals();
+    hwasanThreadList().ReleaseThread(t);
+  }
+}
 
 #endif  // SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD

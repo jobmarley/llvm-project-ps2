@@ -125,6 +125,21 @@ struct VFInfo {
   std::string ScalarName; /// Scalar Function Name.
   std::string VectorName; /// Vector Function Name associated to this VFInfo.
   VFISAKind ISA;          /// Instruction Set Architecture.
+
+  /// Returns the index of the first parameter with the kind 'GlobalPredicate',
+  /// if any exist.
+  std::optional<unsigned> getParamIndexForOptionalMask() const {
+    unsigned ParamCount = Shape.Parameters.size();
+    for (unsigned i = 0; i < ParamCount; ++i)
+      if (Shape.Parameters[i].ParamKind == VFParamKind::GlobalPredicate)
+        return i;
+
+    return std::nullopt;
+  }
+
+  /// Returns true if at least one of the operands to the vectorized function
+  /// has the kind 'GlobalPredicate'.
+  bool isMasked() const { return getParamIndexForOptionalMask().has_value(); }
 };
 
 namespace VFABI {
@@ -159,32 +174,13 @@ static constexpr char const *_LLVM_Scalarize_ = "_LLVM_Scalarize_";
 ///
 /// \param MangledName -> input string in the format
 /// _ZGV<isa><mask><vlen><parameters>_<scalarname>[(<redirection>)].
-/// \param M -> Module used to retrieve informations about the vector
-/// function that are not possible to retrieve from the mangled
-/// name. At the moment, this parameter is needed only to retrieve the
-/// Vectorization Factor of scalable vector functions from their
-/// respective IR declarations.
-Optional<VFInfo> tryDemangleForVFABI(StringRef MangledName, const Module &M);
-
-/// This routine mangles the given VectorName according to the LangRef
-/// specification for vector-function-abi-variant attribute and is specific to
-/// the TLI mappings. It is the responsibility of the caller to make sure that
-/// this is only used if all parameters in the vector function are vector type.
-/// This returned string holds scalar-to-vector mapping:
-///    _ZGV<isa><mask><vlen><vparams>_<scalarname>(<vectorname>)
-///
-/// where:
-///
-/// <isa> = "_LLVM_"
-/// <mask> = "N". Note: TLI does not support masked interfaces.
-/// <vlen> = Number of concurrent lanes, stored in the `VectorizationFactor`
-///          field of the `VecDesc` struct. If the number of lanes is scalable
-///          then 'x' is printed instead.
-/// <vparams> = "v", as many as are the numArgs.
-/// <scalarname> = the name of the scalar function.
-/// <vectorname> = the name of the vector function.
-std::string mangleTLIVectorName(StringRef VectorName, StringRef ScalarName,
-                                unsigned numArgs, ElementCount VF);
+/// \param CI -> A call to the scalar function which we're trying to find
+/// a vectorized variant for. This is required to determine the vectorization
+/// factor for scalable vectors, since the mangled name doesn't encode that;
+/// it needs to be derived from the widest element types of vector arguments
+/// or return values.
+std::optional<VFInfo> tryDemangleForVFABI(StringRef MangledName,
+                                          const CallInst &CI);
 
 /// Retrieve the `VFParamKind` from a string token.
 VFParamKind getVFParamKindFromString(const StringRef Token);
@@ -230,16 +226,16 @@ class VFDatabase {
     if (ListOfStrings.empty())
       return;
     for (const auto &MangledName : ListOfStrings) {
-      const Optional<VFInfo> Shape =
-          VFABI::tryDemangleForVFABI(MangledName, *(CI.getModule()));
+      const std::optional<VFInfo> Shape =
+          VFABI::tryDemangleForVFABI(MangledName, CI);
       // A match is found via scalar and vector names, and also by
       // ensuring that the variant described in the attribute has a
       // corresponding definition or declaration of the vector
       // function in the Module M.
-      if (Shape && (Shape.value().ScalarName == ScalarName)) {
-        assert(CI.getModule()->getFunction(Shape.value().VectorName) &&
+      if (Shape && (Shape->ScalarName == ScalarName)) {
+        assert(CI.getModule()->getFunction(Shape->VectorName) &&
                "Vector function is missing.");
-        Mappings.push_back(Shape.value());
+        Mappings.push_back(*Shape);
       }
     }
   }
@@ -255,6 +251,20 @@ public:
     // Other non-VFABI variants should be retrieved here.
 
     return Ret;
+  }
+
+  static bool hasMaskedVariant(const CallInst &CI,
+                               std::optional<ElementCount> VF = std::nullopt) {
+    // Check whether we have at least one masked vector version of a scalar
+    // function. If no VF is specified then we check for any masked variant,
+    // otherwise we look for one that matches the supplied VF.
+    auto Mappings = VFDatabase::getMappings(CI);
+    for (VFInfo Info : Mappings)
+      if (!VF || Info.Shape.VF == *VF)
+        if (Info.isMasked())
+          return true;
+
+    return false;
   }
 
   /// Constructor, requires a CallInst instance.
@@ -280,7 +290,6 @@ public:
 
 template <typename T> class ArrayRef;
 class DemandedBits;
-class GetElementPtrInst;
 template <typename InstTy> class InterleaveGroup;
 class IRBuilderBase;
 class Loop;
@@ -316,32 +325,15 @@ bool isTriviallyVectorizable(Intrinsic::ID ID);
 bool isVectorIntrinsicWithScalarOpAtArg(Intrinsic::ID ID,
                                         unsigned ScalarOpdIdx);
 
-/// Identifies if the vector form of the intrinsic has a operand that has
-/// an overloaded type.
-bool isVectorIntrinsicWithOverloadTypeAtArg(Intrinsic::ID ID, unsigned OpdIdx);
+/// Identifies if the vector form of the intrinsic is overloaded on the type of
+/// the operand at index \p OpdIdx, or on the return type if \p OpdIdx is -1.
+bool isVectorIntrinsicWithOverloadTypeAtArg(Intrinsic::ID ID, int OpdIdx);
 
 /// Returns intrinsic ID for call.
 /// For the input call instruction it finds mapping intrinsic and returns
 /// its intrinsic ID, in case it does not found it return not_intrinsic.
 Intrinsic::ID getVectorIntrinsicIDForCall(const CallInst *CI,
                                           const TargetLibraryInfo *TLI);
-
-/// Find the operand of the GEP that should be checked for consecutive
-/// stores. This ignores trailing indices that have no effect on the final
-/// pointer.
-unsigned getGEPInductionOperand(const GetElementPtrInst *Gep);
-
-/// If the argument is a GEP, then returns the operand identified by
-/// getGEPInductionOperand. However, if there is some other non-loop-invariant
-/// operand, it returns that instead.
-Value *stripGetElementPtr(Value *Ptr, ScalarEvolution *SE, Loop *Lp);
-
-/// If a value has only one user that is a CastInst, return it.
-Value *getUniqueCastUse(Value *Ptr, Loop *Lp, Type *Ty);
-
-/// Get the stride of a pointer access in a loop. Looks for symbolic
-/// strides "a[i*stride]". Returns the symbolic stride, or null otherwise.
-Value *getStrideFromPointer(Value *Ptr, ScalarEvolution *SE, Loop *Lp);
 
 /// Given a vector and an element number, see if the scalar value is
 /// already around as a register, for example if it were inserted then extracted
@@ -365,6 +357,14 @@ Value *getSplatValue(const Value *V);
 /// This may be more powerful than the related getSplatValue() because it is
 /// not limited by finding a scalar source value to a splatted vector.
 bool isSplatValue(const Value *V, int Index = -1, unsigned Depth = 0);
+
+/// Transform a shuffle mask's output demanded element mask into demanded
+/// element masks for the 2 operands, returns false if the mask isn't valid.
+/// Both \p DemandedLHS and \p DemandedRHS are initialised to [SrcWidth].
+/// \p AllowUndefElts permits "-1" indices to be treated as undef.
+bool getShuffleDemandedElts(int SrcWidth, ArrayRef<int> Mask,
+                            const APInt &DemandedElts, APInt &DemandedLHS,
+                            APInt &DemandedRHS, bool AllowUndefElts = false);
 
 /// Replace each shuffle mask index with the scaled sequential indices for an
 /// equivalent mask of narrowed elements. Mask elements that are less than 0
@@ -397,6 +397,11 @@ void narrowShuffleMaskElts(int Scale, ArrayRef<int> Mask,
 /// divide evenly (scale down) to map to wider vector elements.
 bool widenShuffleMaskElts(int Scale, ArrayRef<int> Mask,
                           SmallVectorImpl<int> &ScaledMask);
+
+/// Repetitively apply `widenShuffleMaskElts()` for as long as it succeeds,
+/// to get the shuffle mask with widest possible elements.
+void getShuffleMaskWithWidestElts(ArrayRef<int> Mask,
+                                  SmallVectorImpl<int> &ScaledMask);
 
 /// Splits and processes shuffle mask depending on the number of input and
 /// output registers. The function does 2 main things: 1) splits the
@@ -633,7 +638,7 @@ public:
   /// \returns false if the instruction doesn't belong to the group.
   bool insertMember(InstTy *Instr, int32_t Index, Align NewAlign) {
     // Make sure the key fits in an int32_t.
-    Optional<int32_t> MaybeKey = checkedAdd(Index, SmallestKey);
+    std::optional<int32_t> MaybeKey = checkedAdd(Index, SmallestKey);
     if (!MaybeKey)
       return false;
     int32_t Key = *MaybeKey;
@@ -644,7 +649,7 @@ public:
       return false;
 
     // Skip if there is already a member with the same index.
-    if (Members.find(Key) != Members.end())
+    if (Members.contains(Key))
       return false;
 
     if (Key > LargestKey) {
@@ -656,7 +661,7 @@ public:
     } else if (Key < SmallestKey) {
 
       // Make sure the largest index fits in an int32_t.
-      Optional<int32_t> MaybeLargestIndex = checkedSub(LargestKey, Key);
+      std::optional<int32_t> MaybeLargestIndex = checkedSub(LargestKey, Key);
       if (!MaybeLargestIndex)
         return false;
 
@@ -786,7 +791,7 @@ public:
 
   /// Check if \p Instr belongs to any interleave group.
   bool isInterleaved(Instruction *Instr) const {
-    return InterleaveGroupMap.find(Instr) != InterleaveGroupMap.end();
+    return InterleaveGroupMap.contains(Instr);
   }
 
   /// Get the interleave group that \p Instr belongs to.
@@ -890,7 +895,7 @@ private:
   /// Collect all the accesses with a constant stride in program order.
   void collectConstStrideAccesses(
       MapVector<Instruction *, StrideDescriptor> &AccessStrideInfo,
-      const ValueToValueMap &Strides);
+      const DenseMap<Value *, const SCEV *> &Strides);
 
   /// Returns true if \p Stride is allowed in an interleaved group.
   static bool isStrided(int Stride);
@@ -950,8 +955,7 @@ private:
 
     // If we know there is a dependence from source to sink, assume the
     // instructions can't be reordered. Otherwise, reordering is legal.
-    return Dependences.find(Src) == Dependences.end() ||
-           !Dependences.lookup(Src).count(Sink);
+    return !Dependences.contains(Src) || !Dependences.lookup(Src).count(Sink);
   }
 
   /// Collect the dependences from LoopAccessInfo.

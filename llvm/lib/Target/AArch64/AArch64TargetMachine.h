@@ -17,6 +17,7 @@
 #include "AArch64Subtarget.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
+#include <optional>
 
 namespace llvm {
 
@@ -28,8 +29,9 @@ protected:
 public:
   AArch64TargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                        StringRef FS, const TargetOptions &Options,
-                       Optional<Reloc::Model> RM, Optional<CodeModel::Model> CM,
-                       CodeGenOpt::Level OL, bool JIT, bool IsLittleEndian);
+                       std::optional<Reloc::Model> RM,
+                       std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
+                       bool JIT, bool IsLittleEndian);
 
   ~AArch64TargetMachine() override;
   const AArch64Subtarget *getSubtargetImpl(const Function &F) const override;
@@ -46,6 +48,10 @@ public:
   TargetLoweringObjectFile* getObjFileLowering() const override {
     return TLOF.get();
   }
+
+  MachineFunctionInfo *
+  createMachineFunctionInfo(BumpPtrAllocator &Allocator, const Function &F,
+                            const TargetSubtargetInfo *STI) const override;
 
   yaml::MachineFunctionInfo *createDefaultFuncInfoYAML() const override;
   yaml::MachineFunctionInfo *
@@ -69,11 +75,12 @@ private:
 //
 class AArch64leTargetMachine : public AArch64TargetMachine {
   virtual void anchor();
+
 public:
   AArch64leTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                          StringRef FS, const TargetOptions &Options,
-                         Optional<Reloc::Model> RM,
-                         Optional<CodeModel::Model> CM, CodeGenOpt::Level OL,
+                         std::optional<Reloc::Model> RM,
+                         std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
                          bool JIT);
 };
 
@@ -81,11 +88,12 @@ public:
 //
 class AArch64beTargetMachine : public AArch64TargetMachine {
   virtual void anchor();
+
 public:
   AArch64beTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
                          StringRef FS, const TargetOptions &Options,
-                         Optional<Reloc::Model> RM,
-                         Optional<CodeModel::Model> CM, CodeGenOpt::Level OL,
+                         std::optional<Reloc::Model> RM,
+                         std::optional<CodeModel::Model> CM, CodeGenOptLevel OL,
                          bool JIT);
 };
 

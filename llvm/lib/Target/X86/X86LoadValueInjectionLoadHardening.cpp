@@ -41,7 +41,6 @@
 #include "X86Subtarget.h"
 #include "X86TargetMachine.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
@@ -154,9 +153,9 @@ private:
   using EdgeSet = MachineGadgetGraph::EdgeSet;
   using NodeSet = MachineGadgetGraph::NodeSet;
 
-  const X86Subtarget *STI;
-  const TargetInstrInfo *TII;
-  const TargetRegisterInfo *TRI;
+  const X86Subtarget *STI = nullptr;
+  const TargetInstrInfo *TII = nullptr;
+  const TargetRegisterInfo *TRI = nullptr;
 
   std::unique_ptr<MachineGadgetGraph>
   getGadgetGraph(MachineFunction &MF, const MachineLoopInfo &MLI,
@@ -362,7 +361,7 @@ X86LoadValueInjectionLoadHardeningPass::getGadgetGraph(
     SmallSet<NodeId, 8> UsesVisited, DefsVisited;
     std::function<void(NodeAddr<DefNode *>)> AnalyzeDefUseChain =
         [&](NodeAddr<DefNode *> Def) {
-          if (Transmitters.find(Def.Id) != Transmitters.end())
+          if (Transmitters.contains(Def.Id))
             return; // Already analyzed `Def`
 
           // Use RDF to find all the uses of `Def`

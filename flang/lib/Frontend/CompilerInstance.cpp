@@ -22,6 +22,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace Fortran::frontend;
 
@@ -116,7 +117,8 @@ CompilerInstance::createOutputFileImpl(llvm::StringRef outputFilePath,
   std::unique_ptr<llvm::raw_fd_ostream> os;
 
   std::error_code error;
-  os.reset(new llvm::raw_fd_ostream(outputFilePath, error,
+  os.reset(new llvm::raw_fd_ostream(
+      outputFilePath, error,
       (binary ? llvm::sys::fs::OF_None : llvm::sys::fs::OF_TextWithCRLF)));
   if (error) {
     return llvm::errorCodeToError(error);
@@ -143,14 +145,19 @@ void CompilerInstance::clearOutputFiles(bool eraseFiles) {
 bool CompilerInstance::executeAction(FrontendAction &act) {
   auto &invoc = this->getInvocation();
 
+  llvm::Triple targetTriple{llvm::Triple(invoc.getTargetOpts().triple)};
+  if (targetTriple.getArch() == llvm::Triple::ArchType::x86_64) {
+    invoc.getDefaultKinds().set_quadPrecisionKind(10);
+  }
+
   // Set some sane defaults for the frontend.
   invoc.setDefaultFortranOpts();
   // Update the fortran options based on user-based input.
   invoc.setFortranOpts();
   // Set the encoding to read all input files in based on user input.
   allSources->set_encoding(invoc.getFortranOpts().encoding);
-  // Create the semantics context and set semantic options.
-  invoc.setSemanticsOpts(*this->allCookedSources);
+  // Create the semantics context
+  semaContext = invoc.getSemanticsCtx(*allCookedSources);
   // Set options controlling lowering to FIR.
   invoc.setLoweringOptions();
 

@@ -15,9 +15,8 @@ define dso_local i32 @test_lshr_and(i32 %x) {
 ; X64-LABEL: test_lshr_and:
 ; X64:       # %bb.0:
 ; X64-NEXT:    # kill: def $edi killed $edi def $rdi
-; X64-NEXT:    shrl $2, %edi
-; X64-NEXT:    andl $3, %edi
-; X64-NEXT:    movl array(,%rdi,4), %eax
+; X64-NEXT:    andl $12, %edi
+; X64-NEXT:    movl array(%rdi), %eax
 ; X64-NEXT:    retq
   %tmp2 = lshr i32 %x, 2
   %tmp3 = and i32 %tmp2, 3
@@ -104,8 +103,8 @@ define dso_local ptr @test_exact4(i32 %a, i32 %b, ptr %x)  {
 ; X64:       # %bb.0:
 ; X64-NEXT:    # kill: def $esi killed $esi def $rsi
 ; X64-NEXT:    subl %edi, %esi
-; X64-NEXT:    shrl $3, %esi
-; X64-NEXT:    leaq (%rdx,%rsi,4), %rax
+; X64-NEXT:    shrl %esi
+; X64-NEXT:    leaq (%rsi,%rdx), %rax
 ; X64-NEXT:    retq
   %sub = sub i32 %b, %a
   %shr = lshr exact i32 %sub, 3
@@ -126,8 +125,8 @@ define dso_local ptr @test_exact5(i32 %a, i32 %b, ptr %x)  {
 ; X64:       # %bb.0:
 ; X64-NEXT:    # kill: def $esi killed $esi def $rsi
 ; X64-NEXT:    subl %edi, %esi
-; X64-NEXT:    shrl $3, %esi
-; X64-NEXT:    leaq (%rdx,%rsi,4), %rax
+; X64-NEXT:    shrl %esi
+; X64-NEXT:    leaq (%rsi,%rdx), %rax
 ; X64-NEXT:    retq
   %sub = sub i32 %b, %a
   %shr = lshr exact i32 %sub, 3
@@ -630,8 +629,8 @@ define i32 @logic_tree_with_mismatching_shifts_i32(i32 %a, i32 %b, i32 %c, i32 %
 ; X64-NEXT:    movl %edx, %eax
 ; X64-NEXT:    shll $15, %edi
 ; X64-NEXT:    shll $16, %eax
+; X64-NEXT:    orl %esi, %edi
 ; X64-NEXT:    orl %ecx, %eax
-; X64-NEXT:    orl %esi, %eax
 ; X64-NEXT:    orl %edi, %eax
 ; X64-NEXT:    retq
   %a.shifted = shl i32 %a, 15
@@ -658,8 +657,8 @@ define i32 @logic_tree_with_mismatching_shifts2_i32(i32 %a, i32 %b, i32 %c, i32 
 ; X64-NEXT:    movl %edx, %eax
 ; X64-NEXT:    shll $16, %edi
 ; X64-NEXT:    shrl $16, %eax
+; X64-NEXT:    orl %esi, %edi
 ; X64-NEXT:    orl %ecx, %eax
-; X64-NEXT:    orl %esi, %eax
 ; X64-NEXT:    orl %edi, %eax
 ; X64-NEXT:    retq
   %a.shifted = shl i32 %a, 16
@@ -671,6 +670,45 @@ define i32 @logic_tree_with_mismatching_shifts2_i32(i32 %a, i32 %b, i32 %c, i32 
 }
 
 define <4 x i32> @or_tree_with_shifts_vec_i32(<4 x i32> %a, <4 x i32> %b, <4 x i32> %c, <4 x i32> %d) {
+; X32-LABEL: or_tree_with_shifts_vec_i32:
+; X32:       # %bb.0:
+; X32-NEXT:    pushl %edi
+; X32-NEXT:    .cfi_def_cfa_offset 8
+; X32-NEXT:    pushl %esi
+; X32-NEXT:    .cfi_def_cfa_offset 12
+; X32-NEXT:    .cfi_offset %esi, -12
+; X32-NEXT:    .cfi_offset %edi, -8
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    shll $16, %ecx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    shll $16, %edx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    shll $16, %esi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    shll $16, %edi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    movl %edi, 12(%eax)
+; X32-NEXT:    movl %esi, 8(%eax)
+; X32-NEXT:    movl %edx, 4(%eax)
+; X32-NEXT:    movl %ecx, (%eax)
+; X32-NEXT:    popl %esi
+; X32-NEXT:    .cfi_def_cfa_offset 8
+; X32-NEXT:    popl %edi
+; X32-NEXT:    .cfi_def_cfa_offset 4
+; X32-NEXT:    retl $4
+;
 ; X64-LABEL: or_tree_with_shifts_vec_i32:
 ; X64:       # %bb.0:
 ; X64-NEXT:    por %xmm2, %xmm0
@@ -687,12 +725,59 @@ define <4 x i32> @or_tree_with_shifts_vec_i32(<4 x i32> %a, <4 x i32> %b, <4 x i
 }
 
 define <4 x i32> @or_tree_with_mismatching_shifts_vec_i32(<4 x i32> %a, <4 x i32> %b, <4 x i32> %c, <4 x i32> %d) {
+; X32-LABEL: or_tree_with_mismatching_shifts_vec_i32:
+; X32:       # %bb.0:
+; X32-NEXT:    pushl %edi
+; X32-NEXT:    .cfi_def_cfa_offset 8
+; X32-NEXT:    pushl %esi
+; X32-NEXT:    .cfi_def_cfa_offset 12
+; X32-NEXT:    .cfi_offset %esi, -12
+; X32-NEXT:    .cfi_offset %edi, -8
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    shll $16, %eax
+; X32-NEXT:    shll $17, %ecx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %ecx
+; X32-NEXT:    orl %eax, %ecx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    shll $16, %eax
+; X32-NEXT:    shll $17, %edx
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edx
+; X32-NEXT:    orl %eax, %edx
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    shll $16, %eax
+; X32-NEXT:    shll $17, %esi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %esi
+; X32-NEXT:    orl %eax, %esi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    shll $16, %eax
+; X32-NEXT:    shll $17, %edi
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    orl {{[0-9]+}}(%esp), %edi
+; X32-NEXT:    orl %eax, %edi
+; X32-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X32-NEXT:    movl %ecx, 12(%eax)
+; X32-NEXT:    movl %edx, 8(%eax)
+; X32-NEXT:    movl %esi, 4(%eax)
+; X32-NEXT:    movl %edi, (%eax)
+; X32-NEXT:    popl %esi
+; X32-NEXT:    .cfi_def_cfa_offset 8
+; X32-NEXT:    popl %edi
+; X32-NEXT:    .cfi_def_cfa_offset 4
+; X32-NEXT:    retl $4
+;
 ; X64-LABEL: or_tree_with_mismatching_shifts_vec_i32:
 ; X64:       # %bb.0:
 ; X64-NEXT:    pslld $16, %xmm0
 ; X64-NEXT:    pslld $17, %xmm2
+; X64-NEXT:    por %xmm1, %xmm0
 ; X64-NEXT:    por %xmm3, %xmm2
-; X64-NEXT:    por %xmm1, %xmm2
 ; X64-NEXT:    por %xmm2, %xmm0
 ; X64-NEXT:    retq
   %a.shifted = shl <4 x i32> %a, <i32 16, i32 16, i32 16, i32 16>

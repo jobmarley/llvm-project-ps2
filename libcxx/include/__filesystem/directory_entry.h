@@ -12,8 +12,8 @@
 
 #include <__availability>
 #include <__chrono/time_point.h>
+#include <__compare/ordering.h>
 #include <__config>
-#include <__errc>
 #include <__filesystem/file_status.h>
 #include <__filesystem/file_time_type.h>
 #include <__filesystem/file_type.h>
@@ -21,11 +21,11 @@
 #include <__filesystem/operations.h>
 #include <__filesystem/path.h>
 #include <__filesystem/perms.h>
+#include <__system_error/errc.h>
+#include <__system_error/error_code.h>
+#include <__utility/move.h>
 #include <__utility/unreachable.h>
 #include <cstdint>
-#include <cstdlib>
-#include <iosfwd>
-#include <system_error>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #  pragma GCC system_header
@@ -34,21 +34,20 @@
 _LIBCPP_PUSH_MACROS
 #include <__undef_macros>
 
-#ifndef _LIBCPP_CXX03_LANG
+#if _LIBCPP_STD_VER >= 17 && !defined(_LIBCPP_HAS_NO_FILESYSTEM)
 
 _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_PUSH
-
+_LIBCPP_AVAILABILITY_FILESYSTEM_LIBRARY_PUSH
 
 class directory_entry {
-  typedef _VSTD_FS::path _Path;
+  typedef filesystem::path _Path;
 
 public:
   // constructors and destructors
-  directory_entry() noexcept = default;
-  directory_entry(directory_entry const&) = default;
-  directory_entry(directory_entry&&) noexcept = default;
+  _LIBCPP_HIDE_FROM_ABI directory_entry() noexcept = default;
+  _LIBCPP_HIDE_FROM_ABI directory_entry(directory_entry const&) = default;
+  _LIBCPP_HIDE_FROM_ABI directory_entry(directory_entry&&) noexcept = default;
 
   _LIBCPP_INLINE_VISIBILITY
   explicit directory_entry(_Path const& __p) : __p_(__p) {
@@ -61,10 +60,10 @@ public:
     __refresh(&__ec);
   }
 
-  ~directory_entry() {}
+  _LIBCPP_HIDE_FROM_ABI ~directory_entry() {}
 
-  directory_entry& operator=(directory_entry const&) = default;
-  directory_entry& operator=(directory_entry&&) noexcept = default;
+  _LIBCPP_HIDE_FROM_ABI directory_entry& operator=(directory_entry const&) = default;
+  _LIBCPP_HIDE_FROM_ABI directory_entry& operator=(directory_entry&&) noexcept = default;
 
   _LIBCPP_INLINE_VISIBILITY
   void assign(_Path const& __p) {
@@ -105,11 +104,11 @@ public:
   operator const _Path&() const noexcept { return __p_; }
 
   _LIBCPP_INLINE_VISIBILITY
-  bool exists() const { return _VSTD_FS::exists(file_status{__get_ft()}); }
+  bool exists() const { return filesystem::exists(file_status{__get_ft()}); }
 
   _LIBCPP_INLINE_VISIBILITY
   bool exists(error_code& __ec) const noexcept {
-    return _VSTD_FS::exists(file_status{__get_ft(&__ec)});
+    return filesystem::exists(file_status{__get_ft(&__ec)});
   }
 
   _LIBCPP_INLINE_VISIBILITY
@@ -145,11 +144,11 @@ public:
   }
 
   _LIBCPP_INLINE_VISIBILITY
-  bool is_other() const { return _VSTD_FS::is_other(file_status{__get_ft()}); }
+  bool is_other() const { return filesystem::is_other(file_status{__get_ft()}); }
 
   _LIBCPP_INLINE_VISIBILITY
   bool is_other(error_code& __ec) const noexcept {
-    return _VSTD_FS::is_other(file_status{__get_ft(&__ec)});
+    return filesystem::is_other(file_status{__get_ft(&__ec)});
   }
 
   _LIBCPP_INLINE_VISIBILITY
@@ -321,8 +320,7 @@ private:
     __data_ = __dt;
   }
 
-  _LIBCPP_FUNC_VIS
-  error_code __do_refresh() noexcept;
+  _LIBCPP_EXPORTED_FROM_ABI error_code __do_refresh() noexcept;
 
   _LIBCPP_INLINE_VISIBILITY
   static bool __is_dne_error(error_code const& __ec) {
@@ -368,7 +366,7 @@ private:
     case _IterNonSymlink:
     case _RefreshNonSymlink:
       file_status __st(__data_.__type_);
-      if (__ec && !_VSTD_FS::exists(__st))
+      if (__ec && !filesystem::exists(__st))
         *__ec = make_error_code(errc::no_such_file_or_directory);
       else if (__ec)
         __ec->clear();
@@ -388,7 +386,7 @@ private:
     case _RefreshNonSymlink:
     case _RefreshSymlink: {
       file_status __st(__data_.__type_);
-      if (__ec && !_VSTD_FS::exists(__st))
+      if (__ec && !filesystem::exists(__st))
         *__ec = make_error_code(errc::no_such_file_or_directory);
       else if (__ec)
         __ec->clear();
@@ -436,15 +434,15 @@ private:
     case _IterNonSymlink:
     case _IterSymlink:
     case _RefreshSymlinkUnresolved:
-      return _VSTD_FS::__file_size(__p_, __ec);
+      return filesystem::__file_size(__p_, __ec);
     case _RefreshSymlink:
     case _RefreshNonSymlink: {
       error_code __m_ec;
       file_status __st(__get_ft(&__m_ec));
       __handle_error("in directory_entry::file_size", __ec, __m_ec);
-      if (_VSTD_FS::exists(__st) && !_VSTD_FS::is_regular_file(__st)) {
-        errc __err_kind = _VSTD_FS::is_directory(__st) ? errc::is_a_directory
-                                                       : errc::not_supported;
+      if (filesystem::exists(__st) && !filesystem::is_regular_file(__st)) {
+        errc __err_kind = filesystem::is_directory(__st) ? errc::is_a_directory
+                                                         : errc::not_supported;
         __handle_error("in directory_entry::file_size", __ec,
                        make_error_code(__err_kind));
       }
@@ -461,7 +459,7 @@ private:
     case _IterNonSymlink:
     case _IterSymlink:
     case _RefreshSymlinkUnresolved:
-      return _VSTD_FS::__hard_link_count(__p_, __ec);
+      return filesystem::__hard_link_count(__p_, __ec);
     case _RefreshSymlink:
     case _RefreshNonSymlink: {
       error_code __m_ec;
@@ -480,13 +478,13 @@ private:
     case _IterNonSymlink:
     case _IterSymlink:
     case _RefreshSymlinkUnresolved:
-      return _VSTD_FS::__last_write_time(__p_, __ec);
+      return filesystem::__last_write_time(__p_, __ec);
     case _RefreshSymlink:
     case _RefreshNonSymlink: {
       error_code __m_ec;
       file_status __st(__get_ft(&__m_ec));
       __handle_error("in directory_entry::last_write_time", __ec, __m_ec);
-      if (_VSTD_FS::exists(__st) &&
+      if (filesystem::exists(__st) &&
           __data_.__write_time_ == file_time_type::min())
         __handle_error("in directory_entry::last_write_time", __ec,
                        make_error_code(errc::value_too_large));
@@ -510,17 +508,17 @@ public:
 private:
   friend class directory_iterator;
   friend class recursive_directory_iterator;
-  explicit __dir_element_proxy(directory_entry const& __e) : __elem_(__e) {}
-  __dir_element_proxy(__dir_element_proxy&& __o)
+  _LIBCPP_HIDE_FROM_ABI explicit __dir_element_proxy(directory_entry const& __e) : __elem_(__e) {}
+  _LIBCPP_HIDE_FROM_ABI __dir_element_proxy(__dir_element_proxy&& __o)
       : __elem_(_VSTD::move(__o.__elem_)) {}
   directory_entry __elem_;
 };
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_POP
+_LIBCPP_AVAILABILITY_FILESYSTEM_LIBRARY_POP
 
 _LIBCPP_END_NAMESPACE_FILESYSTEM
 
-#endif // _LIBCPP_CXX03_LANG
+#endif // _LIBCPP_STD_VER >= 17 && !defined(_LIBCPP_HAS_NO_FILESYSTEM)
 
 _LIBCPP_POP_MACROS
 

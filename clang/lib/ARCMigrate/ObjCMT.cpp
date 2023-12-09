@@ -123,9 +123,7 @@ public:
         NSIntegerTypedefed(nullptr), NSUIntegerTypedefed(nullptr),
         Remapper(remapper), FileMgr(fileMgr), PPRec(PPRec), PP(PP),
         IsOutputFile(isOutputFile), FoundationIncluded(false) {
-    // FIXME: StringSet should have insert(iter, iter) to use here.
-    for (const std::string &Val : AllowList)
-      AllowListFilenames.insert(Val);
+    AllowListFilenames.insert(AllowList.begin(), AllowList.end());
   }
 
 protected:
@@ -153,10 +151,9 @@ protected:
   bool canModifyFile(StringRef Path) {
     if (AllowListFilenames.empty())
       return true;
-    return AllowListFilenames.find(llvm::sys::path::filename(Path)) !=
-           AllowListFilenames.end();
+    return AllowListFilenames.contains(llvm::sys::path::filename(Path));
   }
-  bool canModifyFile(Optional<FileEntryRef> FE) {
+  bool canModifyFile(OptionalFileEntryRef FE) {
     if (!FE)
       return false;
     return canModifyFile(FE->getName());
@@ -202,7 +199,7 @@ ObjCMigrateAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
   Consumers.push_back(WrapperFrontendAction::CreateASTConsumer(CI, InFile));
   Consumers.push_back(std::make_unique<ObjCMigrateASTConsumer>(
       MigrateDir, ObjCMigAction, Remapper, CompInst->getFileManager(), PPRec,
-      CompInst->getPreprocessor(), false, None));
+      CompInst->getPreprocessor(), false, std::nullopt));
   return std::make_unique<MultiplexConsumer>(std::move(Consumers));
 }
 
@@ -639,7 +636,7 @@ ClassImplementsAllMethodsAndProperties(ASTContext &Ctx,
     for (const auto *MD : PDecl->methods()) {
       if (MD->isImplicit())
         continue;
-      if (MD->getImplementationControl() == ObjCMethodDecl::Optional)
+      if (MD->getImplementationControl() == ObjCImplementationControl::Optional)
         continue;
       DeclContext::lookup_result R = ImpDecl->lookup(MD->getDeclName());
       if (R.empty())
@@ -1786,7 +1783,7 @@ private:
       std::tie(FID, Offset) = SourceMgr.getDecomposedLoc(Loc);
       assert(FID.isValid());
       SmallString<200> Path =
-          StringRef(SourceMgr.getFileEntryForID(FID)->getName());
+          StringRef(SourceMgr.getFileEntryRefForID(FID)->getName());
       llvm::sys::fs::make_absolute(Path);
       OS << "  \"file\": \"";
       OS.write_escaped(Path.str()) << "\",\n";
@@ -1958,7 +1955,8 @@ void ObjCMigrateASTConsumer::HandleTranslationUnit(ASTContext &Ctx) {
         I = rewriter.buffer_begin(), E = rewriter.buffer_end(); I != E; ++I) {
     FileID FID = I->first;
     RewriteBuffer &buf = I->second;
-    Optional<FileEntryRef> file = Ctx.getSourceManager().getFileEntryRefForID(FID);
+    OptionalFileEntryRef file =
+        Ctx.getSourceManager().getFileEntryRefForID(FID);
     assert(file);
     SmallString<512> newText;
     llvm::raw_svector_ostream vecOS(newText);
@@ -2028,7 +2026,7 @@ MigrateSourceAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
 namespace {
 struct EditEntry {
-  Optional<FileEntryRef> File;
+  OptionalFileEntryRef File;
   unsigned Offset = 0;
   unsigned RemoveLen = 0;
   std::string Text;

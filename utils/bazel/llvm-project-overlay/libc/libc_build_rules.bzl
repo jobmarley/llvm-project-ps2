@@ -4,13 +4,59 @@
 
 """LLVM libc starlark rules for building individual functions."""
 
-load(":platforms.bzl", "PLATFORM_CPU_ARM64", "PLATFORM_CPU_X86_64")
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//lib:selects.bzl", "selects")
+load(":libc_namespace.bzl", "LIBC_NAMESPACE")
+load(":platforms.bzl", "PLATFORM_CPU_ARM64", "PLATFORM_CPU_X86_64")
 
-LIBC_ROOT_TARGET = ":libc_root"
-INTERNAL_SUFFIX = ".__internal__"
+def libc_internal_target(name):
+    return name + ".__internal__"
 
-def libc_function(name, srcs, deps = None, copts = None, **kwargs):
+def libc_common_copts():
+    root_label = Label(":libc")
+    libc_include_path = paths.join(root_label.workspace_root, root_label.package)
+    return [
+        "-I" + libc_include_path,
+        "-DLIBC_NAMESPACE=" + LIBC_NAMESPACE,
+    ]
+
+def _libc_library(name, hidden, copts = [], deps = [], **kwargs):
+    """Internal macro to serve as a base for all other libc library rules.
+
+    Args:
+      name: Target name.
+      copts: The special compiler options for the target.
+      deps: The list of target dependencies if any.
+      hidden: Whether the symbols should be explicitly hidden or not.
+      **kwargs: All other attributes relevant for the cc_library rule.
+    """
+
+    # We want all libc sources to be compiled with "hidden" visibility.
+    # The public symbols will be given "default" visibility explicitly.
+    # See src/__support/common.h for more information.
+    if hidden:
+        copts = copts + ["-fvisibility=hidden"]
+    native.cc_library(
+        name = name,
+        copts = copts + libc_common_copts(),
+        deps = deps,
+        linkstatic = 1,
+        **kwargs
+    )
+
+# A convenience function which should be used to list all libc support libraries.
+# Any library which does not define a public function should be listed with
+# libc_support_library.
+def libc_support_library(name, **kwargs):
+    _libc_library(name = name, hidden = False, **kwargs)
+
+def libc_function(
+        name,
+        srcs,
+        weak = False,
+        copts = None,
+        local_defines = None,
+        **kwargs):
     """Add target for a libc function.
 
     The libc function is eventually available as a cc_library target by name
@@ -23,36 +69,43 @@ def libc_function(name, srcs, deps = None, copts = None, **kwargs):
       name: Target name. It is normally the name of the function this target is
             for.
       srcs: The .cpp files which contain the function implementation.
+      weak: Make the symbol corresponding to the libc function "weak".
       deps: The list of target dependencies if any.
       copts: The list of options to add to the C++ compilation command.
+      local_defines: The preprocessor defines which will be prepended with -D
+                     and passed to the compile command of this target but not
+                     its deps.
       **kwargs: Other attributes relevant for a cc_library. For example, deps.
     """
-    deps = deps or []
-    deps.append(LIBC_ROOT_TARGET)
+
+    # We use the explicit equals pattern here because append and += mutate the
+    # original list, where this creates a new list and stores it in deps.
     copts = copts or []
-    copts.append("-O3")
-    copts.append("-fno-builtin")
+    copts = copts + ["-O3", "-fno-builtin", "-fno-lax-vector-conversions"]
 
     # We compile the code twice, the first target is suffixed with ".__internal__" and contains the
-    # C++ functions in the "__llvm_libc" namespace. This allows us to test the function in the
+    # C++ functions in the "LIBC_NAMESPACE" namespace. This allows us to test the function in the
     # presence of another libc.
-    native.cc_library(
-        name = name + INTERNAL_SUFFIX,
+    libc_support_library(
+        name = libc_internal_target(name),
         srcs = srcs,
-        deps = deps,
         copts = copts,
-        linkstatic = 1,
         **kwargs
     )
 
-    # This second target is the llvm libc C function.
-    copts.append("-DLLVM_LIBC_PUBLIC_PACKAGING")
-    native.cc_library(
+    # This second target is the llvm libc C function with either a default or hidden visibility.
+    # All other functions are hidden.
+    func_attrs = ["__attribute__((visibility(\"default\")))"]
+    if weak:
+        func_attrs = func_attrs + ["__attribute__((weak))"]
+    local_defines = local_defines or ["LIBC_COPT_PUBLIC_PACKAGING"]
+    local_defines = local_defines + ["LLVM_LIBC_FUNCTION_ATTR='%s'" % " ".join(func_attrs)]
+    _libc_library(
         name = name,
+        hidden = True,
         srcs = srcs,
-        deps = deps,
         copts = copts,
-        linkstatic = 1,
+        local_defines = local_defines,
         **kwargs
     )
 
@@ -91,8 +144,7 @@ def libc_math_function(
         ":__support_fputil_manipulation_functions",
         ":__support_fputil_nearest_integer_operations",
         ":__support_fputil_normal_float",
-        ":__support_fputil_platform_defs",
-        ":__support_builtin_wrappers",
+        ":__support_math_extras",
         ":__support_fputil_except_value_utils",
     ]
     libc_function(

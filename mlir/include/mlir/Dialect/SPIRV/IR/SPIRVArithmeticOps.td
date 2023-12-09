@@ -23,7 +23,7 @@ class SPIRV_ArithmeticBinaryOp<string mnemonic, Type type,
       // Operands type same as result type.
       SPIRV_BinaryOp<mnemonic, type, type,
                    !listconcat(traits,
-                               [NoSideEffect, SameOperandsAndResultType])> {
+                               [Pure, SameOperandsAndResultType])> {
   // In addition to normal types arithmetic instructions can support cooperative
   // matrix.
   let arguments = (ins
@@ -42,7 +42,43 @@ class SPIRV_ArithmeticUnaryOp<string mnemonic, Type type,
       // Operand type same as result type.
       SPIRV_UnaryOp<mnemonic, type, type,
                    !listconcat(traits,
-                               [NoSideEffect, SameOperandsAndResultType])>;
+                               [Pure, SameOperandsAndResultType])> {
+  // In addition to normal types arithmetic instructions can support cooperative
+  // matrix.
+  let arguments = (ins
+    SPIRV_ScalarOrVectorOrCoopMatrixOf<type>:$operand
+  );
+
+  let results = (outs
+    SPIRV_ScalarOrVectorOrCoopMatrixOf<type>:$result
+  );
+  let assemblyFormat = "operands attr-dict `:` type($result)";
+}
+
+class SPIRV_ArithmeticExtendedBinaryOp<string mnemonic,
+                                       list<Trait> traits = []> :
+      // Result type is a struct with two operand-typed elements.
+      SPIRV_BinaryOp<mnemonic, SPIRV_AnyStruct, SPIRV_Integer, traits> {
+  let arguments = (ins
+    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand1,
+    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand2
+  );
+
+  let results = (outs
+    SPIRV_AnyStruct:$result
+  );
+
+  let builders = [
+    OpBuilder<(ins "Value":$operand1, "Value":$operand2), [{
+      build($_builder, $_state,
+            ::mlir::spirv::StructType::get({operand1.getType(), operand1.getType()}),
+            operand1, operand2);
+    }]>
+  ];
+
+  // These ops require a custom verifier.
+  let hasVerifier = 1;
+}
 
 // -----
 
@@ -52,18 +88,11 @@ def SPIRV_FAddOp : SPIRV_ArithmeticBinaryOp<"FAdd", SPIRV_Float, [Commutative]> 
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.
+    Results are computed per component.
 
-    <!-- End of AutoGen section -->
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fadd-op ::= ssa-id `=` `spirv.FAdd` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
@@ -81,19 +110,11 @@ def SPIRV_FDivOp : SPIRV_ArithmeticBinaryOp<"FDiv", SPIRV_Float, []> {
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.
-
-    <!-- End of AutoGen section -->
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fdiv-op ::= ssa-id `=` `spirv.FDiv` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
 
     #### Example:
 
@@ -114,21 +135,14 @@ def SPIRV_FModOp : SPIRV_ArithmeticBinaryOp<"FMod", SPIRV_Float, []> {
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.  Otherwise, the result is the remainder r of Operand
     1 divided by Operand 2 where if r ≠ 0, the sign of r is the same as the
     sign of Operand 2.
 
-    <!-- End of AutoGen section -->
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fmod-op ::= ssa-id `=` `spirv.FMod` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
@@ -146,19 +160,10 @@ def SPIRV_FMulOp : SPIRV_ArithmeticBinaryOp<"FMul", SPIRV_Float, [Commutative]> 
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fmul-op ::= `spirv.FMul` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -182,17 +187,9 @@ def SPIRV_FNegateOp : SPIRV_ArithmeticUnaryOp<"FNegate", SPIRV_Float, []> {
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The type of Operand must be the same as Result Type.
+    The type of Operand must be the same as Result Type.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fmul-op ::= `spirv.FNegate` ssa-use `:` float-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -213,21 +210,13 @@ def SPIRV_FRemOp : SPIRV_ArithmeticBinaryOp<"FRem", SPIRV_Float, []> {
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.  Otherwise, the result is the remainder r of Operand
     1 divided by Operand 2 where if r ≠ 0, the sign of r is the same as the
     sign of Operand 1.
-
-    <!-- End of AutoGen section -->
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    frem-op ::= ssa-id `=` `spirv.FRemOp` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
 
     #### Example:
 
@@ -246,18 +235,10 @@ def SPIRV_FSubOp : SPIRV_ArithmeticBinaryOp<"FSub", SPIRV_Float, []> {
   let description = [{
     Result Type must be a scalar or vector of floating-point type.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-    ```
-    float-scalar-vector-type ::= float-type |
-                                 `vector<` integer-literal `x` float-type `>`
-    fsub-op ::= ssa-id `=` `spirv.FRemOp` ssa-use, ssa-use
-                          `:` float-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -278,7 +259,7 @@ def SPIRV_IAddOp : SPIRV_ArithmeticBinaryOp<"IAdd",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
@@ -286,15 +267,7 @@ def SPIRV_IAddOp : SPIRV_ArithmeticBinaryOp<"IAdd",
     result R, where N is the component width and R is computed with enough
     precision to avoid overflow and underflow.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    iadd-op ::= ssa-id `=` `spirv.IAdd` ssa-use, ssa-use
-                          `:` integer-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -310,9 +283,8 @@ def SPIRV_IAddOp : SPIRV_ArithmeticBinaryOp<"IAdd",
 
 // -----
 
-def SPIRV_IAddCarryOp : SPIRV_BinaryOp<"IAddCarry",
-                                   SPIRV_AnyStruct, SPIRV_Integer,
-                                   [Commutative, NoSideEffect]> {
+def SPIRV_IAddCarryOp : SPIRV_ArithmeticExtendedBinaryOp<"IAddCarry",
+                                                         [Commutative, Pure]> {
   let summary = [{
     Integer addition of Operand 1 and Operand 2, including the carry.
   }];
@@ -345,24 +317,7 @@ def SPIRV_IAddCarryOp : SPIRV_BinaryOp<"IAddCarry",
     ```
   }];
 
-  let arguments = (ins
-    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand1,
-    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand2
-  );
-
-  let results = (outs
-    SPIRV_AnyStruct:$result
-  );
-
-  let builders = [
-    OpBuilder<(ins "Value":$operand1, "Value":$operand2), [{
-      build($_builder, $_state,
-            ::mlir::spirv::StructType::get({operand1.getType(), operand1.getType()}),
-            operand1, operand2);
-    }]>
-  ];
-
-  let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 // -----
@@ -375,7 +330,7 @@ def SPIRV_IMulOp : SPIRV_ArithmeticBinaryOp<"IMul",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
@@ -383,15 +338,7 @@ def SPIRV_IMulOp : SPIRV_ArithmeticBinaryOp<"IMul",
     result R, where N is the component width and R is computed with enough
     precision to avoid overflow and underflow.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    imul-op ::= ssa-id `=` `spirv.IMul` ssa-use, ssa-use
-                          `:` integer-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -415,7 +362,7 @@ def SPIRV_ISubOp : SPIRV_ArithmeticBinaryOp<"ISub",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
@@ -423,15 +370,7 @@ def SPIRV_ISubOp : SPIRV_ArithmeticBinaryOp<"ISub",
     result R, where N is the component width and R is computed with enough
     precision to avoid overflow and underflow.
 
-     Results are computed per component.
-
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    isub-op ::= `spirv.ISub` ssa-use, ssa-use
-                          `:` integer-scalar-vector-type
-    ```
+    Results are computed per component.
 
     #### Example:
 
@@ -447,8 +386,8 @@ def SPIRV_ISubOp : SPIRV_ArithmeticBinaryOp<"ISub",
 
 // -----
 
-def SPIRV_ISubBorrowOp : SPIRV_BinaryOp<"ISubBorrow", SPIRV_AnyStruct, SPIRV_Integer,
-                                    [NoSideEffect]> {
+def SPIRV_ISubBorrowOp : SPIRV_ArithmeticExtendedBinaryOp<"ISubBorrow",
+                                                          [Pure]> {
   let summary = [{
     Result is the unsigned integer subtraction of Operand 2 from Operand 1,
     and what it needed to borrow.
@@ -483,25 +422,40 @@ def SPIRV_ISubBorrowOp : SPIRV_BinaryOp<"ISubBorrow", SPIRV_AnyStruct, SPIRV_Int
     %2 = spirv.ISubBorrow %0, %1 : !spirv.struct<(vector<2xi32>, vector<2xi32>)>
     ```
   }];
+}
+
+// -----
+
+def SPIRV_DotOp : SPIRV_Op<"Dot",
+                    [Pure, AllTypesMatch<["vector1", "vector2"]>,
+                     AllElementTypesMatch<["vector1", "result"]>]> {
+  let summary = "Dot product of Vector 1 and Vector 2";
+
+  let description = [{
+    Result Type must be a floating point scalar.
+
+    Vector 1 and Vector 2 must be vectors of the same type, and their component
+    type must be Result Type.
+
+    #### Example:
+
+    ```mlir
+    %0 = spirv.Dot %v1, %v2 : vector<4xf32> -> f32
+    ```
+  }];
 
   let arguments = (ins
-    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand1,
-    SPIRV_ScalarOrVectorOf<SPIRV_Integer>:$operand2
+    SPIRV_VectorOf<SPIRV_Float>:$vector1,
+    SPIRV_VectorOf<SPIRV_Float>:$vector2
   );
 
   let results = (outs
-    SPIRV_AnyStruct:$result
+    SPIRV_Float:$result
   );
 
-  let builders = [
-    OpBuilder<(ins "Value":$operand1, "Value":$operand2), [{
-      build($_builder, $_state,
-            ::mlir::spirv::StructType::get({operand1.getType(), operand1.getType()}),
-            operand1, operand2);
-    }]>
-  ];
+  let assemblyFormat = "operands attr-dict `:` type($vector1) `->` type($result)";
 
-  let hasVerifier = 1;
+  let hasVerifier = 0;
 }
 
 // -----
@@ -514,20 +468,12 @@ def SPIRV_SDivOp : SPIRV_ArithmeticBinaryOp<"SDiv",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.
-
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    sdiv-op ::= ssa-id `=` `spirv.SDiv` ssa-use, ssa-use
-                           `:` integer-scalar-vector-type
-    ```
 
     #### Example:
 
@@ -537,6 +483,8 @@ def SPIRV_SDivOp : SPIRV_ArithmeticBinaryOp<"SDiv",
 
     ```
   }];
+
+  let hasFolder = 1;
 }
 
 // -----
@@ -552,22 +500,15 @@ def SPIRV_SModOp : SPIRV_ArithmeticBinaryOp<"SMod",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.  Otherwise, the result is the remainder r of Operand
     1 divided by Operand 2 where if r ≠ 0, the sign of r is the same as the
     sign of Operand 2.
 
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    smod-op ::= ssa-id `=` `spirv.SMod` ssa-use, ssa-use
-                           `:` integer-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
@@ -576,6 +517,44 @@ def SPIRV_SModOp : SPIRV_ArithmeticBinaryOp<"SMod",
 
     ```
   }];
+
+  let hasFolder = 1;
+}
+
+// -----
+
+def SPIRV_SMulExtendedOp : SPIRV_ArithmeticExtendedBinaryOp<"SMulExtended",
+                                                            [Pure, Commutative]> {
+  let summary = [{
+    Result is the full value of the signed integer multiplication of Operand
+    1 and Operand 2.
+  }];
+
+  let description = [{
+    Result Type must be from OpTypeStruct.  The struct must have two
+    members, and the two members must be the same type.  The member type
+    must be a scalar or vector of integer type.
+
+    Operand 1 and Operand 2 must have the same type as the members of Result
+    Type. These are consumed as signed integers.
+
+    Results are computed per component.
+
+    Member 0 of the result gets the low-order bits of the multiplication.
+
+    Member 1 of the result gets the high-order bits of the multiplication.
+
+    <!-- End of AutoGen section -->
+
+    #### Example:
+
+    ```mlir
+    %2 = spirv.SMulExtended %0, %1 : !spirv.struct<(i32, i32)>
+    %2 = spirv.SMulExtended %0, %1 : !spirv.struct<(vector<2xi32>, vector<2xi32>)>
+    ```
+  }];
+
+  let hasCanonicalizer = 1;
 }
 
 // -----
@@ -588,7 +567,7 @@ def SPIRV_SNegateOp : SPIRV_ArithmeticUnaryOp<"SNegate",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-    Operand’s type  must be a scalar or vector of integer type.  It must
+    Operand's type  must be a scalar or vector of integer type.  It must
     have the same number of components as Result Type.  The component width
     must equal the component width in Result Type.
 
@@ -618,22 +597,15 @@ def SPIRV_SRemOp : SPIRV_ArithmeticBinaryOp<"SRem",
   let description = [{
     Result Type must be a scalar or vector of integer type.
 
-     The type of Operand 1 and Operand 2  must be a scalar or vector of
+    The type of Operand 1 and Operand 2  must be a scalar or vector of
     integer type.  They must have the same number of components as Result
     Type. They must have the same component width as Result Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.  Otherwise, the result is the remainder r of Operand
     1 divided by Operand 2 where if r ≠ 0, the sign of r is the same as the
     sign of Operand 1.
 
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    srem-op ::= ssa-id `=` `spirv.SRem` ssa-use, ssa-use
-                           `:` integer-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
@@ -642,6 +614,8 @@ def SPIRV_SRemOp : SPIRV_ArithmeticBinaryOp<"SRem",
 
     ```
   }];
+
+  let hasFolder = 1;
 }
 
 // -----
@@ -655,32 +629,63 @@ def SPIRV_UDivOp : SPIRV_ArithmeticBinaryOp<"UDiv",
     Result Type must be a scalar or vector of integer type, whose Signedness
     operand is 0.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.
 
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    udiv-op ::= ssa-id `=` `spirv.UDiv` ssa-use, ssa-use
-                           `:` integer-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
     %4 = spirv.UDiv %0, %1 : i32
     %5 = spirv.UDiv %2, %3 : vector<4xi32>
-
     ```
   }];
+
+  let hasFolder = 1;
 }
 
 // -----
 
-def SPIRV_VectorTimesScalarOp : SPIRV_Op<"VectorTimesScalar", [NoSideEffect]> {
+def SPIRV_UMulExtendedOp : SPIRV_ArithmeticExtendedBinaryOp<"UMulExtended",
+                                                            [Pure, Commutative]> {
+  let summary = [{
+    Result is the full value of the unsigned integer multiplication of
+    Operand 1 and Operand 2.
+  }];
+
+  let description = [{
+    Result Type must be from OpTypeStruct.  The struct must have two
+    members, and the two members must be the same type.  The member type
+    must be a scalar or vector of integer type, whose Signedness operand is
+    0.
+
+    Operand 1 and Operand 2 must have the same type as the members of Result
+    Type. These are consumed as unsigned integers.
+
+    Results are computed per component.
+
+    Member 0 of the result gets the low-order bits of the multiplication.
+
+    Member 1 of the result gets the high-order bits of the multiplication.
+
+    <!-- End of AutoGen section -->
+
+    #### Example:
+
+    ```mlir
+    %2 = spirv.UMulExtended %0, %1 : !spirv.struct<(i32, i32)>
+    %2 = spirv.UMulExtended %0, %1 : !spirv.struct<(vector<2xi32>, vector<2xi32>)>
+    ```
+  }];
+
+  let hasCanonicalizer = 1;
+}
+
+// -----
+
+def SPIRV_VectorTimesScalarOp : SPIRV_Op<"VectorTimesScalar", [Pure]> {
   let summary = "Scale a floating-point vector.";
 
   let description = [{
@@ -723,27 +728,22 @@ def SPIRV_UModOp : SPIRV_ArithmeticBinaryOp<"UMod",
     Result Type must be a scalar or vector of integer type, whose Signedness
     operand is 0.
 
-     The types of Operand 1 and Operand 2 both must be the same as Result
+    The types of Operand 1 and Operand 2 both must be the same as Result
     Type.
 
-     Results are computed per component.  The resulting value is undefined
+    Results are computed per component.  The resulting value is undefined
     if Operand 2 is 0.
 
-    <!-- End of AutoGen section -->
-    ```
-    integer-scalar-vector-type ::= integer-type |
-                                 `vector<` integer-literal `x` integer-type `>`
-    umod-op ::= ssa-id `=` `spirv.UMod` ssa-use, ssa-use
-                           `:` integer-scalar-vector-type
-    ```
     #### Example:
 
     ```mlir
     %4 = spirv.UMod %0, %1 : i32
     %5 = spirv.UMod %2, %3 : vector<4xi32>
-
     ```
   }];
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 #endif // MLIR_DIALECT_SPIRV_IR_ARITHMETIC_OPS

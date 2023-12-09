@@ -1,4 +1,4 @@
-; RUN: llvm-mc -arch=amdgcn -mcpu=gfx1010 -show-encoding %s | FileCheck --check-prefixes=GFX10 %s
+; RUN: llvm-mc -triple=amdgcn -mcpu=gfx1010 -show-encoding %s | FileCheck --check-prefixes=GFX10 %s
 
 image_load v[0:3], v0, s[0:7] dmask:0xf dim:SQ_RSRC_IMG_1D unorm
 ; GFX10: image_load v[0:3], v0, s[0:7] dmask:0xf dim:SQ_RSRC_IMG_1D unorm ; encoding: [0x00,0x1f,0x00,0xf0,0x00,0x00,0x00,0x00]
@@ -298,8 +298,8 @@ image_sample_d v[64:66], v[32:37], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG
 image_sample_d v[64:66], [v32, v16, v8, v4, v2, v1, v0, v20, v21], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D
 ; GFX10: image_sample_d v[64:66], [v32, v16, v8, v4, v2, v1, v0, v20, v21], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D ; encoding: [0x14,0x07,0x88,0xf0,0x20,0x40,0x21,0x03,0x10,0x08,0x04,0x02,0x01,0x00,0x14,0x15]
 
-image_sample_d v[64:66], v[32:47], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D
-; GFX10: image_sample_d v[64:66], v[32:47], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D ; encoding: [0x10,0x07,0x88,0xf0,0x20,0x40,0x21,0x03]
+image_sample_d v[64:66], v[32:40], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D
+; GFX10: image_sample_d v[64:66], v[32:40], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_3D ; encoding: [0x10,0x07,0x88,0xf0,0x20,0x40,0x21,0x03]
 
 image_sample_d v[64:66], [v32, v16, v8, v4, v2, v1, v5], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_CUBE
 ; GFX10: image_sample_d v[64:66], [v32, v16, v8, v4, v2, v1, v5], s[4:11], s[100:103] dmask:0x7 dim:SQ_RSRC_IMG_CUBE ; encoding: [0x1c,0x07,0x88,0xf0,0x20,0x40,0x21,0x03,0x10,0x08,0x04,0x02,0x01,0x05,0x00,0x00]

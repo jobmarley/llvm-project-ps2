@@ -20,6 +20,7 @@ include "flang/Optimizer/Dialect/FIRTypes.td"
 def fircg_Dialect : Dialect {
   let name = "fircg";
   let cppNamespace = "::fir::cg";
+  let usePropertiesForAttributes = 1;
 }
 
 // Base class for FIR CG operations.
@@ -56,14 +57,15 @@ def fircg_XEmboxOp : fircg_Op<"ext_embox", [AttrSizedOperandSegments]> {
     Variadic<AnyIntegerType>:$slice,
     Variadic<AnyCoordinateType>:$subcomponent,
     Variadic<AnyIntegerType>:$substr,
-    Variadic<AnyIntegerType>:$lenParams
+    Variadic<AnyIntegerType>:$lenParams,
+    Optional<fir_ClassType>:$sourceBox
   );
-  let results = (outs fir_BoxType);
+  let results = (outs BoxOrClassType);
 
   let assemblyFormat = [{
     $memref (`(`$shape^`)`)? (`origin` $shift^)? (`[`$slice^`]`)?
       (`path` $subcomponent^)? (`substr` $substr^)? (`typeparams` $lenParams^)?
-      attr-dict `:` functional-type(operands, results)
+      (`source_box` $sourceBox^)? attr-dict `:` functional-type(operands, results)
   }];
 
   let extraClassDeclaration = [{
@@ -82,6 +84,9 @@ def fircg_XEmboxOp : fircg_Op<"ext_embox", [AttrSizedOperandSegments]> {
       return subcomponentOffset() + getSubcomponent().size();
     }
     unsigned lenParamOffset() { return substrOffset() + getSubstr().size(); }
+    unsigned getSourceBoxOffset() {
+      return lenParamOffset() + getLenParams().size();
+    }
   }];
 }
 
@@ -107,14 +112,14 @@ def fircg_XReboxOp : fircg_Op<"ext_rebox", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins
-    fir_BoxType:$box,
+    BoxOrClassType:$box,
     Variadic<AnyIntegerType>:$shape,
     Variadic<AnyIntegerType>:$shift,
     Variadic<AnyIntegerType>:$slice,
     Variadic<AnyCoordinateType>:$subcomponent,
     Variadic<AnyIntegerType>:$substr
   );
-  let results = (outs fir_BoxType);
+  let results = (outs BoxOrClassType);
 
   let assemblyFormat = [{
     $box (`(`$shape^`)`)? (`origin` $shift^)? (`[`$slice^`]`)?

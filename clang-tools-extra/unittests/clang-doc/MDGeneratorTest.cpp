@@ -26,14 +26,14 @@ TEST(MDGeneratorTest, emitNamespaceMD) {
   I.Name = "Namespace";
   I.Namespace.emplace_back(EmptySID, "A", InfoType::IT_namespace);
 
-  I.ChildNamespaces.emplace_back(EmptySID, "ChildNamespace",
-                                 InfoType::IT_namespace);
-  I.ChildRecords.emplace_back(EmptySID, "ChildStruct", InfoType::IT_record);
-  I.ChildFunctions.emplace_back();
-  I.ChildFunctions.back().Name = "OneFunction";
-  I.ChildFunctions.back().Access = AccessSpecifier::AS_none;
-  I.ChildEnums.emplace_back();
-  I.ChildEnums.back().Name = "OneEnum";
+  I.Children.Namespaces.emplace_back(EmptySID, "ChildNamespace",
+                                     InfoType::IT_namespace);
+  I.Children.Records.emplace_back(EmptySID, "ChildStruct", InfoType::IT_record);
+  I.Children.Functions.emplace_back();
+  I.Children.Functions.back().Name = "OneFunction";
+  I.Children.Functions.back().Access = AccessSpecifier::AS_none;
+  I.Children.Enums.emplace_back();
+  I.Children.Enums.back().Name = "OneEnum";
 
   auto G = getMDGenerator();
   assert(G);
@@ -86,15 +86,15 @@ TEST(MDGeneratorTest, emitRecordMD) {
   I.Loc.emplace_back(12, llvm::SmallString<16>{"test.cpp"});
 
   I.Members.emplace_back(TypeInfo("int"), "X", AccessSpecifier::AS_private);
-  I.TagType = TagTypeKind::TTK_Class;
+  I.TagType = TagTypeKind::Class;
   I.Parents.emplace_back(EmptySID, "F", InfoType::IT_record);
   I.VirtualParents.emplace_back(EmptySID, "G", InfoType::IT_record);
 
-  I.ChildRecords.emplace_back(EmptySID, "ChildStruct", InfoType::IT_record);
-  I.ChildFunctions.emplace_back();
-  I.ChildFunctions.back().Name = "OneFunction";
-  I.ChildEnums.emplace_back();
-  I.ChildEnums.back().Name = "OneEnum";
+  I.Children.Records.emplace_back(EmptySID, "ChildStruct", InfoType::IT_record);
+  I.Children.Functions.emplace_back();
+  I.Children.Functions.back().Name = "OneFunction";
+  I.Children.Enums.emplace_back();
+  I.Children.Enums.back().Name = "OneEnum";
 
   auto G = getMDGenerator();
   assert(G);
@@ -347,9 +347,9 @@ TEST(MDGeneratorTest, emitCommentMD) {
 
  The description continues.
 
-**I** [out]
+**I** [out] is a parameter.
 
-**J**
+**J** is a parameter.
 
 **return**void
 

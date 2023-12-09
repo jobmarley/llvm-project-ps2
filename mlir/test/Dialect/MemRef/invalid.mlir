@@ -179,7 +179,7 @@ func.func @memref_reinterpret_cast_incompatible_memory_space(%in: memref<*xf32>)
 // -----
 
 func.func @memref_reinterpret_cast_offset_mismatch(%in: memref<?xf32>) {
-  // expected-error @+1 {{expected result type with offset = 2 instead of 1}}
+  // expected-error @+1 {{expected result type with offset = 1 instead of 2}}
   %out = memref.reinterpret_cast %in to
            offset: [1], sizes: [10], strides: [1]
          : memref<?xf32> to memref<10xf32, strided<[1], offset: 2>>
@@ -209,7 +209,7 @@ func.func @memref_reinterpret_cast_offset_mismatch(%in: memref<?xf32>) {
 // -----
 
 func.func @memref_reinterpret_cast_no_map_but_offset(%in: memref<?xf32>) {
-  // expected-error @+1 {{expected result type with offset = 0 instead of 2}}
+  // expected-error @+1 {{expected result type with offset = 2 instead of 0}}
   %out = memref.reinterpret_cast %in to offset: [2], sizes: [10], strides: [1]
          : memref<?xf32> to memref<10xf32>
   return
@@ -392,9 +392,9 @@ func.func @copy_different_eltype(%arg0: memref<2xf32>, %arg1: memref<2xf16>) {
 
 // -----
 
-func.func @expand_shape(%arg0: memref<f32>) {
-  // expected-error @+1 {{invalid number of reassociation groups: found 1, expected 0}}
-  %0 = memref.expand_shape %arg0 [[0]] : memref<f32> into memref<f32>
+func.func @expand_shape(%arg0: memref<?x?xf32>) {
+  // expected-error @+1 {{invalid number of reassociation groups: found 1, expected 2}}
+  %0 = memref.expand_shape %arg0 [[0, 1]] : memref<?x?xf32> into memref<?x5x?xf32>
   return
 }
 
@@ -408,16 +408,30 @@ func.func @expand_shape(%arg0: memref<f32>) {
 
 // -----
 
-func.func @collapse_shape_to_higher_rank(%arg0: memref<f32>) {
-  // expected-error @+1 {{op reassociation index 0 is out of bounds}}
-  %0 = memref.collapse_shape %arg0 [[0]] : memref<f32> into memref<1xf32>
+func.func @collapse_shape_out_of_bounds(%arg0: memref<?x?xf32>) {
+  // expected-error @+1 {{op reassociation index 2 is out of bounds}}
+  %0 = memref.collapse_shape %arg0 [[0, 1, 2]] : memref<?x?xf32> into memref<?xf32>
 }
 
 // -----
 
-func.func @expand_shape_to_smaller_rank(%arg0: memref<1xf32>) {
-  // expected-error @+1 {{op reassociation index 0 is out of bounds}}
-  %0 = memref.expand_shape %arg0 [[0]] : memref<1xf32> into memref<f32>
+func.func @expand_shape_invalid_ranks(%arg0: memref<?x?xf32>) {
+  // expected-error @+1 {{op expected rank expansion, but found source rank 2 >= result rank 2}}
+  %0 = memref.expand_shape %arg0 [[0], [1]] : memref<?x?xf32> into memref<?x?xf32>
+}
+
+// -----
+
+func.func @collapse_shape_invalid_ranks(%arg0: memref<?x?xf32>) {
+  // expected-error @+1 {{op expected rank reduction, but found source rank 2 <= result rank 2}}
+  %0 = memref.collapse_shape %arg0 [[0], [1]] : memref<?x?xf32> into memref<?x?xf32>
+}
+
+// -----
+
+func.func @expand_shape_out_of_bounds(%arg0: memref<?xf32>) {
+  // expected-error @+1 {{op reassociation index 2 is out of bounds}}
+  %0 = memref.expand_shape %arg0 [[0, 1, 2]] : memref<?xf32> into memref<4x?xf32>
 }
 
 // -----
@@ -593,6 +607,22 @@ func.func @invalid_view(%arg0 : index, %arg1 : index, %arg2 : index) {
   %1 = memref.view %0[%arg2][%arg0]
     : memref<2048xi8> to memref<?x?xf32>
   return
+}
+
+// -----
+
+func.func @invalid_subview(%input: memref<4x1024xf32>) -> memref<2x256xf32, strided<[1024, 1], offset: 2304>> {
+  // expected-error@+1 {{expected offsets to be non-negative, but got -1}}
+  %0 = memref.subview %input[-1, 256] [2, 256] [1, 1] : memref<4x1024xf32> to memref<2x256xf32, strided<[1024, 1], offset: 2304>>
+  return %0 : memref<2x256xf32, strided<[1024, 1], offset: 2304>>
+}
+
+// -----
+
+func.func @invalid_subview(%input: memref<4x1024xf32>) -> memref<2x256xf32, strided<[1024, 1], offset: 2304>> {
+  // expected-error@+1 {{expected sizes to be non-negative, but got -1}}
+  %0 = memref.subview %input[2, 256] [-1, 256] [1, 1] : memref<4x1024xf32> to memref<2x256xf32, strided<[1024, 1], offset: 2304>>
+  return %0 : memref<2x256xf32, strided<[1024, 1], offset: 2304>>
 }
 
 // -----
@@ -896,7 +926,7 @@ func.func @test_alloc_memref_map_rank_mismatch() {
 // -----
 
 func.func @rank(%0: f32) {
-  // expected-error@+1 {{'memref.rank' op operand #0 must be unranked.memref of any type values or memref of any type values}}
+  // expected-error@+1 {{'memref.rank' op operand #0 must be ranked or unranked memref of any type values}}
   "memref.rank"(%0): (f32)->index
   return
 }
@@ -1025,4 +1055,12 @@ func.func @memref_realloc_type(%src : memref<256xf32>) -> memref<?xi32>{
   // expected-error@+1 {{different element types}}
   %0 = memref.realloc %src : memref<256xf32> to memref<?xi32>
   return %0 : memref<?xi32>
+}
+
+// -----
+
+// Asking the dimension of a 0-D shape doesn't make sense.
+func.func @dim_0_ranked(%arg : memref<f32>, %arg1 : index) {
+  memref.dim %arg, %arg1 : memref<f32> // expected-error {{'memref.dim' op operand #0 must be unranked.memref of any type values or non-0-ranked.memref of any type values, but got 'memref<f32>'}}
+  return
 }

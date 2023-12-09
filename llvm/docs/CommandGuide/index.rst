@@ -21,6 +21,7 @@ Basic Commands
    llvm-config
    llvm-cov
    llvm-cxxmap
+   llvm-debuginfo-analyzer
    llvm-diff
    llvm-dis
    llvm-dwarfdump
@@ -29,10 +30,13 @@ Basic Commands
    llvm-libtool-darwin
    llvm-link
    llvm-lipo
+   llvm-mc
    llvm-mca
+   llvm-opt-report
    llvm-otool
    llvm-profdata
    llvm-readobj
+   llvm-reduce
    llvm-stress
    llvm-symbolizer
    opt
@@ -92,5 +96,4 @@ Remarks Tools
 .. toctree::
    :maxdepth: 1
 
-   llvm-remark-size-diff
    llvm-remarkutil

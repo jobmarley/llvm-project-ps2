@@ -234,11 +234,11 @@ using namespace llvm;
   CASE_AVX_INS_COMMON(Inst##SS4, , mr_Int)
 
 static unsigned getVectorRegSize(unsigned RegNo) {
-  if (X86::ZMM0 <= RegNo && RegNo <= X86::ZMM31)
+  if (X86II::isZMMReg(RegNo))
     return 512;
-  if (X86::YMM0 <= RegNo && RegNo <= X86::YMM31)
+  if (X86II::isYMMReg(RegNo))
     return 256;
-  if (X86::XMM0 <= RegNo && RegNo <= X86::XMM31)
+  if (X86II::isXMMReg(RegNo))
     return 128;
   if (X86::MM0 <= RegNo && RegNo <= X86::MM7)
     return 64;
@@ -252,7 +252,7 @@ static unsigned getRegOperandNumElts(const MCInst *MI, unsigned ScalarSize,
   return getVectorRegSize(OpReg) / ScalarSize;
 }
 
-static const char *getRegName(unsigned Reg) {
+static const char *getRegName(MCRegister Reg) {
   return X86ATTInstPrinter::getRegisterName(Reg);
 }
 

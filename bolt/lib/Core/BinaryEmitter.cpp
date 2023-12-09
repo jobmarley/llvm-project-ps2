@@ -161,9 +161,17 @@ private:
   /// \p FirstInstr indicates if \p NewLoc represents the first instruction
   /// in a sequence, such as a function fragment.
   ///
+  /// If \p NewLoc location matches \p PrevLoc, no new line number entry will be
+  /// created and the function will return \p PrevLoc while \p InstrLabel will
+  /// be ignored. Otherwise, the caller should use \p InstrLabel to mark the
+  /// corresponding instruction by emitting \p InstrLabel before it.
+  /// If \p InstrLabel is set by the caller, its value will be used with \p
+  /// \p NewLoc. If it was nullptr on entry, it will be populated with a pointer
+  /// to a new temp symbol used with \p NewLoc.
+  ///
   /// Return new current location which is either \p NewLoc or \p PrevLoc.
   SMLoc emitLineInfo(const BinaryFunction &BF, SMLoc NewLoc, SMLoc PrevLoc,
-                     bool FirstInstr);
+                     bool FirstInstr, MCSymbol *&InstrLabel);
 
   /// Use \p FunctionEndSymbol to mark the end of the line info sequence.
   /// Note that it does not automatically result in the insertion of the EOS
@@ -189,13 +197,16 @@ void BinaryEmitter::emitAll(StringRef OrgSecPrefix) {
 
   if (opts::UpdateDebugSections && BC.isELF()) {
     // Force the emission of debug line info into allocatable section to ensure
-    // RuntimeDyld will process it without ProcessAllSections flag.
+    // JITLink will process it.
     //
     // NB: on MachO all sections are required for execution, hence no need
     //     to change flags/attributes.
     MCSectionELF *ELFDwarfLineSection =
         static_cast<MCSectionELF *>(BC.MOFI->getDwarfLineSection());
     ELFDwarfLineSection->setFlags(ELF::SHF_ALLOC);
+    MCSectionELF *ELFDwarfLineStrSection =
+        static_cast<MCSectionELF *>(BC.MOFI->getDwarfLineStrSection());
+    ELFDwarfLineStrSection->setFlags(ELF::SHF_ALLOC);
   }
 
   if (RuntimeLibrary *RtLibrary = BC.getRuntimeLibrary())
@@ -212,7 +223,9 @@ void BinaryEmitter::emitAll(StringRef OrgSecPrefix) {
 
   emitDataSections(OrgSecPrefix);
 
-  Streamer.emitLabel(BC.Ctx->getOrCreateSymbol("_end"));
+  // TODO Enable for Mach-O once BinaryContext::getDataSection supports it.
+  if (BC.isELF())
+    AddressMap::emit(Streamer, BC);
 }
 
 void BinaryEmitter::emitFunctions() {
@@ -274,7 +287,10 @@ void BinaryEmitter::emitFunctions() {
 
   // Mark the end of hot text.
   if (opts::HotText) {
-    Streamer.switchSection(BC.getTextSection());
+    if (BC.HasWarmSection)
+      Streamer.switchSection(BC.getCodeSection(BC.getWarmCodeSectionName()));
+    else
+      Streamer.switchSection(BC.getTextSection());
     Streamer.emitLabel(BC.getHotTextEndSymbol());
   }
 }
@@ -302,18 +318,16 @@ bool BinaryEmitter::emitFunction(BinaryFunction &Function,
     // Set section alignment to at least maximum possible object alignment.
     // We need this to support LongJmp and other passes that calculates
     // tentative layout.
-    if (Section->getAlignment() < opts::AlignFunctions)
-      Section->setAlignment(Align(opts::AlignFunctions));
+    Section->ensureMinAlignment(Align(opts::AlignFunctions));
 
-    Streamer.emitCodeAlignment(BinaryFunction::MinAlign, &*BC.STI);
+    Streamer.emitCodeAlignment(Function.getMinAlign(), &*BC.STI);
     uint16_t MaxAlignBytes = FF.isSplitFragment()
                                  ? Function.getMaxColdAlignmentBytes()
                                  : Function.getMaxAlignmentBytes();
     if (MaxAlignBytes > 0)
-      Streamer.emitCodeAlignment(Function.getAlignment(), &*BC.STI,
-                                 MaxAlignBytes);
+      Streamer.emitCodeAlignment(Function.getAlign(), &*BC.STI, MaxAlignBytes);
   } else {
-    Streamer.emitCodeAlignment(Function.getAlignment(), &*BC.STI);
+    Streamer.emitCodeAlignment(Function.getAlign(), &*BC.STI);
   }
 
   MCContext &Context = Streamer.getContext();
@@ -377,7 +391,7 @@ bool BinaryEmitter::emitFunction(BinaryFunction &Function,
   }
 
   if (opts::MarkFuncs)
-    Streamer.emitIntValue(BC.MIB->getTrapFillValue(), 1);
+    Streamer.emitBytes(BC.MIB->getTrapFillValue());
 
   // Emit CFI end
   if (Function.hasCFI())
@@ -421,7 +435,7 @@ void BinaryEmitter::emitFunctionBody(BinaryFunction &BF, FunctionFragment &FF,
     // case, the call site entries in that LSDA have 0 as offset to the landing
     // pad, which the runtime interprets as "no handler". To prevent this,
     // insert some padding.
-    Streamer.emitIntValue(BC.MIB->getTrapFillValue(), 1);
+    Streamer.emitBytes(BC.MIB->getTrapFillValue());
   }
 
   // Track the first emitted instruction with debug info.
@@ -429,7 +443,7 @@ void BinaryEmitter::emitFunctionBody(BinaryFunction &BF, FunctionFragment &FF,
   for (BinaryBasicBlock *const BB : FF) {
     if ((opts::AlignBlocks || opts::PreserveBlocksAlignment) &&
         BB->getAlignment() > 1)
-      Streamer.emitCodeAlignment(BB->getAlignment(), &*BC.STI,
+      Streamer.emitCodeAlignment(BB->getAlign(), &*BC.STI,
                                  BB->getAlignmentMaxBytes());
     Streamer.emitLabel(BB->getLabel());
     if (!EmitCodeOnly) {
@@ -458,13 +472,6 @@ void BinaryEmitter::emitFunctionBody(BinaryFunction &BF, FunctionFragment &FF,
         continue;
 
       // Handle pseudo instructions.
-      if (BC.MIB->isEHLabel(Instr)) {
-        const MCSymbol *Label = BC.MIB->getTargetSymbol(Instr);
-        assert(Instr.getNumOperands() >= 1 && Label &&
-               "bad EH_LABEL instruction");
-        Streamer.emitLabel(const_cast<MCSymbol *>(Label));
-        continue;
-      }
       if (BC.MIB->isCFI(Instr)) {
         emitCFIInstruction(*BF.getCFIFor(Instr));
         continue;
@@ -480,19 +487,39 @@ void BinaryEmitter::emitFunctionBody(BinaryFunction &BF, FunctionFragment &FF,
         // are relaxable, we should be safe.
       }
 
-      if (!EmitCodeOnly && opts::UpdateDebugSections && BF.getDWARFUnit()) {
-        LastLocSeen = emitLineInfo(BF, Instr.getLoc(), LastLocSeen, FirstInstr);
-        FirstInstr = false;
+      if (!EmitCodeOnly) {
+        // A symbol to be emitted before the instruction to mark its location.
+        MCSymbol *InstrLabel = BC.MIB->getLabel(Instr);
+
+        if (opts::UpdateDebugSections && BF.getDWARFUnit()) {
+          LastLocSeen = emitLineInfo(BF, Instr.getLoc(), LastLocSeen,
+                                     FirstInstr, InstrLabel);
+          FirstInstr = false;
+        }
+
+        // Prepare to tag this location with a label if we need to keep track of
+        // the location of calls/returns for BOLT address translation maps
+        if (BF.requiresAddressTranslation() && BC.MIB->getOffset(Instr)) {
+          const uint32_t Offset = *BC.MIB->getOffset(Instr);
+          if (!InstrLabel)
+            InstrLabel = BC.Ctx->createTempSymbol();
+          BB->getLocSyms().emplace_back(Offset, InstrLabel);
+        }
+
+        if (InstrLabel)
+          Streamer.emitLabel(InstrLabel);
       }
 
-      // Prepare to tag this location with a label if we need to keep track of
-      // the location of calls/returns for BOLT address translation maps
-      if (!EmitCodeOnly && BF.requiresAddressTranslation() &&
-          BC.MIB->getOffset(Instr)) {
-        const uint32_t Offset = *BC.MIB->getOffset(Instr);
-        MCSymbol *LocSym = BC.Ctx->createTempSymbol();
-        Streamer.emitLabel(LocSym);
-        BB->getLocSyms().emplace_back(Offset, LocSym);
+      // Emit sized NOPs via MCAsmBackend::writeNopData() interface on x86.
+      // This is a workaround for invalid NOPs handling by asm/disasm layer.
+      if (BC.MIB->isNoop(Instr) && BC.isX86()) {
+        if (std::optional<uint32_t> Size = BC.MIB->getSize(Instr)) {
+          SmallString<15> Code;
+          raw_svector_ostream VecOS(Code);
+          BC.MAB->writeNopData(VecOS, *Size, BC.STI.get());
+          Streamer.emitBytes(Code);
+          continue;
+        }
       }
 
       Streamer.emitInstruction(Instr, *BC.STI);
@@ -518,7 +545,7 @@ void BinaryEmitter::emitConstantIslands(BinaryFunction &BF, bool EmitColdPart,
   const uint16_t Alignment = OnBehalfOf
                                  ? OnBehalfOf->getConstantIslandAlignment()
                                  : BF.getConstantIslandAlignment();
-  Streamer.emitCodeAlignment(Alignment, &*BC.STI);
+  Streamer.emitCodeAlignment(Align(Alignment), &*BC.STI);
 
   if (!OnBehalfOf) {
     if (!EmitColdPart)
@@ -655,7 +682,8 @@ void BinaryEmitter::emitConstantIslands(BinaryFunction &BF, bool EmitColdPart,
 }
 
 SMLoc BinaryEmitter::emitLineInfo(const BinaryFunction &BF, SMLoc NewLoc,
-                                  SMLoc PrevLoc, bool FirstInstr) {
+                                  SMLoc PrevLoc, bool FirstInstr,
+                                  MCSymbol *&InstrLabel) {
   DWARFUnit *FunctionCU = BF.getDWARFUnit();
   const DWARFDebugLine::LineTable *FunctionLineTable = BF.getDWARFLineTable();
   assert(FunctionCU && "cannot emit line info for function without CU");
@@ -705,12 +733,12 @@ SMLoc BinaryEmitter::emitLineInfo(const BinaryFunction &BF, SMLoc NewLoc,
   const MCDwarfLoc &DwarfLoc = BC.Ctx->getCurrentDwarfLoc();
   BC.Ctx->clearDwarfLocSeen();
 
-  MCSymbol *LineSym = BC.Ctx->createTempSymbol();
-  Streamer.emitLabel(LineSym);
+  if (!InstrLabel)
+    InstrLabel = BC.Ctx->createTempSymbol();
 
   BC.getDwarfLineTable(FunctionUnitIndex)
       .getMCLineSections()
-      .addLineEntry(MCDwarfLineEntry(LineSym, DwarfLoc),
+      .addLineEntry(MCDwarfLineEntry(InstrLabel, DwarfLoc),
                     Streamer.getCurrentSectionOnly());
 
   return NewLoc;
@@ -742,10 +770,12 @@ void BinaryEmitter::emitJumpTables(const BinaryFunction &BF) {
 
   for (auto &JTI : BF.jumpTables()) {
     JumpTable &JT = *JTI.second;
+    // Only emit shared jump tables once, when processing the first parent
+    if (JT.Parents.size() > 1 && JT.Parents[0] != &BF)
+      continue;
     if (opts::PrintJumpTables)
       JT.print(outs());
-    if ((opts::JumpTables == JTS_BASIC || !BF.isSimple()) &&
-        BC.HasRelocations) {
+    if (opts::JumpTables == JTS_BASIC && BC.HasRelocations) {
       JT.updateOriginal();
     } else {
       MCSection *HotSection, *ColdSection;
@@ -796,18 +826,19 @@ void BinaryEmitter::emitJumpTable(const JumpTable &JT, MCSection *HotSection,
     LabelCounts[CurrentLabel] = CurrentLabelCount;
   } else {
     Streamer.switchSection(JT.Count > 0 ? HotSection : ColdSection);
-    Streamer.emitValueToAlignment(JT.EntrySize);
+    Streamer.emitValueToAlignment(Align(JT.EntrySize));
   }
   MCSymbol *LastLabel = nullptr;
   uint64_t Offset = 0;
   for (MCSymbol *Entry : JT.Entries) {
     auto LI = JT.Labels.find(Offset);
     if (LI != JT.Labels.end()) {
-      LLVM_DEBUG(dbgs() << "BOLT-DEBUG: emitting jump table "
-                        << LI->second->getName()
-                        << " (originally was at address 0x"
-                        << Twine::utohexstr(JT.getAddress() + Offset)
-                        << (Offset ? "as part of larger jump table\n" : "\n"));
+      LLVM_DEBUG({
+        dbgs() << "BOLT-DEBUG: emitting jump table " << LI->second->getName()
+               << " (originally was at address 0x"
+               << Twine::utohexstr(JT.getAddress() + Offset)
+               << (Offset ? ") as part of larger jump table\n" : ")\n");
+      });
       if (!LabelCounts.empty()) {
         LLVM_DEBUG(dbgs() << "BOLT-DEBUG: jump table count: "
                           << LabelCounts[LI->second] << '\n');
@@ -815,9 +846,27 @@ void BinaryEmitter::emitJumpTable(const JumpTable &JT, MCSection *HotSection,
           Streamer.switchSection(HotSection);
         else
           Streamer.switchSection(ColdSection);
-        Streamer.emitValueToAlignment(JT.EntrySize);
+        Streamer.emitValueToAlignment(Align(JT.EntrySize));
       }
-      Streamer.emitLabel(LI->second);
+      // Emit all labels registered at the address of this jump table
+      // to sync with our global symbol table.  We may have two labels
+      // registered at this address if one label was created via
+      // getOrCreateGlobalSymbol() (e.g. LEA instructions referencing
+      // this location) and another via getOrCreateJumpTable().  This
+      // creates a race where the symbols created by these two
+      // functions may or may not be the same, but they are both
+      // registered in our symbol table at the same address. By
+      // emitting them all here we make sure there is no ambiguity
+      // that depends on the order that these symbols were created, so
+      // whenever this address is referenced in the binary, it is
+      // certain to point to the jump table identified at this
+      // address.
+      if (BinaryData *BD = BC.getBinaryDataByName(LI->second->getName())) {
+        for (MCSymbol *S : BD->getSymbols())
+          Streamer.emitLabel(S);
+      } else {
+        Streamer.emitLabel(LI->second);
+      }
       LastLabel = LI->second;
     }
     if (JT.Type == JumpTable::JTT_NORMAL) {
@@ -907,7 +956,7 @@ void BinaryEmitter::emitLSDA(BinaryFunction &BF, const FunctionFragment &FF) {
   const uint16_t TTypeAlignment = 4;
 
   // Type tables have to be aligned at 4 bytes.
-  Streamer.emitValueToAlignment(TTypeAlignment);
+  Streamer.emitValueToAlignment(Align(TTypeAlignment));
 
   // Emit the LSDA label.
   MCSymbol *LSDASymbol = BF.getLSDASymbol(FF.getFragmentNum());
@@ -1140,14 +1189,11 @@ void BinaryEmitter::emitDebugLineInfoForUnprocessedCUs() {
 
 void BinaryEmitter::emitDataSections(StringRef OrgSecPrefix) {
   for (BinarySection &Section : BC.sections()) {
-    if (!Section.hasRelocations() || !Section.hasSectionRef())
+    if (!Section.hasRelocations())
       continue;
 
-    StringRef SectionName = Section.getName();
-    std::string EmitName = Section.isReordered()
-                               ? std::string(Section.getOutputName())
-                               : OrgSecPrefix.str() + std::string(SectionName);
-    Section.emitAsData(Streamer, EmitName);
+    StringRef Prefix = Section.hasSectionRef() ? OrgSecPrefix : "";
+    Section.emitAsData(Streamer, Prefix + Section.getName());
     Section.clearRelocations();
   }
 }

@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "AArch64SMEAttributes.h"
-#include "llvm/ADT/None.h"
 #include "llvm/IR/InstrTypes.h"
 #include <cassert>
 
@@ -21,16 +20,30 @@ void SMEAttrs::set(unsigned M, bool Enable) {
 
   assert(!(hasStreamingInterface() && hasStreamingCompatibleInterface()) &&
          "SM_Enabled and SM_Compatible are mutually exclusive");
-  assert(!(hasNewZAInterface() && hasSharedZAInterface()) &&
+  assert(!(hasNewZABody() && hasSharedZAInterface()) &&
          "ZA_New and ZA_Shared are mutually exclusive");
-  assert(!(hasNewZAInterface() && preservesZA()) &&
+  assert(!(hasNewZABody() && preservesZA()) &&
          "ZA_New and ZA_Preserved are mutually exclusive");
+  assert(!(hasNewZABody() && (Bitmask & ZA_NoLazySave)) &&
+         "ZA_New and ZA_NoLazySave are mutually exclusive");
+  assert(!(hasSharedZAInterface() && (Bitmask & ZA_NoLazySave)) &&
+         "ZA_Shared and ZA_NoLazySave are mutually exclusive");
 }
 
 SMEAttrs::SMEAttrs(const CallBase &CB) {
   *this = SMEAttrs(CB.getAttributes());
-  if (auto *F = CB.getCalledFunction())
-    set(SMEAttrs(*F).Bitmask);
+  if (auto *F = CB.getCalledFunction()) {
+    set(SMEAttrs(*F).Bitmask | SMEAttrs(F->getName()).Bitmask);
+  }
+}
+
+SMEAttrs::SMEAttrs(StringRef FuncName) : Bitmask(0) {
+  if (FuncName == "__arm_tpidr2_save" || FuncName == "__arm_sme_state")
+    Bitmask |= (SMEAttrs::SM_Compatible | SMEAttrs::ZA_Preserved |
+                SMEAttrs::ZA_NoLazySave);
+  if (FuncName == "__arm_tpidr2_restore")
+    Bitmask |= (SMEAttrs::SM_Compatible | SMEAttrs::ZA_Shared |
+                SMEAttrs::ZA_NoLazySave);
 }
 
 SMEAttrs::SMEAttrs(const AttributeList &Attrs) {
@@ -49,25 +62,27 @@ SMEAttrs::SMEAttrs(const AttributeList &Attrs) {
     Bitmask |= ZA_Preserved;
 }
 
-Optional<bool> SMEAttrs::requiresSMChange(const SMEAttrs &Callee,
-                                          bool BodyOverridesInterface) const {
+std::optional<bool>
+SMEAttrs::requiresSMChange(const SMEAttrs &Callee,
+                           bool BodyOverridesInterface) const {
   // If the transition is not through a call (e.g. when considering inlining)
   // and Callee has a streaming body, then we can ignore the interface of
   // Callee.
   if (BodyOverridesInterface && Callee.hasStreamingBody()) {
-    return hasStreamingInterfaceOrBody() ? None : Optional<bool>(true);
+    return hasStreamingInterfaceOrBody() ? std::nullopt
+                                         : std::optional<bool>(true);
   }
 
   if (Callee.hasStreamingCompatibleInterface())
-    return None;
+    return std::nullopt;
 
   // Both non-streaming
   if (hasNonStreamingInterfaceAndBody() && Callee.hasNonStreamingInterface())
-    return None;
+    return std::nullopt;
 
   // Both streaming
   if (hasStreamingInterfaceOrBody() && Callee.hasStreamingInterface())
-    return None;
+    return std::nullopt;
 
   return Callee.hasStreamingInterface();
 }

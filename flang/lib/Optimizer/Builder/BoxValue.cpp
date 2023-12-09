@@ -85,6 +85,12 @@ llvm::raw_ostream &fir::operator<<(llvm::raw_ostream &os,
 }
 
 llvm::raw_ostream &fir::operator<<(llvm::raw_ostream &os,
+                                   const fir::PolymorphicValue &p) {
+  return os << "polymorphicvalue: { addr: " << p.getAddr()
+            << ", sourceBox: " << p.getSourceBox() << " }";
+}
+
+llvm::raw_ostream &fir::operator<<(llvm::raw_ostream &os,
                                    const fir::ArrayBoxValue &box) {
   os << "boxarray { addr: " << box.getAddr();
   if (box.getLBounds().size()) {
@@ -204,14 +210,9 @@ bool fir::MutableBoxValue::verify() const {
 /// Debug verifier for BoxValue ctor. There is no guarantee this will
 /// always be called.
 bool fir::BoxValue::verify() const {
-  if (!addr.getType().isa<fir::BoxType>())
+  if (!addr.getType().isa<fir::BaseBoxType>())
     return false;
   if (!lbounds.empty() && lbounds.size() != rank())
-    return false;
-  // Explicit extents are here to cover cases where an explicit-shape dummy
-  // argument comes as a fir.box. This can only happen with derived types and
-  // unlimited polymorphic.
-  if (!extents.empty() && !(isDerived() || isUnlimitedPolymorphic()))
     return false;
   if (!extents.empty() && extents.size() != rank())
     return false;

@@ -34,6 +34,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/Loads.h"
@@ -1599,7 +1600,7 @@ Scop::Scop(Region &R, ScalarEvolution &ScalarEvolution, LoopInfo &LI,
            DominatorTree &DT, ScopDetection::DetectionContext &DC,
            OptimizationRemarkEmitter &ORE, int ID)
     : IslCtx(isl_ctx_alloc(), isl_ctx_free), SE(&ScalarEvolution), DT(&DT),
-      R(R), name(None), HasSingleExitEdge(R.getExitingBlock()), DC(DC),
+      R(R), name(std::nullopt), HasSingleExitEdge(R.getExitingBlock()), DC(DC),
       ORE(ORE), Affinator(this, LI), ID(ID) {
 
   // Options defaults that are different from ISL's.
@@ -1646,9 +1647,7 @@ void Scop::removeFromStmtMap(ScopStmt &Stmt) {
   } else {
     auto StmtMapIt = StmtMap.find(Stmt.getBasicBlock());
     if (StmtMapIt != StmtMap.end())
-      StmtMapIt->second.erase(std::remove(StmtMapIt->second.begin(),
-                                          StmtMapIt->second.end(), &Stmt),
-                              StmtMapIt->second.end());
+      llvm::erase(StmtMapIt->second, &Stmt);
     for (Instruction *Inst : Stmt.getInstructions())
       InstStmtMap.erase(Inst);
   }
@@ -2423,15 +2422,13 @@ void Scop::removeAccessData(MemoryAccess *Access) {
     ValueDefAccs.erase(Access->getAccessValue());
   } else if (Access->isOriginalValueKind() && Access->isRead()) {
     auto &Uses = ValueUseAccs[Access->getScopArrayInfo()];
-    auto NewEnd = std::remove(Uses.begin(), Uses.end(), Access);
-    Uses.erase(NewEnd, Uses.end());
+    llvm::erase(Uses, Access);
   } else if (Access->isOriginalPHIKind() && Access->isRead()) {
     PHINode *PHI = cast<PHINode>(Access->getAccessInstruction());
     PHIReadAccs.erase(PHI);
   } else if (Access->isOriginalAnyPHIKind() && Access->isWrite()) {
     auto &Incomings = PHIIncomingAccs[Access->getScopArrayInfo()];
-    auto NewEnd = std::remove(Incomings.begin(), Incomings.end(), Access);
-    Incomings.erase(NewEnd, Incomings.end());
+    llvm::erase(Incomings, Access);
   }
 }
 

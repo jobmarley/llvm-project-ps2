@@ -817,6 +817,43 @@ TEST(RenameTest, WithinFileRename) {
           char [[da^ta]];
         } @end
       )cpp",
+
+      // Issue 170: Rename symbol introduced by UsingDecl
+      R"cpp(
+        namespace ns { void [[f^oo]](); } 
+
+        using ns::[[f^oo]];
+
+        void f() {
+            [[f^oo]]();
+            auto p = &[[f^oo]];
+        }
+      )cpp",
+
+      // Issue 170: using decl that imports multiple overloads
+      // -> Only the overload under the cursor is renamed
+      R"cpp(
+        namespace ns { int [[^foo]](int); char foo(char); }
+        using ns::[[foo]];
+        void f() {
+          [[^foo]](42);
+          foo('x');
+        }
+      )cpp",
+
+      // ObjC class with a category.
+      R"cpp(
+        @interface [[Fo^o]]
+        @end
+        @implementation [[F^oo]]
+        @end
+        @interface [[Fo^o]] (Category)
+        @end
+        @implementation [[F^oo]] (Category)
+        @end
+
+        void func([[Fo^o]] *f) {}
+      )cpp",
   };
   llvm::StringRef NewName = "NewName";
   for (llvm::StringRef T : Tests) {
@@ -866,6 +903,15 @@ TEST(RenameTest, Renameable) {
         namespace n^s {}
       )cpp",
        "not a supported kind", HeaderFile},
+
+      {R"cpp(// disallow - category rename.
+        @interface Foo
+        @end
+        @interface Foo (Cate^gory)
+        @end
+      )cpp",
+       "Cannot rename symbol: there is no symbol at the given location",
+       HeaderFile},
 
       {
           R"cpp(
@@ -1040,6 +1086,19 @@ TEST(RenameTest, Renameable) {
        "conflict", !HeaderFile, "Conflict"},
 
       {R"cpp(
+        void func(int);
+        void [[o^therFunc]](double);
+      )cpp",
+       nullptr, !HeaderFile, "func"},
+      {R"cpp(
+        struct S {
+          void func(int);
+          void [[o^therFunc]](double);
+        };
+      )cpp",
+       nullptr, !HeaderFile, "func"},
+
+      {R"cpp(
         int V^ar;
       )cpp",
        "\"const\" is a keyword", !HeaderFile, "const"},
@@ -1062,6 +1121,23 @@ TEST(RenameTest, Renameable) {
         };
       )cpp",
        "no symbol", false},
+
+      {R"cpp(// FIXME we probably want to rename both overloads here,
+             // but renaming currently assumes there's only a 
+             // single canonical declaration.
+        namespace ns { int foo(int); char foo(char); }
+        using ns::^foo;
+      )cpp",
+       "there are multiple symbols at the given location", !HeaderFile},
+
+      {R"cpp(
+        void test() {
+          // no crash
+          using namespace std;
+          int [[V^ar]];
+        }
+      )cpp",
+        nullptr, !HeaderFile},
   };
 
   for (const auto& Case : Cases) {
@@ -1090,9 +1166,7 @@ TEST(RenameTest, Renameable) {
     } else {
       EXPECT_TRUE(bool(Results)) << "rename returned an error: "
                                  << llvm::toString(Results.takeError());
-      ASSERT_EQ(1u, Results->GlobalChanges.size());
-      EXPECT_EQ(applyEdits(std::move(Results->GlobalChanges)).front().second,
-                expectedResult(T, NewName));
+      EXPECT_EQ(Results->LocalChanges, T.ranges());
     }
   }
 }
@@ -1248,7 +1322,7 @@ TEST(RenameTest, PrepareRename) {
   runAddDocument(Server, FooCCPath, FooCC.code());
 
   auto Results = runPrepareRename(Server, FooCCPath, FooCC.point(),
-                                  /*NewName=*/llvm::None, {});
+                                  /*NewName=*/std::nullopt, {});
   // Verify that for multi-file rename, we only return main-file occurrences.
   ASSERT_TRUE(bool(Results)) << Results.takeError();
   // We don't know the result is complete in prepareRename (passing a nullptr
@@ -1426,7 +1500,7 @@ TEST(CrossFileRenameTests, DeduplicateRefsFromIndex) {
 
 TEST(CrossFileRenameTests, WithUpToDateIndex) {
   MockCompilationDatabase CDB;
-  CDB.ExtraClangFlags = {"-xc++"};
+  CDB.ExtraClangFlags = {"-xobjective-c++"};
   // rename is runnning on all "^" points in FooH, and "[[]]" ranges are the
   // expected rename occurrences.
   struct Case {
@@ -1515,13 +1589,12 @@ TEST(CrossFileRenameTests, WithUpToDateIndex) {
         }
       )cpp",
       },
-      {
-          // virtual templated method
-          R"cpp(
+      {// virtual templated method
+       R"cpp(
         template <typename> class Foo { virtual void [[m]](); };
         class Bar : Foo<int> { void [[^m]]() override; };
       )cpp",
-          R"cpp(
+       R"cpp(
           #include "foo.h"
 
           template<typename T> void Foo<T>::[[m]]() {}
@@ -1529,8 +1602,7 @@ TEST(CrossFileRenameTests, WithUpToDateIndex) {
           // the canonical Foo<T>::m().
           // https://github.com/clangd/clangd/issues/1325
           class Baz : Foo<float> { void m() override; };
-        )cpp"
-      },
+        )cpp"},
       {
           // rename on constructor and destructor.
           R"cpp(
@@ -1633,6 +1705,20 @@ TEST(CrossFileRenameTests, WithUpToDateIndex) {
           FOO y;
           FooFoo z;
         }
+      )cpp",
+      },
+      {
+          // Objective-C classes.
+          R"cpp(
+        @interface [[Fo^o]]
+        @end
+      )cpp",
+          R"cpp(
+        #include "foo.h"
+        @implementation [[Foo]]
+        @end
+
+        void func([[Foo]] *f) {}
       )cpp",
       },
   };

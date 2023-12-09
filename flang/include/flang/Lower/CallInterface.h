@@ -106,12 +106,13 @@ public:
     /// Value means passed by value at the mlir level, it is not necessarily
     /// implied by Fortran Value attribute.
     Value,
-    /// ValueAttribute means dummy has the the Fortran VALUE attribute.
+    /// ValueAttribute means dummy has the Fortran VALUE attribute.
     BaseAddressValueAttribute,
     CharBoxValueAttribute, // BoxChar with VALUE
     // Passing a character procedure as a <procedure address, result length>
     // tuple.
-    CharProcTuple
+    CharProcTuple,
+    BoxProcRef
   };
   /// Different properties of an entity that can be passed/returned.
   /// One-to-One mapping with PassEntityBy but for
@@ -124,7 +125,8 @@ public:
     CharProcTuple,
     Box,
     MutableBox,
-    Value
+    Value,
+    BoxProcRef
   };
 
   using FortranEntity = typename PassedEntityTypes<T>::FortranEntity;
@@ -153,16 +155,25 @@ public:
   /// PassedEntity is what is provided back to the CallInterface user.
   /// It describe how the entity is plugged in the interface
   struct PassedEntity {
-    /// Is the dummy argument optional ?
+    /// Is the dummy argument optional?
     bool isOptional() const;
-    /// Can the argument be modified by the callee ?
+    /// Can the argument be modified by the callee?
     bool mayBeModifiedByCall() const;
-    /// Can the argument be read by the callee ?
+    /// Can the argument be read by the callee?
     bool mayBeReadByCall() const;
+    /// Does the argument have the specified IgnoreTKR flag?
+    bool testTKR(Fortran::common::IgnoreTKR flag) const;
     /// Is the argument INTENT(OUT)
     bool isIntentOut() const;
-    /// Does the argument have the CONTIGUOUS attribute or have explicit shape ?
+    /// Does the argument have the CONTIGUOUS attribute or have explicit shape?
     bool mustBeMadeContiguous() const;
+    /// Does the dummy argument have the VALUE attribute?
+    bool hasValueAttribute() const;
+    /// Does the dummy argument have the ALLOCATABLE attribute?
+    bool hasAllocatableAttribute() const;
+    /// May the dummy argument require INTENT(OUT) finalization
+    /// on entry to the invoked procedure? Provides conservative answer.
+    bool mayRequireIntentoutFinalization() const;
     /// How entity is passed by.
     PassEntityBy passBy;
     /// What is the entity (SymbolRef for callee/ActualArgument* for caller)
@@ -284,6 +295,14 @@ public:
   /// procedure.
   bool isIndirectCall() const;
 
+  /// Returns true if this is a call of a type-bound procedure with a
+  /// polymorphic entity.
+  bool requireDispatchCall() const;
+
+  /// Get the passed-object argument index. nullopt if there is no passed-object
+  /// index.
+  std::optional<unsigned> getPassArgIndex() const;
+
   /// Return the procedure symbol if this is a call to a user defined
   /// procedure.
   const Fortran::semantics::Symbol *getProcedureSymbol() const;
@@ -337,6 +356,9 @@ public:
     llvm_unreachable("getting host associated type in CallerInterface");
   }
 
+  /// Set attributes on MLIR function.
+  void setFuncAttrs(mlir::func::FuncOp) const {}
+
 private:
   /// Check that the input vector is complete.
   bool verifyActualInputs() const;
@@ -372,6 +394,10 @@ public:
   /// called through pointers or not.
   bool isIndirectCall() const { return false; }
 
+  /// On the callee side it does not matter whether the procedure is called
+  /// through dynamic dispatch or not.
+  bool requireDispatchCall() const { return false; };
+
   /// Return the procedure symbol if this is a call to a user defined
   /// procedure.
   const Fortran::semantics::Symbol *getProcedureSymbol() const;
@@ -383,6 +409,7 @@ public:
   bool hasHostAssociated() const;
   mlir::Type getHostAssociatedTy() const;
   mlir::Value getHostAssociatedTuple() const;
+  void setFuncAttrs(mlir::func::FuncOp) const;
 
 private:
   Fortran::lower::pft::FunctionLikeUnit &funit;
@@ -393,15 +420,14 @@ mlir::FunctionType
 translateSignature(const Fortran::evaluate::ProcedureDesignator &,
                    Fortran::lower::AbstractConverter &);
 
-/// Declare or find the mlir::func::FuncOp named \p name. If the
-/// mlir::func::FuncOp does not exist yet, declare it with the signature
-/// translated from the ProcedureDesignator argument.
+/// Declare or find the mlir::func::FuncOp for the procedure designator
+/// \p proc. If the mlir::func::FuncOp does not exist yet, declare it with
+/// the signature translated from the ProcedureDesignator argument.
 /// Due to Fortran implicit function typing rules, the returned FuncOp is not
 /// guaranteed to have the signature from ProcedureDesignator if the FuncOp was
 /// already declared.
 mlir::func::FuncOp
-getOrDeclareFunction(llvm::StringRef name,
-                     const Fortran::evaluate::ProcedureDesignator &,
+getOrDeclareFunction(const Fortran::evaluate::ProcedureDesignator &,
                      Fortran::lower::AbstractConverter &);
 
 /// Return the type of an argument that is a dummy procedure. This may be an
@@ -410,6 +436,9 @@ getOrDeclareFunction(llvm::StringRef name,
 /// functions).
 mlir::Type getDummyProcedureType(const Fortran::semantics::Symbol &dummyProc,
                                  Fortran::lower::AbstractConverter &);
+
+/// Return !fir.boxproc<() -> ()> type.
+mlir::Type getUntypedBoxProcType(mlir::MLIRContext *context);
 
 /// Return true if \p ty is "!fir.ref<i64>", which is the interface for
 /// type(C_PTR/C_FUNPTR) passed by value.

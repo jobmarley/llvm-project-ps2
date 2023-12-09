@@ -255,6 +255,146 @@ func.func @isub_borrow(%arg: i64) -> !spirv.struct<(i32, i32)> {
 // -----
 
 //===----------------------------------------------------------------------===//
+// spirv.Dot
+//===----------------------------------------------------------------------===//
+
+func.func @dot(%arg0: vector<4xf32>, %arg1: vector<4xf32>) -> f32 {
+  %0 = spirv.Dot %arg0, %arg1 : vector<4xf32> -> f32
+  return %0 : f32
+}
+
+// -----
+
+// expected-note @+1 {{prior use here}}
+func.func @dot(%arg0: vector<4xf32>, %arg1: vector<3xf32>) -> f32 {
+  // expected-error @+1 {{use of value '%arg1' expects different type than prior uses}}
+  %0 = spirv.Dot %arg0, %arg1 : vector<4xf32> -> f32
+  return %0 : f32
+}
+
+// -----
+
+func.func @dot(%arg0: vector<4xf32>, %arg1: vector<4xf32>) -> f16 {
+  // expected-error @+1 {{'spirv.Dot' op failed to verify that all of {vector1, result} have same element type}}
+  %0 = spirv.Dot %arg0, %arg1 : vector<4xf32> -> f16
+  return %0 : f16
+}
+
+// -----
+
+func.func @dot(%arg0: vector<4xi32>, %arg1: vector<4xi32>) -> i32 {
+  // expected-error @+1 {{'spirv.Dot' op operand #0 must be vector of 16/32/64-bit float values of length 2/3/4/8/16}}
+  %0 = spirv.Dot %arg0, %arg1 : vector<4xi32> -> i32
+  return %0 : i32
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// spirv.SMulExtended
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @smul_extended_scalar
+func.func @smul_extended_scalar(%arg: i32) -> !spirv.struct<(i32, i32)> {
+  // CHECK: spirv.SMulExtended %{{.+}}, %{{.+}} : !spirv.struct<(i32, i32)>
+  %0 = spirv.SMulExtended %arg, %arg : !spirv.struct<(i32, i32)>
+  return %0 : !spirv.struct<(i32, i32)>
+}
+
+// CHECK-LABEL: @smul_extended_vector
+func.func @smul_extended_vector(%arg: vector<3xi32>) -> !spirv.struct<(vector<3xi32>, vector<3xi32>)> {
+  // CHECK: spirv.SMulExtended %{{.+}}, %{{.+}} : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+  %0 = spirv.SMulExtended %arg, %arg : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+  return %0 : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+}
+
+// -----
+
+func.func @smul_extended(%arg: i32) -> !spirv.struct<(i32, i32, i32)> {
+  // expected-error @+1 {{expected spirv.struct type with two members}}
+  %0 = spirv.SMulExtended %arg, %arg : !spirv.struct<(i32, i32, i32)>
+  return %0 : !spirv.struct<(i32, i32, i32)>
+}
+
+// -----
+
+func.func @smul_extended(%arg: i32) -> !spirv.struct<(i32)> {
+  // expected-error @+1 {{expected result struct type containing two members}}
+  %0 = "spirv.SMulExtended"(%arg, %arg): (i32, i32) -> !spirv.struct<(i32)>
+  return %0 : !spirv.struct<(i32)>
+}
+
+// -----
+
+func.func @smul_extended(%arg: i32) -> !spirv.struct<(i32, i64)> {
+  // expected-error @+1 {{expected all operand types and struct member types are the same}}
+  %0 = "spirv.SMulExtended"(%arg, %arg): (i32, i32) -> !spirv.struct<(i32, i64)>
+  return %0 : !spirv.struct<(i32, i64)>
+}
+
+// -----
+
+func.func @smul_extended(%arg: i64) -> !spirv.struct<(i32, i32)> {
+  // expected-error @+1 {{expected all operand types and struct member types are the same}}
+  %0 = "spirv.SMulExtended"(%arg, %arg): (i64, i64) -> !spirv.struct<(i32, i32)>
+  return %0 : !spirv.struct<(i32, i32)>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// spirv.UMulExtended
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @umul_extended_scalar
+func.func @umul_extended_scalar(%arg: i32) -> !spirv.struct<(i32, i32)> {
+  // CHECK: spirv.UMulExtended %{{.+}}, %{{.+}} : !spirv.struct<(i32, i32)>
+  %0 = spirv.UMulExtended %arg, %arg : !spirv.struct<(i32, i32)>
+  return %0 : !spirv.struct<(i32, i32)>
+}
+
+// CHECK-LABEL: @umul_extended_vector
+func.func @umul_extended_vector(%arg: vector<3xi32>) -> !spirv.struct<(vector<3xi32>, vector<3xi32>)> {
+  // CHECK: spirv.UMulExtended %{{.+}}, %{{.+}} : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+  %0 = spirv.UMulExtended %arg, %arg : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+  return %0 : !spirv.struct<(vector<3xi32>, vector<3xi32>)>
+}
+
+// -----
+
+func.func @umul_extended(%arg: i32) -> !spirv.struct<(i32, i32, i32)> {
+  // expected-error @+1 {{expected spirv.struct type with two members}}
+  %0 = spirv.UMulExtended %arg, %arg : !spirv.struct<(i32, i32, i32)>
+  return %0 : !spirv.struct<(i32, i32, i32)>
+}
+
+// -----
+
+func.func @umul_extended(%arg: i32) -> !spirv.struct<(i32)> {
+  // expected-error @+1 {{expected result struct type containing two members}}
+  %0 = "spirv.UMulExtended"(%arg, %arg): (i32, i32) -> !spirv.struct<(i32)>
+  return %0 : !spirv.struct<(i32)>
+}
+
+// -----
+
+func.func @umul_extended(%arg: i32) -> !spirv.struct<(i32, i64)> {
+  // expected-error @+1 {{expected all operand types and struct member types are the same}}
+  %0 = "spirv.UMulExtended"(%arg, %arg): (i32, i32) -> !spirv.struct<(i32, i64)>
+  return %0 : !spirv.struct<(i32, i64)>
+}
+
+// -----
+
+func.func @umul_extended(%arg: i64) -> !spirv.struct<(i32, i32)> {
+  // expected-error @+1 {{expected all operand types and struct member types are the same}}
+  %0 = "spirv.UMulExtended"(%arg, %arg): (i64, i64) -> !spirv.struct<(i32, i32)>
+  return %0 : !spirv.struct<(i32, i32)>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
 // spirv.SDiv
 //===----------------------------------------------------------------------===//
 

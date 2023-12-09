@@ -4,7 +4,7 @@
 // Verify the generic form can be parsed.
 // RUN: mlir-opt -allow-unregistered-dialect -mlir-print-op-generic %s | mlir-opt -allow-unregistered-dialect | FileCheck %s
 
-// CHECK: #map0 = affine_map<(d0) -> (d0 + 1)>
+// CHECK: #map = affine_map<(d0) -> (d0 + 1)>
 
 // CHECK: #map1 = affine_map<()[s0] -> (s0 + 1)>
 
@@ -161,7 +161,7 @@ func.func @affine_apply() {
   %i = "arith.constant"() {value = 0: index} : () -> index
   %j = "arith.constant"() {value = 1: index} : () -> index
 
-  // CHECK: affine.apply #map0(%c0)
+  // CHECK: affine.apply #map(%c0)
   %a = "affine.apply" (%i) { map = affine_map<(d0) -> (d0 + 1)> } :
     (index) -> (index)
 
@@ -286,24 +286,6 @@ func.func @test_dimop(%arg0: tensor<4x4x?xf32>) {
   %0 = tensor.dim %arg0, %c2 : tensor<4x4x?xf32>
   // use dim as an index to ensure type correctness
   %1 = affine.apply affine_map<(d0) -> (d0)>(%0)
-  return
-}
-
-// CHECK-LABEL: func @tensor_load_store
-func.func @tensor_load_store(%0 : memref<4x4xi32>, %1 : tensor<4x4xi32>) {
-  // CHECK-SAME: (%[[MEMREF:.*]]: memref<4x4xi32>,
-  // CHECK-SAME:  %[[TENSOR:.*]]: tensor<4x4xi32>)
-  // CHECK: memref.tensor_store %[[TENSOR]], %[[MEMREF]] : memref<4x4xi32>
-  memref.tensor_store %1, %0 : memref<4x4xi32>
-  return
-}
-
-// CHECK-LABEL: func @unranked_tensor_load_store
-func.func @unranked_tensor_load_store(%0 : memref<*xi32>, %1 : tensor<*xi32>) {
-  // CHECK-SAME: (%[[MEMREF:.*]]: memref<*xi32>,
-  // CHECK-SAME:  %[[TENSOR:.*]]: tensor<*xi32>)
-  // CHECK: memref.tensor_store %[[TENSOR]], %[[MEMREF]] : memref<*xi32>
-  memref.tensor_store %1, %0 : memref<*xi32>
   return
 }
 

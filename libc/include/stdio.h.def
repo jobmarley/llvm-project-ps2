@@ -11,6 +11,9 @@
 
 #include <__llvm-libc-common.h>
 #include <llvm-libc-macros/file-seek-macros.h>
+#include <llvm-libc-macros/stdio-macros.h>
+
+#include <stdarg.h>
 
 %%public_api()
 

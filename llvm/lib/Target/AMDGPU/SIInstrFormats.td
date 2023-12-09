@@ -150,6 +150,15 @@ class InstSI <dag outs, dag ins, string asm = "",
   // This bit indicates that this is one of WMMA instructions.
   field bit IsWMMA = 0;
 
+  // This bit indicates that tied source will not be read.
+  field bit TiedSourceNotRead = 0;
+
+  // This bit indicates that the instruction is never-uniform/divergent
+  field bit IsNeverUniform = 0;
+
+  // ds_gws_* instructions.
+  field bit GWS = 0;
+
   // These need to be kept in sync with the enum in SIInstrFlags.
   let TSFlags{0} = SALU;
   let TSFlags{1} = VALU;
@@ -229,6 +238,12 @@ class InstSI <dag outs, dag ins, string asm = "",
 
   let TSFlags{59} = IsWMMA;
 
+  let TSFlags{60} = TiedSourceNotRead;
+
+  let TSFlags{61} = IsNeverUniform;
+  
+  let TSFlags{62} = GWS;
+
   let SchedRW = [Write32Bit];
 
   let AsmVariantName = AMDGPUAsmVariants.Default;
@@ -288,6 +303,16 @@ def CPolBit {
 }
 
 class VOPDstOperand <RegisterClass rc> : RegisterOperand <rc, "printVOPDst">;
+
+def VOPDstOperand_t16 : VOPDstOperand <VGPR_16> {
+  let EncoderMethod = "getMachineOpValueT16";
+  let DecoderMethod = "DecodeVGPR_16RegisterClass";
+}
+
+def VOPDstOperand_t16Lo128 : VOPDstOperand <VGPR_16_Lo128> {
+  let EncoderMethod = "getMachineOpValueT16Lo128";
+  let DecoderMethod = "DecodeVGPR_16_Lo128RegisterClass";
+}
 
 class VINTRPe <bits<2> op> : Enc32 {
   bits<8> vdst;

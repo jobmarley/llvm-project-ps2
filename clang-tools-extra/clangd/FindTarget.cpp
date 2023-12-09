@@ -10,6 +10,7 @@
 #include "AST.h"
 #include "HeuristicResolver.h"
 #include "support/Logger.h"
+#include "clang/AST/ASTConcept.h"
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclBase.h"
@@ -189,8 +190,8 @@ public:
         add(S->getUnderlyingDecl(), Flags);
       Flags |= Rel::Alias; // continue with the alias.
     } else if (const UsingEnumDecl *UED = dyn_cast<UsingEnumDecl>(D)) {
-      add(UED->getEnumDecl(), Flags);
-      Flags |= Rel::Alias; // continue with the alias.
+      // UsingEnumDecl is not an alias at all, just a reference.
+      D = UED->getEnumDecl();
     } else if (const auto *NAD = dyn_cast<NamespaceAliasDecl>(D)) {
       add(NAD->getUnderlyingDecl(), Flags | Rel::Underlying);
       Flags |= Rel::Alias; // continue with the alias
@@ -207,9 +208,12 @@ public:
       // templates.
       Flags |= Rel::Alias;
     } else if (const UsingShadowDecl *USD = dyn_cast<UsingShadowDecl>(D)) {
-      // Include the Introducing decl, but don't traverse it. This may end up
-      // including *all* shadows, which we don't want.
-      report(USD->getIntroducer(), Flags | Rel::Alias);
+      // Include the introducing UsingDecl, but don't traverse it. This may end
+      // up including *all* shadows, which we don't want.
+      // Don't apply this logic to UsingEnumDecl, which can't easily be
+      // conflated with the aliases it introduces.
+      if (llvm::isa<UsingDecl>(USD->getIntroducer()))
+        report(USD->getIntroducer(), Flags | Rel::Alias);
       // Shadow decls are synthetic and not themselves interesting.
       // Record the underlying decl instead, if allowed.
       D = USD->getTargetDecl();
@@ -254,7 +258,7 @@ public:
         Outer.add(CE->getCalleeDecl(), Flags);
       }
       void VisitConceptSpecializationExpr(const ConceptSpecializationExpr *E) {
-        Outer.add(E->getNamedConcept(), Flags);
+        Outer.add(E->getConceptReference(), Flags);
       }
       void VisitDeclRefExpr(const DeclRefExpr *DRE) {
         const Decl *D = DRE->getDecl();
@@ -285,7 +289,7 @@ public:
         for (const DesignatedInitExpr::Designator &D :
              llvm::reverse(DIE->designators()))
           if (D.isFieldDesignator()) {
-            Outer.add(D.getField(), Flags);
+            Outer.add(D.getFieldDecl(), Flags);
             // We don't know which designator was intended, we assume the outer.
             break;
           }
@@ -343,6 +347,10 @@ public:
       }
       void VisitCXXDeleteExpr(const CXXDeleteExpr *CDE) {
         Outer.add(CDE->getOperatorDelete(), Flags);
+      }
+      void
+      VisitCXXRewrittenBinaryOperator(const CXXRewrittenBinaryOperator *RBO) {
+        Outer.add(RBO->getDecomposedForm().InnerBinOp, Flags);
       }
     };
     Visitor(*this, Flags).Visit(S);
@@ -525,6 +533,10 @@ public:
         add(USD, Flags);
     }
   }
+
+  void add(const ConceptReference *CR, RelSet Flags) {
+    add(CR->getNamedConcept(), Flags);
+  }
 };
 
 } // namespace
@@ -554,6 +566,8 @@ allTargetDecls(const DynTypedNode &N, const HeuristicResolver *Resolver) {
     Finder.add(CBS->getTypeSourceInfo()->getType(), Flags);
   else if (const ObjCProtocolLoc *PL = N.get<ObjCProtocolLoc>())
     Finder.add(PL->getProtocol(), Flags);
+  else if (const ConceptReference *CR = N.get<ConceptReference>())
+    Finder.add(CR, Flags);
   return Finder.takeDecls();
 }
 
@@ -626,6 +640,12 @@ llvm::SmallVector<ReferenceLoc> refInDecl(const Decl *D,
                                    DeclRelation::Underlying, Resolver)});
     }
 
+    void VisitUsingEnumDecl(const UsingEnumDecl *D) {
+      // "using enum ns::E" is a non-declaration reference.
+      // The reference is covered by the embedded typeloc.
+      // Don't use the default VisitNamedDecl, which would report a declaration.
+    }
+
     void VisitNamespaceAliasDecl(const NamespaceAliasDecl *D) {
       // For namespace alias, "namespace Foo = Target;", we add two references.
       // Add a declaration reference for Foo.
@@ -695,8 +715,23 @@ llvm::SmallVector<ReferenceLoc> refInDecl(const Decl *D,
                                   {OCID->getClassInterface()}});
       Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
                                   OCID->getCategoryNameLoc(),
-                                  /*IsDecl=*/true,
+                                  /*IsDecl=*/false,
                                   {OCID->getCategoryDecl()}});
+      Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
+                                  OCID->getCategoryNameLoc(),
+                                  /*IsDecl=*/true,
+                                  {OCID}});
+    }
+
+    void VisitObjCImplementationDecl(const ObjCImplementationDecl *OIMD) {
+      Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
+                                  OIMD->getLocation(),
+                                  /*IsDecl=*/false,
+                                  {OIMD->getClassInterface()}});
+      Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
+                                  OIMD->getLocation(),
+                                  /*IsDecl=*/true,
+                                  {OIMD}});
     }
   };
 
@@ -713,13 +748,6 @@ llvm::SmallVector<ReferenceLoc> refInStmt(const Stmt *S,
     const HeuristicResolver *Resolver;
     // FIXME: handle more complicated cases: more ObjC, designated initializers.
     llvm::SmallVector<ReferenceLoc> Refs;
-
-    void VisitConceptSpecializationExpr(const ConceptSpecializationExpr *E) {
-      Refs.push_back(ReferenceLoc{E->getNestedNameSpecifierLoc(),
-                                  E->getConceptNameLoc(),
-                                  /*IsDecl=*/false,
-                                  {E->getNamedConcept()}});
-    }
 
     void VisitDeclRefExpr(const DeclRefExpr *E) {
       Refs.push_back(ReferenceLoc{E->getQualifierLoc(),
@@ -799,7 +827,7 @@ llvm::SmallVector<ReferenceLoc> refInStmt(const Stmt *S,
         Refs.push_back(ReferenceLoc{NestedNameSpecifierLoc(),
                                     D.getFieldLoc(),
                                     /*IsDecl=*/false,
-                                    {D.getField()}});
+                                    {D.getFieldDecl()}});
       }
     }
 
@@ -1035,6 +1063,11 @@ public:
     return RecursiveASTVisitor::TraverseConstructorInitializer(Init);
   }
 
+  bool VisitConceptReference(const ConceptReference *CR) {
+    visitNode(DynTypedNode::create(*CR));
+    return true;
+  }
+
 private:
   /// Obtain information about a reference directly defined in \p N. Does not
   /// recurse into child nodes, e.g. do not expect references for constructor
@@ -1080,6 +1113,11 @@ private:
                            PL->getLocation(),
                            /*IsDecl=*/false,
                            {PL->getProtocol()}}};
+    if (const ConceptReference *CR = N.get<ConceptReference>())
+      return {ReferenceLoc{CR->getNestedNameSpecifierLoc(),
+                           CR->getConceptNameLoc(),
+                           /*IsDecl=*/false,
+                           {CR->getNamedConcept()}}};
 
     // We do not have location information for other nodes (QualType, etc)
     return {};
@@ -1093,7 +1131,7 @@ private:
   void reportReference(ReferenceLoc &&Ref, DynTypedNode N) {
     // Strip null targets that can arise from invalid code.
     // (This avoids having to check for null everywhere we insert)
-    llvm::erase_value(Ref.Targets, nullptr);
+    llvm::erase(Ref.Targets, nullptr);
     // Our promise is to return only references from the source code. If we lack
     // location information, skip these nodes.
     // Normally this should not happen in practice, unless there are bugs in the

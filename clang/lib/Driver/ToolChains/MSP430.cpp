@@ -101,7 +101,7 @@ void msp430::getMSP430TargetFeatures(const Driver &D, const ArgList &Args,
     Features.push_back("+hwmultf5");
   } else {
     D.Diag(clang::diag::err_drv_unsupported_option_argument)
-        << HWMultArg->getOption().getName() << HWMult;
+        << HWMultArg->getSpelling() << HWMult;
   }
 }
 
@@ -279,8 +279,7 @@ void msp430::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   if (!Args.hasArg(options::OPT_r, options::OPT_g_Group))
     CmdArgs.push_back("--gc-sections");
 
-  Args.AddAllArgs(CmdArgs, {
-                               options::OPT_e,
+  Args.addAllArgs(CmdArgs, {
                                options::OPT_n,
                                options::OPT_s,
                                options::OPT_t,

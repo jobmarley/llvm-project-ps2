@@ -1,7 +1,7 @@
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 -show-encoding %s | FileCheck --check-prefixes=GFX10,W32 %s
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 -mattr=-wavefrontsize32,+wavefrontsize64 -show-encoding %s | FileCheck --check-prefixes=GFX10,W64 %s
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 %s 2>&1 | FileCheck --check-prefixes=GFX10-ERR,W32-ERR --implicit-check-not=error: %s
-// RUN: not llvm-mc -arch=amdgcn -mcpu=gfx1010 -mattr=-wavefrontsize32,+wavefrontsize64 %s 2>&1 | FileCheck --check-prefixes=GFX10-ERR,W64-ERR --implicit-check-not=error: %s
+// RUN: not llvm-mc -triple=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 -show-encoding %s | FileCheck --check-prefixes=GFX10,W32 %s
+// RUN: not llvm-mc -triple=amdgcn -mcpu=gfx1010 -mattr=-wavefrontsize32,+wavefrontsize64 -show-encoding %s | FileCheck --check-prefixes=GFX10,W64 %s
+// RUN: not llvm-mc -triple=amdgcn -mcpu=gfx1010 -mattr=+wavefrontsize32,-wavefrontsize64 %s 2>&1 | FileCheck --check-prefixes=GFX10-ERR,W32-ERR --implicit-check-not=error: %s
+// RUN: not llvm-mc -triple=amdgcn -mcpu=gfx1010 -mattr=-wavefrontsize32,+wavefrontsize64 %s 2>&1 | FileCheck --check-prefixes=GFX10-ERR,W64-ERR --implicit-check-not=error: %s
 
 //===----------------------------------------------------------------------===//
 // ENC_VOP3.
@@ -12797,6 +12797,9 @@ v_permlane16_b32 v5, v1, 0.5, s3
 v_permlane16_b32 v5, v1, -4.0, s3
 // GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0xef,0x0d,0x00]
 
+v_permlane16_b32 v5, v1, 0xaf123456, s3
+// GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0xff,0x0d,0x00,0x56,0x34,0x12,0xaf]
+
 v_permlane16_b32 v5, v1, s2, s103
 // GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0x05,0x9c,0x01]
 
@@ -12829,6 +12832,12 @@ v_permlane16_b32 v5, v1, s2, 0.5
 
 v_permlane16_b32 v5, v1, s2, -4.0
 // GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0x05,0xdc,0x03]
+
+v_permlane16_b32 v5, v1, s2, 0xaf123456
+// GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0x05,0xfc,0x03,0x56,0x34,0x12,0xaf]
+
+v_permlane16_b32 v5, v1, 0x12345678, 0x12345678
+// GFX10: encoding: [0x05,0x00,0x77,0xd7,0x01,0xff,0xfd,0x03,0x78,0x56,0x34,0x12]
 
 v_permlane16_b32 v5, v1, s2, s3 op_sel:[1,0]
 // GFX10: encoding: [0x05,0x08,0x77,0xd7,0x01,0x05,0x0c,0x00]
@@ -12923,6 +12932,9 @@ v_permlanex16_b32 v5, v1, 0.5, s3
 v_permlanex16_b32 v5, v1, -4.0, s3
 // GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0xef,0x0d,0x00]
 
+v_permlanex16_b32 v5, v1, 0xaf123456, s3
+// GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0xff,0x0d,0x00,0x56,0x34,0x12,0xaf]
+
 v_permlanex16_b32 v5, v1, s2, s103
 // GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0x05,0x9c,0x01]
 
@@ -12955,6 +12967,12 @@ v_permlanex16_b32 v5, v1, s2, 0.5
 
 v_permlanex16_b32 v5, v1, s2, -4.0
 // GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0x05,0xdc,0x03]
+
+v_permlanex16_b32 v5, v1, s2, 0xaf123456
+// GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0x05,0xfc,0x03,0x56,0x34,0x12,0xaf]
+
+v_permlanex16_b32 v5, v1, 0x12345678, 0x12345678
+// GFX10: encoding: [0x05,0x00,0x78,0xd7,0x01,0xff,0xfd,0x03,0x78,0x56,0x34,0x12]
 
 v_permlanex16_b32 v5, v1, s2, s3 op_sel:[1,0]
 // GFX10: encoding: [0x05,0x08,0x78,0xd7,0x01,0x05,0x0c,0x00]

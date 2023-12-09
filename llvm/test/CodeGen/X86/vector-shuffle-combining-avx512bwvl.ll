@@ -108,11 +108,10 @@ define void @PR46178(ptr %0) {
 ; X86-NEXT:    vmovdqu (%eax), %ymm1
 ; X86-NEXT:    vpmovqw %ymm0, %xmm0
 ; X86-NEXT:    vpmovqw %ymm1, %xmm1
-; X86-NEXT:    vpsllw $8, %xmm0, %xmm0
-; X86-NEXT:    vpsraw $8, %xmm0, %xmm0
-; X86-NEXT:    vpsllw $8, %xmm1, %xmm1
-; X86-NEXT:    vpsraw $8, %xmm1, %xmm1
-; X86-NEXT:    vpunpcklqdq {{.*#+}} ymm0 = ymm0[0],ymm1[0],ymm0[2],ymm1[2]
+; X86-NEXT:    vinserti128 $1, %xmm1, %ymm0, %ymm0
+; X86-NEXT:    vpsllw $8, %ymm0, %ymm0
+; X86-NEXT:    vpsraw $8, %ymm0, %ymm0
+; X86-NEXT:    vpermq {{.*#+}} ymm0 = ymm0[0,2,1,1]
 ; X86-NEXT:    vmovdqu %ymm0, (%eax)
 ; X86-NEXT:    vzeroupper
 ; X86-NEXT:    retl
@@ -173,13 +172,14 @@ define <8 x i32> @PR46393(<8 x i16> %a0, i8 %a1) {
 define i64 @PR55050() {
 ; X86-LABEL: PR55050:
 ; X86:       # %bb.0: # %entry
+; X86-NEXT:    xorl %edx, %edx
 ; X86-NEXT:    xorl %eax, %eax
-; X86-NEXT:    testb %al, %al
+; X86-NEXT:    testb %dl, %dl
 ; X86-NEXT:    jne .LBB10_2
 ; X86-NEXT:  # %bb.1: # %if
 ; X86-NEXT:    xorl %eax, %eax
+; X86-NEXT:    xorl %edx, %edx
 ; X86-NEXT:  .LBB10_2: # %exit
-; X86-NEXT:    movl %eax, %edx
 ; X86-NEXT:    retl
 ;
 ; X64-LABEL: PR55050:

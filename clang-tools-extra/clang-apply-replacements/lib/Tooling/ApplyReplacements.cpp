@@ -23,12 +23,12 @@
 #include "clang/Tooling/DiagnosticsYaml.h"
 #include "clang/Tooling/ReplacementsYaml.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include <optional>
 
 using namespace llvm;
 using namespace clang;
@@ -138,11 +138,11 @@ std::error_code collectReplacementsFromDirectory(
 ///
 /// \returns A map mapping FileEntry to a set of Replacement targeting that
 /// file.
-static llvm::DenseMap<const FileEntry *, std::vector<tooling::Replacement>>
+static llvm::DenseMap<FileEntryRef, std::vector<tooling::Replacement>>
 groupReplacements(const TUReplacements &TUs, const TUDiagnostics &TUDs,
                   const clang::SourceManager &SM) {
   llvm::StringSet<> Warned;
-  llvm::DenseMap<const FileEntry *, std::vector<tooling::Replacement>>
+  llvm::DenseMap<FileEntryRef, std::vector<tooling::Replacement>>
       GroupedReplacements;
 
   // Deduplicate identical replacements in diagnostics unless they are from the
@@ -155,7 +155,7 @@ groupReplacements(const TUReplacements &TUs, const TUDiagnostics &TUDs,
 
   auto AddToGroup = [&](const tooling::Replacement &R,
                         const tooling::TranslationUnitDiagnostics *SourceTU,
-                        const llvm::Optional<std::string> BuildDir) {
+                        const std::optional<std::string> BuildDir) {
     // Use the file manager to deduplicate paths. FileEntries are
     // automatically canonicalized. Since relative paths can come from different
     // build directories, make them absolute immediately.
@@ -165,7 +165,7 @@ groupReplacements(const TUReplacements &TUs, const TUDiagnostics &TUDs,
     else
       SM.getFileManager().makeAbsolutePath(Path);
 
-    if (auto Entry = SM.getFileManager().getFile(Path)) {
+    if (auto Entry = SM.getFileManager().getOptionalFileRef(Path)) {
       if (SourceTU) {
         auto &Replaces = DiagReplacements[*Entry];
         auto It = Replaces.find(R);
@@ -212,10 +212,10 @@ bool mergeAndDeduplicate(const TUReplacements &TUs, const TUDiagnostics &TUDs,
   // To report conflicting replacements on corresponding file, all replacements
   // are stored into 1 big AtomicChange.
   for (const auto &FileAndReplacements : GroupedReplacements) {
-    const FileEntry *Entry = FileAndReplacements.first;
+    FileEntryRef Entry = FileAndReplacements.first;
     const SourceLocation BeginLoc =
         SM.getLocForStartOfFile(SM.getOrCreateFileID(Entry, SrcMgr::C_User));
-    tooling::AtomicChange FileChange(Entry->getName(), Entry->getName());
+    tooling::AtomicChange FileChange(Entry.getName(), Entry.getName());
     for (const auto &R : FileAndReplacements.second) {
       llvm::Error Err =
           FileChange.replace(SM, BeginLoc.getLocWithOffset(R.getOffset()),

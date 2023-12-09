@@ -6,16 +6,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC_SUPPORT_FPUTIL_DIVISION_AND_REMAINDER_OPERATIONS_H
-#define LLVM_LIBC_SRC_SUPPORT_FPUTIL_DIVISION_AND_REMAINDER_OPERATIONS_H
+#ifndef LLVM_LIBC_SRC___SUPPORT_FPUTIL_DIVISIONANDREMAINDEROPERATIONS_H
+#define LLVM_LIBC_SRC___SUPPORT_FPUTIL_DIVISIONANDREMAINDEROPERATIONS_H
 
 #include "FPBits.h"
 #include "ManipulationFunctions.h"
 #include "NormalFloat.h"
 
 #include "src/__support/CPP/type_traits.h"
+#include "src/__support/common.h"
 
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE {
 namespace fputil {
 
 static constexpr int QUOTIENT_LSB_BITS = 3;
@@ -23,18 +24,18 @@ static constexpr int QUOTIENT_LSB_BITS = 3;
 // The implementation is a bit-by-bit algorithm which uses integer division
 // to evaluate the quotient and remainder.
 template <typename T, cpp::enable_if_t<cpp::is_floating_point_v<T>, int> = 0>
-static inline T remquo(T x, T y, int &q) {
+LIBC_INLINE T remquo(T x, T y, int &q) {
   FPBits<T> xbits(x), ybits(y);
   if (xbits.is_nan())
     return x;
   if (ybits.is_nan())
     return y;
   if (xbits.is_inf() || ybits.is_zero())
-    return FPBits<T>::build_nan(1);
+    return FPBits<T>::build_quiet_nan(1);
 
   if (xbits.is_zero()) {
     q = 0;
-    return __llvm_libc::fputil::copysign(T(0.0), x);
+    return LIBC_NAMESPACE::fputil::copysign(T(0.0), x);
   }
 
   if (ybits.is_inf()) {
@@ -72,7 +73,7 @@ static inline T remquo(T x, T y, int &q) {
     mx = n - my;
     if (mx == 0) {
       q = result_sign ? -q : q;
-      return __llvm_libc::fputil::copysign(T(0.0), x);
+      return LIBC_NAMESPACE::fputil::copysign(T(0.0), x);
     }
   }
 
@@ -108,11 +109,11 @@ static inline T remquo(T x, T y, int &q) {
 
   q = result_sign ? -q : q;
   if (native_remainder == T(0.0))
-    return __llvm_libc::fputil::copysign(T(0.0), x);
+    return LIBC_NAMESPACE::fputil::copysign(T(0.0), x);
   return native_remainder;
 }
 
 } // namespace fputil
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE
 
-#endif // LLVM_LIBC_SRC_SUPPORT_FPUTIL_DIVISION_AND_REMAINDER_OPERATIONS_H
+#endif // LLVM_LIBC_SRC___SUPPORT_FPUTIL_DIVISIONANDREMAINDEROPERATIONS_H

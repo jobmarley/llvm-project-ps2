@@ -20,6 +20,7 @@
 
 #include "omptarget.h"
 
+#include <cstdint>
 #include <list>
 #include <map>
 #include <mutex>
@@ -31,13 +32,11 @@ struct __tgt_bin_desc;
 
 struct RTLInfoTy {
   typedef int32_t(init_plugin_ty)();
-  typedef int32_t(deinit_plugin_ty)();
   typedef int32_t(is_valid_binary_ty)(void *);
   typedef int32_t(is_valid_binary_info_ty)(void *, void *);
   typedef int32_t(is_data_exchangable_ty)(int32_t, int32_t);
   typedef int32_t(number_of_devices_ty)();
   typedef int32_t(init_device_ty)(int32_t);
-  typedef int32_t(deinit_device_ty)(int32_t);
   typedef __tgt_target_table *(load_binary_ty)(int32_t, void *);
   typedef void *(data_alloc_ty)(int32_t, int64_t, void *, int32_t);
   typedef int32_t(data_submit_ty)(int32_t, void *, void *, int64_t);
@@ -50,19 +49,11 @@ struct RTLInfoTy {
   typedef int32_t(data_exchange_async_ty)(int32_t, void *, int32_t, void *,
                                           int64_t, __tgt_async_info *);
   typedef int32_t(data_delete_ty)(int32_t, void *, int32_t);
-  typedef int32_t(run_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                 int32_t);
-  typedef int32_t(run_region_async_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                       int32_t, __tgt_async_info *);
-  typedef int32_t(run_team_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                      int32_t, int32_t, int32_t, uint64_t);
-  typedef int32_t(run_team_region_async_ty)(int32_t, void *, void **,
-                                            ptrdiff_t *, int32_t, int32_t,
-                                            int32_t, uint64_t,
-                                            __tgt_async_info *);
+  typedef int32_t(launch_kernel_ty)(int32_t, void *, void **, ptrdiff_t *,
+                                    const KernelArgsTy *, __tgt_async_info *);
   typedef int64_t(init_requires_ty)(int64_t);
   typedef int32_t(synchronize_ty)(int32_t, __tgt_async_info *);
-  typedef int32_t (*register_lib_ty)(__tgt_bin_desc *);
+  typedef int32_t(query_async_ty)(int32_t, __tgt_async_info *);
   typedef int32_t(supports_empty_images_ty)();
   typedef void(print_device_info_ty)(int32_t);
   typedef void(set_info_flag_ty)(uint32_t);
@@ -75,6 +66,13 @@ struct RTLInfoTy {
   typedef int32_t(init_async_info_ty)(int32_t, __tgt_async_info **);
   typedef int64_t(init_device_into_ty)(int64_t, __tgt_device_info *,
                                        const char **);
+  typedef int32_t(data_lock_ty)(int32_t, void *, int64_t, void **);
+  typedef int32_t(data_unlock_ty)(int32_t, void *);
+  typedef int32_t(data_notify_mapped_ty)(int32_t, void *, int64_t);
+  typedef int32_t(data_notify_unmapped_ty)(int32_t, void *);
+  typedef int32_t(set_device_offset_ty)(int32_t);
+  typedef int32_t(activate_record_replay_ty)(int32_t, uint64_t, void *, bool,
+                                             bool, uint64_t &);
 
   int32_t Idx = -1;             // RTL index, index is the number of devices
                                 // of other RTLs that were registered before,
@@ -90,13 +88,11 @@ struct RTLInfoTy {
 
   // Functions implemented in the RTL.
   init_plugin_ty *init_plugin = nullptr;
-  deinit_plugin_ty *deinit_plugin = nullptr;
   is_valid_binary_ty *is_valid_binary = nullptr;
   is_valid_binary_info_ty *is_valid_binary_info = nullptr;
   is_data_exchangable_ty *is_data_exchangable = nullptr;
   number_of_devices_ty *number_of_devices = nullptr;
   init_device_ty *init_device = nullptr;
-  deinit_device_ty *deinit_device = nullptr;
   load_binary_ty *load_binary = nullptr;
   data_alloc_ty *data_alloc = nullptr;
   data_submit_ty *data_submit = nullptr;
@@ -106,14 +102,10 @@ struct RTLInfoTy {
   data_exchange_ty *data_exchange = nullptr;
   data_exchange_async_ty *data_exchange_async = nullptr;
   data_delete_ty *data_delete = nullptr;
-  run_region_ty *run_region = nullptr;
-  run_region_async_ty *run_region_async = nullptr;
-  run_team_region_ty *run_team_region = nullptr;
-  run_team_region_async_ty *run_team_region_async = nullptr;
+  launch_kernel_ty *launch_kernel = nullptr;
   init_requires_ty *init_requires = nullptr;
   synchronize_ty *synchronize = nullptr;
-  register_lib_ty register_lib = nullptr;
-  register_lib_ty unregister_lib = nullptr;
+  query_async_ty *query_async = nullptr;
   supports_empty_images_ty *supports_empty_images = nullptr;
   set_info_flag_ty *set_info_flag = nullptr;
   print_device_info_ty *print_device_info = nullptr;
@@ -125,6 +117,12 @@ struct RTLInfoTy {
   init_async_info_ty *init_async_info = nullptr;
   init_device_into_ty *init_device_info = nullptr;
   release_async_info_ty *release_async_info = nullptr;
+  data_lock_ty *data_lock = nullptr;
+  data_unlock_ty *data_unlock = nullptr;
+  data_notify_mapped_ty *data_notify_mapped = nullptr;
+  data_notify_unmapped_ty *data_notify_unmapped = nullptr;
+  set_device_offset_ty *set_device_offset = nullptr;
+  activate_record_replay_ty *activate_record_replay = nullptr;
 
   // Are there images associated with this RTL.
   bool IsUsed = false;
@@ -165,10 +163,11 @@ struct RTLsTy {
   // Unregister a shared library from all RTLs.
   void unregisterLib(__tgt_bin_desc *Desc);
 
-  // Mutex-like object to guarantee thread-safety and unique initialization
-  // (i.e. the library attempts to load the RTLs (plugins) only once).
-  std::once_flag InitFlag;
-  void loadRTLs(); // not thread-safe
+  // not thread-safe, called from global constructor (i.e. once)
+  void loadRTLs();
+
+private:
+  static bool attemptLoadRTL(const std::string &RTLName, RTLInfoTy &RTL);
 };
 
 /// Map between the host entry begin and the translation table. Each

@@ -7,8 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/VectorUtils.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
+#include <limits>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "vfabi-demangling"
 
 namespace {
 /// Utilities for the Vector Function ABI name parser.
@@ -21,8 +26,9 @@ enum class ParseRet {
 };
 
 /// Extracts the `<isa>` information from the mangled string, and
-/// sets the `ISA` accordingly.
-ParseRet tryParseISA(StringRef &MangledName, VFISAKind &ISA) {
+/// sets the `ISA` accordingly. If successful, the <isa> token is removed
+/// from the input string `MangledName`.
+static ParseRet tryParseISA(StringRef &MangledName, VFISAKind &ISA) {
   if (MangledName.empty())
     return ParseRet::Error;
 
@@ -45,9 +51,9 @@ ParseRet tryParseISA(StringRef &MangledName, VFISAKind &ISA) {
 }
 
 /// Extracts the `<mask>` information from the mangled string, and
-/// sets `IsMasked` accordingly. The input string `MangledName` is
-/// left unmodified.
-ParseRet tryParseMask(StringRef &MangledName, bool &IsMasked) {
+/// sets `IsMasked` accordingly. If successful, the <mask> token is removed
+/// from the input string `MangledName`.
+static ParseRet tryParseMask(StringRef &MangledName, bool &IsMasked) {
   if (MangledName.consume_front("M")) {
     IsMasked = true;
     return ParseRet::OK;
@@ -62,20 +68,28 @@ ParseRet tryParseMask(StringRef &MangledName, bool &IsMasked) {
 }
 
 /// Extract the `<vlen>` information from the mangled string, and
-/// sets `VF` accordingly. A `<vlen> == "x"` token is interpreted as a scalable
-/// vector length. On success, the `<vlen>` token is removed from
-/// the input string `ParseString`.
-///
-ParseRet tryParseVLEN(StringRef &ParseString, unsigned &VF, bool &IsScalable) {
+/// sets `ParsedVF` accordingly. A `<vlen> == "x"` token is interpreted as a
+/// scalable vector length and the boolean is set to true, otherwise a nonzero
+/// unsigned integer will be directly used as a VF. On success, the `<vlen>`
+/// token is removed from the input string `ParseString`.
+static ParseRet tryParseVLEN(StringRef &ParseString, VFISAKind ISA,
+                             std::pair<unsigned, bool> &ParsedVF) {
   if (ParseString.consume_front("x")) {
-    // Set VF to 0, to be later adjusted to a value grater than zero
-    // by looking at the signature of the vector function with
-    // `getECFromSignature`.
-    VF = 0;
-    IsScalable = true;
+    // SVE is the only scalable ISA currently supported.
+    if (ISA != VFISAKind::SVE) {
+      LLVM_DEBUG(dbgs() << "Vector function variant declared with scalable VF "
+                        << "but ISA is not SVE\n");
+      return ParseRet::Error;
+    }
+    // We can't determine the VF of a scalable vector by looking at the vlen
+    // string (just 'x'), so say we successfully parsed it but return a 'true'
+    // for the scalable field with an invalid VF field so that we know to look
+    // up the actual VF based on element types from the parameters or return.
+    ParsedVF = {0, true};
     return ParseRet::OK;
   }
 
+  unsigned VF = 0;
   if (ParseString.consumeInteger(10, VF))
     return ParseRet::Error;
 
@@ -83,7 +97,7 @@ ParseRet tryParseVLEN(StringRef &ParseString, unsigned &VF, bool &IsScalable) {
   if (VF == 0)
     return ParseRet::Error;
 
-  IsScalable = false;
+  ParsedVF = {VF, false};
   return ParseRet::OK;
 }
 
@@ -95,13 +109,13 @@ ParseRet tryParseVLEN(StringRef &ParseString, unsigned &VF, bool &IsScalable) {
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `Pos` to
 /// <number>, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
+/// parsing error. If nothing is parsed, it returns std::nullopt.
 ///
 /// The function expects <token> to be one of "ls", "Rs", "Us" or
 /// "Ls".
-ParseRet tryParseLinearTokenWithRuntimeStep(StringRef &ParseString,
-                                            VFParamKind &PKind, int &Pos,
-                                            const StringRef Token) {
+static ParseRet tryParseLinearTokenWithRuntimeStep(StringRef &ParseString,
+                                                   VFParamKind &PKind, int &Pos,
+                                                   const StringRef Token) {
   if (ParseString.consume_front(Token)) {
     PKind = VFABI::getVFParamKindFromString(Token);
     if (ParseString.consumeInteger(10, Pos))
@@ -122,9 +136,10 @@ ParseRet tryParseLinearTokenWithRuntimeStep(StringRef &ParseString,
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `StepOrPos` to
 /// <number>, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
-ParseRet tryParseLinearWithRuntimeStep(StringRef &ParseString,
-                                       VFParamKind &PKind, int &StepOrPos) {
+/// parsing error. If nothing is parsed, it returns std::nullopt.
+static ParseRet tryParseLinearWithRuntimeStep(StringRef &ParseString,
+                                              VFParamKind &PKind,
+                                              int &StepOrPos) {
   ParseRet Ret;
 
   // "ls" <RuntimeStepPos>
@@ -158,13 +173,14 @@ ParseRet tryParseLinearWithRuntimeStep(StringRef &ParseString,
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `LinearStep` to
 /// <number>, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
+/// parsing error. If nothing is parsed, it returns std::nullopt.
 ///
 /// The function expects <token> to be one of "l", "R", "U" or
 /// "L".
-ParseRet tryParseCompileTimeLinearToken(StringRef &ParseString,
-                                        VFParamKind &PKind, int &LinearStep,
-                                        const StringRef Token) {
+static ParseRet tryParseCompileTimeLinearToken(StringRef &ParseString,
+                                               VFParamKind &PKind,
+                                               int &LinearStep,
+                                               const StringRef Token) {
   if (ParseString.consume_front(Token)) {
     PKind = VFABI::getVFParamKindFromString(Token);
     const bool Negate = ParseString.consume_front("n");
@@ -186,9 +202,10 @@ ParseRet tryParseCompileTimeLinearToken(StringRef &ParseString,
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `LinearStep` to
 /// <number>, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
-ParseRet tryParseLinearWithCompileTimeStep(StringRef &ParseString,
-                                           VFParamKind &PKind, int &StepOrPos) {
+/// parsing error. If nothing is parsed, it returns std::nullopt.
+static ParseRet tryParseLinearWithCompileTimeStep(StringRef &ParseString,
+                                                  VFParamKind &PKind,
+                                                  int &StepOrPos) {
   // "l" {"n"} <CompileTimeStep>
   if (tryParseCompileTimeLinearToken(ParseString, PKind, StepOrPos, "l") ==
       ParseRet::OK)
@@ -219,9 +236,9 @@ ParseRet tryParseLinearWithCompileTimeStep(StringRef &ParseString,
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `StepOrPos`
 /// accordingly, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
-ParseRet tryParseParameter(StringRef &ParseString, VFParamKind &PKind,
-                           int &StepOrPos) {
+/// parsing error. If nothing is parsed, it returns std::nullopt.
+static ParseRet tryParseParameter(StringRef &ParseString, VFParamKind &PKind,
+                                  int &StepOrPos) {
   if (ParseString.consume_front("v")) {
     PKind = VFParamKind::Vector;
     StepOrPos = 0;
@@ -254,8 +271,8 @@ ParseRet tryParseParameter(StringRef &ParseString, VFParamKind &PKind,
 /// On success, it removes the parsed parameter from `ParseString`,
 /// sets `PKind` to the correspondent enum value, sets `StepOrPos`
 /// accordingly, and return success.  On a syntax error, it return a
-/// parsing error. If nothing is parsed, it returns None.
-ParseRet tryParseAlign(StringRef &ParseString, Align &Alignment) {
+/// parsing error. If nothing is parsed, it returns std::nullopt.
+static ParseRet tryParseAlign(StringRef &ParseString, Align &Alignment) {
   uint64_t Val;
   //    "a" <number>
   if (ParseString.consume_front("a")) {
@@ -272,50 +289,87 @@ ParseRet tryParseAlign(StringRef &ParseString, Align &Alignment) {
 
   return ParseRet::None;
 }
-#ifndef NDEBUG
-// Verify the assumtion that all vectors in the signature of a vector
-// function have the same number of elements.
-bool verifyAllVectorsHaveSameWidth(FunctionType *Signature) {
-  SmallVector<VectorType *, 2> VecTys;
-  if (auto *RetTy = dyn_cast<VectorType>(Signature->getReturnType()))
-    VecTys.push_back(RetTy);
-  for (auto *Ty : Signature->params())
-    if (auto *VTy = dyn_cast<VectorType>(Ty))
-      VecTys.push_back(VTy);
 
-  if (VecTys.size() <= 1)
-    return true;
+// Returns the 'natural' VF for a given scalar element type, based on the
+// current architecture.
+//
+// For SVE (currently the only scalable architecture with a defined name
+// mangling), we assume a minimum vector size of 128b and return a VF based on
+// the number of elements of the given type which would fit in such a vector.
+static std::optional<ElementCount> getElementCountForTy(const VFISAKind ISA,
+                                                        const Type *Ty) {
+  // Only AArch64 SVE is supported at present.
+  assert(ISA == VFISAKind::SVE &&
+         "Scalable VF decoding only implemented for SVE\n");
 
-  assert(VecTys.size() > 1 && "Invalid number of elements.");
-  const ElementCount EC = VecTys[0]->getElementCount();
-  return llvm::all_of(llvm::drop_begin(VecTys), [&EC](VectorType *VTy) {
-    return (EC == VTy->getElementCount());
-  });
+  if (Ty->isIntegerTy(64) || Ty->isDoubleTy() || Ty->isPointerTy())
+    return ElementCount::getScalable(2);
+  if (Ty->isIntegerTy(32) || Ty->isFloatTy())
+    return ElementCount::getScalable(4);
+  if (Ty->isIntegerTy(16) || Ty->is16bitFPTy())
+    return ElementCount::getScalable(8);
+  if (Ty->isIntegerTy(8))
+    return ElementCount::getScalable(16);
+
+  return std::nullopt;
 }
 
-#endif // NDEBUG
+// Extract the VectorizationFactor from a given function signature, based
+// on the widest scalar element types that will become vector parameters.
+static std::optional<ElementCount>
+getScalableECFromSignature(const FunctionType *Signature, const VFISAKind ISA,
+                           const SmallVectorImpl<VFParameter> &Params) {
+  // Start with a very wide EC and drop when we find smaller ECs based on type.
+  ElementCount MinEC =
+      ElementCount::getScalable(std::numeric_limits<unsigned int>::max());
+  for (auto &Param : Params) {
+    // Only vector parameters are used when determining the VF; uniform or
+    // linear are left as scalars, so do not affect VF.
+    if (Param.ParamKind == VFParamKind::Vector) {
+      // If the scalar function doesn't actually have a corresponding argument,
+      // reject the mapping.
+      if (Param.ParamPos >= Signature->getNumParams())
+        return std::nullopt;
+      Type *PTy = Signature->getParamType(Param.ParamPos);
 
-// Extract the VectorizationFactor from a given function signature,
-// under the assumtion that all vectors have the same number of
-// elements, i.e. same ElementCount.Min.
-ElementCount getECFromSignature(FunctionType *Signature) {
-  assert(verifyAllVectorsHaveSameWidth(Signature) &&
-         "Invalid vector signature.");
+      std::optional<ElementCount> EC = getElementCountForTy(ISA, PTy);
+      // If we have an unknown scalar element type we can't find a reasonable
+      // VF.
+      if (!EC)
+        return std::nullopt;
 
-  if (auto *RetTy = dyn_cast<VectorType>(Signature->getReturnType()))
-    return RetTy->getElementCount();
-  for (auto *Ty : Signature->params())
-    if (auto *VTy = dyn_cast<VectorType>(Ty))
-      return VTy->getElementCount();
+      // Find the smallest VF, based on the widest scalar type.
+      if (ElementCount::isKnownLT(*EC, MinEC))
+        MinEC = *EC;
+    }
+  }
 
-  return ElementCount::getFixed(/*Min=*/1);
+  // Also check the return type if not void.
+  Type *RetTy = Signature->getReturnType();
+  if (!RetTy->isVoidTy()) {
+    std::optional<ElementCount> ReturnEC = getElementCountForTy(ISA, RetTy);
+    // If we have an unknown scalar element type we can't find a reasonable VF.
+    if (!ReturnEC)
+      return std::nullopt;
+    if (ElementCount::isKnownLT(*ReturnEC, MinEC))
+      MinEC = *ReturnEC;
+  }
+
+  // The SVE Vector function call ABI bases the VF on the widest element types
+  // present, and vector arguments containing types of that width are always
+  // considered to be packed. Arguments with narrower elements are considered
+  // to be unpacked.
+  if (MinEC.getKnownMinValue() < std::numeric_limits<unsigned int>::max())
+    return MinEC;
+
+  return std::nullopt;
 }
 } // namespace
 
 // Format of the ABI name:
 // _ZGV<isa><mask><vlen><parameters>_<scalarname>[(<redirection>)]
-Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
-                                            const Module &M) {
+std::optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
+                                                 const CallInst &CI) {
   const StringRef OriginalName = MangledName;
   // Assume there is no custom name <redirection>, and therefore the
   // vector name consists of
@@ -324,24 +378,23 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
 
   // Parse the fixed size part of the manled name
   if (!MangledName.consume_front("_ZGV"))
-    return None;
+    return std::nullopt;
 
   // Extract ISA. An unknow ISA is also supported, so we accept all
   // values.
   VFISAKind ISA;
   if (tryParseISA(MangledName, ISA) != ParseRet::OK)
-    return None;
+    return std::nullopt;
 
   // Extract <mask>.
   bool IsMasked;
   if (tryParseMask(MangledName, IsMasked) != ParseRet::OK)
-    return None;
+    return std::nullopt;
 
   // Parse the variable size, starting from <vlen>.
-  unsigned VF;
-  bool IsScalable;
-  if (tryParseVLEN(MangledName, VF, IsScalable) != ParseRet::OK)
-    return None;
+  std::pair<unsigned, bool> ParsedVF;
+  if (tryParseVLEN(MangledName, ISA, ParsedVF) != ParseRet::OK)
+    return std::nullopt;
 
   // Parse the <parameters>.
   ParseRet ParamFound;
@@ -354,7 +407,7 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
 
     // Bail off if there is a parsing error in the parsing of the parameter.
     if (ParamFound == ParseRet::Error)
-      return None;
+      return std::nullopt;
 
     if (ParamFound == ParseRet::OK) {
       Align Alignment;
@@ -362,7 +415,7 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
       const ParseRet AlignFound = tryParseAlign(MangledName, Alignment);
       // Bail off if there is a syntax error in the align token.
       if (AlignFound == ParseRet::Error)
-        return None;
+        return std::nullopt;
 
       // Add the parameter.
       Parameters.push_back({ParameterPos, PKind, StepOrPos, Alignment});
@@ -372,12 +425,25 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
   // A valid MangledName must have at least one valid entry in the
   // <parameters>.
   if (Parameters.empty())
-    return None;
+    return std::nullopt;
+
+  // Figure out the number of lanes in vectors for this function variant. This
+  // is easy for fixed length, as the vlen encoding just gives us the value
+  // directly. However, if the vlen mangling indicated that this function
+  // variant expects scalable vectors we need to work it out based on the
+  // demangled parameter types and the scalar function signature.
+  std::optional<ElementCount> EC;
+  if (ParsedVF.second) {
+    EC = getScalableECFromSignature(CI.getFunctionType(), ISA, Parameters);
+    if (!EC)
+      return std::nullopt;
+  } else
+    EC = ElementCount::getFixed(ParsedVF.first);
 
   // Check for the <scalarname> and the optional <redirection>, which
   // are separated from the prefix with "_"
   if (!MangledName.consume_front("_"))
-    return None;
+    return std::nullopt;
 
   // The rest of the string must be in the format:
   // <scalarname>[(<redirection>)]
@@ -385,25 +451,25 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
       MangledName.take_while([](char In) { return In != '('; });
 
   if (ScalarName.empty())
-    return None;
+    return std::nullopt;
 
   // Reduce MangledName to [(<redirection>)].
   MangledName = MangledName.ltrim(ScalarName);
   // Find the optional custom name redirection.
   if (MangledName.consume_front("(")) {
     if (!MangledName.consume_back(")"))
-      return None;
+      return std::nullopt;
     // Update the vector variant with the one specified by the user.
     VectorName = MangledName;
     // If the vector name is missing, bail out.
     if (VectorName.empty())
-      return None;
+      return std::nullopt;
   }
 
   // LLVM internal mapping via the TargetLibraryInfo (TLI) must be
   // redirected to an existing name.
   if (ISA == VFISAKind::LLVM && VectorName == OriginalName)
-    return None;
+    return std::nullopt;
 
   // When <mask> is "M", we need to add a parameter that is used as
   // global predicate for the function.
@@ -426,32 +492,7 @@ Optional<VFInfo> VFABI::tryDemangleForVFABI(StringRef MangledName,
     assert(Parameters.back().ParamKind == VFParamKind::GlobalPredicate &&
            "The global predicate must be the last parameter");
 
-  // Adjust the VF for scalable signatures. The EC.Min is not encoded
-  // in the name of the function, but it is encoded in the IR
-  // signature of the function. We need to extract this information
-  // because it is needed by the loop vectorizer, which reasons in
-  // terms of VectorizationFactor or ElementCount. In particular, we
-  // need to make sure that the VF field of the VFShape class is never
-  // set to 0.
-  if (IsScalable) {
-    const Function *F = M.getFunction(VectorName);
-    // The declaration of the function must be present in the module
-    // to be able to retrieve its signature.
-    if (!F)
-      return None;
-    const ElementCount EC = getECFromSignature(F->getFunctionType());
-    VF = EC.getKnownMinValue();
-  }
-
-  // 1. We don't accept a zero lanes vectorization factor.
-  // 2. We don't accept the demangling if the vector function is not
-  // present in the module.
-  if (VF == 0)
-    return None;
-  if (!M.getFunction(VectorName))
-    return None;
-
-  const VFShape Shape({ElementCount::get(VF, IsScalable), Parameters});
+  const VFShape Shape({*EC, Parameters});
   return VFInfo({Shape, std::string(ScalarName), std::string(VectorName), ISA});
 }
 

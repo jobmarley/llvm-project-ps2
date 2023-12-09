@@ -39,6 +39,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Transforms/Utils/EscapeEnumerator.h"
 #include <cassert>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -105,7 +106,7 @@ ShadowStackGCLowering::ShadowStackGCLowering() : FunctionPass(ID) {
 
 Constant *ShadowStackGCLowering::GetFrameMap(Function &F) {
   // doInitialization creates the abstract type of this value.
-  Type *VoidPtr = Type::getInt8PtrTy(F.getContext());
+  Type *VoidPtr = PointerType::getUnqual(F.getContext());
 
   // Truncate the ShadowStackDescriptor if some metadata is null.
   unsigned NumMeta = 0;
@@ -305,7 +306,7 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
   if (Roots.empty())
     return false;
 
-  Optional<DomTreeUpdater> DTU;
+  std::optional<DomTreeUpdater> DTU;
   if (auto *DTWP = getAnalysisIfAvailable<DominatorTreeWrapperPass>())
     DTU.emplace(DTWP->getDomTree(), DomTreeUpdater::UpdateStrategy::Lazy);
 
@@ -325,7 +326,7 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
 
   // Initialize the map pointer and load the current head of the shadow stack.
   Instruction *CurrentHead =
-      AtEntry.CreateLoad(StackEntryTy->getPointerTo(), Head, "gc_currhead");
+      AtEntry.CreateLoad(AtEntry.getPtrTy(), Head, "gc_currhead");
   Instruction *EntryMapPtr = CreateGEP(Context, AtEntry, ConcreteStackEntryTy,
                                        StackEntry, 0, 1, "gc_frame.map");
   AtEntry.CreateStore(FrameMap, EntryMapPtr);
@@ -360,15 +361,15 @@ bool ShadowStackGCLowering::runOnFunction(Function &F) {
 
   // For each instruction that escapes...
   EscapeEnumerator EE(F, "gc_cleanup", /*HandleExceptions=*/true,
-                      DTU ? DTU.getPointer() : nullptr);
+                      DTU ? &*DTU : nullptr);
   while (IRBuilder<> *AtExit = EE.Next()) {
     // Pop the entry from the shadow stack. Don't reuse CurrentHead from
     // AtEntry, since that would make the value live for the entire function.
     Instruction *EntryNextPtr2 =
         CreateGEP(Context, *AtExit, ConcreteStackEntryTy, StackEntry, 0, 0,
                   "gc_frame.next");
-    Value *SavedHead = AtExit->CreateLoad(StackEntryTy->getPointerTo(),
-                                          EntryNextPtr2, "gc_savedhead");
+    Value *SavedHead =
+        AtExit->CreateLoad(AtExit->getPtrTy(), EntryNextPtr2, "gc_savedhead");
     AtExit->CreateStore(SavedHead, Head);
   }
 

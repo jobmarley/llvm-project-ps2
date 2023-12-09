@@ -17,13 +17,11 @@
 #  pragma GCC system_header
 #endif
 
-#ifndef _LIBCPP_CXX03_LANG
+#if _LIBCPP_STD_VER >= 17
 
 _LIBCPP_BEGIN_NAMESPACE_FILESYSTEM
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_PUSH
-
-enum class _LIBCPP_ENUM_VIS perm_options : unsigned char {
+enum class perm_options : unsigned char {
   replace = 1,
   add = 2,
   remove = 4,
@@ -68,10 +66,8 @@ inline perm_options& operator^=(perm_options& __lhs, perm_options __rhs) {
   return __lhs = __lhs ^ __rhs;
 }
 
-_LIBCPP_AVAILABILITY_FILESYSTEM_POP
-
 _LIBCPP_END_NAMESPACE_FILESYSTEM
 
-#endif // _LIBCPP_CXX03_LANG
+#endif // _LIBCPP_STD_VER >= 17
 
 #endif // _LIBCPP___FILESYSTEM_PERM_OPTIONS_H

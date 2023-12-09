@@ -8,7 +8,10 @@
 //
 // This file declares the dataflow analysis class for integer range inference
 // so that it can be used in transformations over the `arith` dialect such as
-// branch elimination or signed->unsigned rewriting
+// branch elimination or signed->unsigned rewriting.
+//
+// One can also implement InferIntRangeInterface on ops in custom dialects,
+// and then use this analysis to propagate ranges with custom semantics.
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,7 +33,7 @@ public:
   static IntegerValueRange getMaxRange(Value value);
 
   /// Create an integer value range lattice value.
-  IntegerValueRange(Optional<ConstantIntRanges> value = None)
+  IntegerValueRange(std::optional<ConstantIntRanges> value = std::nullopt)
       : value(std::move(value)) {}
 
   /// Whether the range is uninitialized. This happens when the state hasn't
@@ -63,7 +66,7 @@ public:
 
 private:
   /// The known integer value range.
-  Optional<ConstantIntRanges> value;
+  std::optional<ConstantIntRanges> value;
 };
 
 /// This lattice element represents the integer value range of an SSA value.
@@ -81,10 +84,13 @@ public:
 /// Integer range analysis determines the integer value range of SSA values
 /// using operations that define `InferIntRangeInterface` and also sets the
 /// range of iteration indices of loops with known bounds.
+///
+/// This analysis depends on DeadCodeAnalysis, and will be a silent no-op
+/// if DeadCodeAnalysis is not loaded in the same solver context.
 class IntegerRangeAnalysis
-    : public SparseDataFlowAnalysis<IntegerValueRangeLattice> {
+    : public SparseForwardDataFlowAnalysis<IntegerValueRangeLattice> {
 public:
-  using SparseDataFlowAnalysis::SparseDataFlowAnalysis;
+  using SparseForwardDataFlowAnalysis::SparseForwardDataFlowAnalysis;
 
   /// At an entry point, we cannot reason about interger value ranges.
   void setToEntryState(IntegerValueRangeLattice *lattice) override {

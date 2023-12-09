@@ -46,37 +46,35 @@ stages there is no ABI stability in any form.
 
 .. toctree::
    :hidden:
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Using
 
-   runtimes_build
+   usage_modes
+   overlay_mode
+   fullbuild_mode
+   configure
+   gpu/index.rst
 
 .. toctree::
    :hidden:
    :maxdepth: 1
    :caption: Status
 
+   compiler_support
+   date_and_time
+   math/index.rst
    strings
    stdio
-   math
 
 .. toctree::
    :hidden:
    :maxdepth: 1
    :caption: Development
 
-   build_system
-   clang_tidy_checks
-   entrypoints
-   fuzzing
-   ground_truth_specification
-   header_generation
-   implementation_standard
-   api_test
-   layering
-   mechanics_of_public_api
-   redirectors
-   source_layout
+   build_and_test
+   dev/index.rst
+   porting
+   contributing
 
 .. toctree::
    :hidden:
@@ -85,4 +83,7 @@ stages there is no ABI stability in any form.
 
    Source Code <https://github.com/llvm/llvm-project/tree/main/libc>
    Bug Reports <https://github.com/llvm/llvm-project/labels/libc>
+   Discourse <https://discourse.llvm.org/c/runtimes/libc>
+   Join the Discord <https://discord.gg/xS7Z362>
+   Discord Channel <https://discord.com/channels/636084430946959380/636732994891284500>
    Buildbot <https://lab.llvm.org/buildbot/#/builders?tags=libc>

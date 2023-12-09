@@ -62,9 +62,17 @@ bool IONAME(OutputNamelist)(Cookie cookie, const NamelistGroup &group) {
     if (listOutput) {
       listOutput->set_lastWasUndelimitedCharacter(false);
     }
-    if (!(EmitWithAdvance(j == 0 ? ' ' : comma) && EmitUpperCase(item.name) &&
-            EmitWithAdvance('=') &&
-            descr::DescriptorIO<Direction::Output>(io, item.descriptor))) {
+    if (!EmitWithAdvance(j == 0 ? ' ' : comma) || !EmitUpperCase(item.name) ||
+        !EmitWithAdvance('=')) {
+      return false;
+    }
+    if (const auto *addendum{item.descriptor.Addendum()};
+        addendum && addendum->derivedType()) {
+      const NonTbpDefinedIoTable *table{group.nonTbpDefinedIo};
+      if (!IONAME(OutputDerivedType)(cookie, item.descriptor, table)) {
+        return false;
+      }
+    } else if (!descr::DescriptorIO<Direction::Output>(io, item.descriptor)) {
       return false;
     }
   }
@@ -310,7 +318,42 @@ static bool HandleComponent(IoStatementState &io, Descriptor &desc,
         type{addendum ? addendum->derivedType() : nullptr}) {
       if (const typeInfo::Component *
           comp{type->FindDataComponent(compName, std::strlen(compName))}) {
-        comp->CreatePointerDescriptor(desc, source, handler);
+        bool createdDesc{false};
+        if (comp->rank() > 0 && source.rank() > 0) {
+          // If base and component are both arrays, the component name
+          // must be followed by subscripts; process them now.
+          std::size_t byteCount{0};
+          if (std::optional<char32_t> next{io.GetNextNonBlank(byteCount)};
+              next && *next == '(') {
+            io.HandleRelativePosition(byteCount); // skip over '('
+            StaticDescriptor<maxRank, true, 16> staticDesc;
+            Descriptor &tmpDesc{staticDesc.descriptor()};
+            comp->CreatePointerDescriptor(tmpDesc, source, handler);
+            if (!HandleSubscripts(io, desc, tmpDesc, compName)) {
+              return false;
+            }
+            createdDesc = true;
+          }
+        }
+        if (!createdDesc) {
+          comp->CreatePointerDescriptor(desc, source, handler);
+        }
+        if (source.rank() > 0) {
+          if (desc.rank() > 0) {
+            handler.SignalError(
+                "NAMELIST component reference '%%%s' of input group "
+                "item %s cannot be an array when its base is not scalar",
+                compName, name);
+            return false;
+          }
+          desc.raw().rank = source.rank();
+          for (int j{0}; j < source.rank(); ++j) {
+            const auto &srcDim{source.GetDimension(j)};
+            desc.GetDimension(j)
+                .SetBounds(1, srcDim.UpperBound())
+                .SetByteStride(srcDim.ByteStride());
+          }
+        }
         return true;
       } else {
         handler.SignalError(
@@ -383,7 +426,11 @@ bool IONAME(InputNamelist)(Cookie cookie, const NamelistGroup &group) {
         next = io.GetNextNonBlank(byteCount);
       }
     }
-    if (!next || *next != '&') {
+    if (!next) {
+      handler.SignalEnd();
+      return false;
+    }
+    if (*next != '&') {
       handler.SignalError(
           "NAMELIST input group does not begin with '&' (at '%lc')", *next);
       return false;
@@ -475,9 +522,18 @@ bool IONAME(InputNamelist)(Cookie cookie, const NamelistGroup &group) {
     }
     io.HandleRelativePosition(byteCount);
     // Read the values into the descriptor.  An array can be short.
-    listInput->ResetForNextNamelistItem(useDescriptor->rank() > 0);
-    if (!descr::DescriptorIO<Direction::Input>(io, *useDescriptor)) {
-      return false;
+    if (const auto *addendum{useDescriptor->Addendum()};
+        addendum && addendum->derivedType()) {
+      const NonTbpDefinedIoTable *table{group.nonTbpDefinedIo};
+      listInput->ResetForNextNamelistItem(/*inNamelistSequence=*/true);
+      if (!IONAME(InputDerivedType)(cookie, *useDescriptor, table)) {
+        return false;
+      }
+    } else {
+      listInput->ResetForNextNamelistItem(useDescriptor->rank() > 0);
+      if (!descr::DescriptorIO<Direction::Input>(io, *useDescriptor)) {
+        return false;
+      }
     }
     next = io.GetNextNonBlank(byteCount);
     if (next && *next == comma) {
@@ -496,7 +552,7 @@ bool IONAME(InputNamelist)(Cookie cookie, const NamelistGroup &group) {
 bool IsNamelistNameOrSlash(IoStatementState &io) {
   if (auto *listInput{
           io.get_if<ListDirectedStatementState<Direction::Input>>()}) {
-    if (listInput->inNamelistArray()) {
+    if (listInput->inNamelistSequence()) {
       SavedPosition savedPosition{io};
       std::size_t byteCount{0};
       if (auto ch{io.GetNextNonBlank(byteCount)}) {

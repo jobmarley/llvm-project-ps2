@@ -21,7 +21,7 @@
 #include "mlir/Dialect/SCF/Utils/AffineCanonicalizationUtils.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/IR/AffineExpr.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/DenseMap.h"
@@ -34,6 +34,7 @@ namespace mlir {
 } // namespace mlir
 
 using namespace mlir;
+using namespace mlir::affine;
 using scf::ForOp;
 using scf::ParallelOp;
 
@@ -50,7 +51,7 @@ static void specializeParallelLoopForUnrolling(ParallelOp op) {
       return;
     int64_t minConstant = std::numeric_limits<int64_t>::max();
     for (AffineExpr expr : minOp.getMap().getResults()) {
-      if (auto constantIndex = expr.dyn_cast<AffineConstantExpr>())
+      if (auto constantIndex = dyn_cast<AffineConstantExpr>(expr))
         minConstant = std::min(minConstant, constantIndex.getValue());
     }
     if (minConstant == std::numeric_limits<int64_t>::max())
@@ -59,7 +60,7 @@ static void specializeParallelLoopForUnrolling(ParallelOp op) {
   }
 
   OpBuilder b(op);
-  BlockAndValueMapping map;
+  IRMapping map;
   Value cond;
   for (auto bound : llvm::zip(op.getUpperBound(), constantIndices)) {
     Value constant =
@@ -86,14 +87,14 @@ static void specializeForLoopForUnrolling(ForOp op) {
     return;
   int64_t minConstant = std::numeric_limits<int64_t>::max();
   for (AffineExpr expr : minOp.getMap().getResults()) {
-    if (auto constantIndex = expr.dyn_cast<AffineConstantExpr>())
+    if (auto constantIndex = dyn_cast<AffineConstantExpr>(expr))
       minConstant = std::min(minConstant, constantIndex.getValue());
   }
   if (minConstant == std::numeric_limits<int64_t>::max())
     return;
 
   OpBuilder b(op);
-  BlockAndValueMapping map;
+  IRMapping map;
   Value constant = b.create<arith::ConstantIndexOp>(op.getLoc(), minConstant);
   Value cond = b.create<arith::CmpIOp>(op.getLoc(), arith::CmpIPredicate::eq,
                                        bound, constant);
@@ -122,19 +123,29 @@ static LogicalResult peelForLoop(RewriterBase &b, ForOp forOp,
   auto ubInt = getConstantIntValue(forOp.getUpperBound());
   auto stepInt = getConstantIntValue(forOp.getStep());
 
-  // No specialization necessary if step already divides upper bound evenly.
-  if (lbInt && ubInt && stepInt && (*ubInt - *lbInt) % *stepInt == 0)
-    return failure();
   // No specialization necessary if step size is 1.
-  if (stepInt == static_cast<int64_t>(1))
+  if (getConstantIntValue(forOp.getStep()) == static_cast<int64_t>(1))
     return failure();
 
-  auto loc = forOp.getLoc();
+  // No specialization necessary if step already divides upper bound evenly.
+  // Fast path: lb, ub and step are constants.
+  if (lbInt && ubInt && stepInt && (*ubInt - *lbInt) % *stepInt == 0)
+    return failure();
+  // Slow path: Examine the ops that define lb, ub and step.
   AffineExpr sym0, sym1, sym2;
   bindSymbols(b.getContext(), sym0, sym1, sym2);
+  SmallVector<Value> operands{forOp.getLowerBound(), forOp.getUpperBound(),
+                              forOp.getStep()};
+  AffineMap map = AffineMap::get(0, 3, {(sym1 - sym0) % sym2});
+  affine::fullyComposeAffineMapAndOperands(&map, &operands);
+  if (auto constExpr = dyn_cast<AffineConstantExpr>(map.getResult(0)))
+    if (constExpr.getValue() == 0)
+      return failure();
+
   // New upper bound: %ub - (%ub - %lb) mod %step
   auto modMap = AffineMap::get(0, 3, {sym1 - ((sym1 - sym0) % sym2)});
   b.setInsertionPoint(forOp);
+  auto loc = forOp.getLoc();
   splitBound = b.createOrFold<AffineApplyOp>(loc, modMap,
                                              ValueRange{forOp.getLowerBound(),
                                                         forOp.getUpperBound(),
@@ -144,7 +155,7 @@ static LogicalResult peelForLoop(RewriterBase &b, ForOp forOp,
   b.setInsertionPointAfter(forOp);
   partialIteration = cast<ForOp>(b.clone(*forOp.getOperation()));
   partialIteration.getLowerBoundMutable().assign(splitBound);
-  forOp.replaceAllUsesWith(partialIteration->getResults());
+  b.replaceAllUsesWith(forOp.getResults(), partialIteration->getResults());
   partialIteration.getInitArgsMutable().assign(forOp->getResults());
 
   // Set new upper loop bound.
@@ -154,7 +165,6 @@ static LogicalResult peelForLoop(RewriterBase &b, ForOp forOp,
   return success();
 }
 
-template <typename OpTy, bool IsMin>
 static void rewriteAffineOpAfterPeeling(RewriterBase &rewriter, ForOp forOp,
                                         ForOp partialIteration,
                                         Value previousUb) {
@@ -164,34 +174,33 @@ static void rewriteAffineOpAfterPeeling(RewriterBase &rewriter, ForOp forOp,
          "expected same step in main and partial loop");
   Value step = forOp.getStep();
 
-  forOp.walk([&](OpTy affineOp) {
-    AffineMap map = affineOp.getAffineMap();
-    (void)scf::rewritePeeledMinMaxOp(rewriter, affineOp, map,
-                                     affineOp.operands(), IsMin, mainIv,
-                                     previousUb, step,
+  forOp.walk([&](Operation *affineOp) {
+    if (!isa<AffineMinOp, AffineMaxOp>(affineOp))
+      return WalkResult::advance();
+    (void)scf::rewritePeeledMinMaxOp(rewriter, affineOp, mainIv, previousUb,
+                                     step,
                                      /*insideLoop=*/true);
+    return WalkResult::advance();
   });
-  partialIteration.walk([&](OpTy affineOp) {
-    AffineMap map = affineOp.getAffineMap();
-    (void)scf::rewritePeeledMinMaxOp(rewriter, affineOp, map,
-                                     affineOp.operands(), IsMin, partialIv,
-                                     previousUb, step, /*insideLoop=*/false);
+  partialIteration.walk([&](Operation *affineOp) {
+    if (!isa<AffineMinOp, AffineMaxOp>(affineOp))
+      return WalkResult::advance();
+    (void)scf::rewritePeeledMinMaxOp(rewriter, affineOp, partialIv, previousUb,
+                                     step, /*insideLoop=*/false);
+    return WalkResult::advance();
   });
 }
 
-LogicalResult mlir::scf::peelAndCanonicalizeForLoop(RewriterBase &rewriter,
-                                                    ForOp forOp,
-                                                    ForOp &partialIteration) {
+LogicalResult mlir::scf::peelForLoopAndSimplifyBounds(RewriterBase &rewriter,
+                                                      ForOp forOp,
+                                                      ForOp &partialIteration) {
   Value previousUb = forOp.getUpperBound();
   Value splitBound;
   if (failed(peelForLoop(rewriter, forOp, partialIteration, splitBound)))
     return failure();
 
   // Rewrite affine.min and affine.max ops.
-  rewriteAffineOpAfterPeeling<AffineMinOp, /*IsMin=*/true>(
-      rewriter, forOp, partialIteration, previousUb);
-  rewriteAffineOpAfterPeeling<AffineMaxOp, /*IsMin=*/false>(
-      rewriter, forOp, partialIteration, previousUb);
+  rewriteAffineOpAfterPeeling(rewriter, forOp, partialIteration, previousUb);
 
   return success();
 }
@@ -220,14 +229,16 @@ struct ForLoopPeelingPattern : public OpRewritePattern<ForOp> {
     }
     // Apply loop peeling.
     scf::ForOp partialIteration;
-    if (failed(peelAndCanonicalizeForLoop(rewriter, forOp, partialIteration)))
+    if (failed(peelForLoopAndSimplifyBounds(rewriter, forOp, partialIteration)))
       return failure();
     // Apply label, so that the same loop is not rewritten a second time.
-    partialIteration->setAttr(kPeeledLoopLabel, rewriter.getUnitAttr());
+    rewriter.updateRootInPlace(partialIteration, [&]() {
+      partialIteration->setAttr(kPeeledLoopLabel, rewriter.getUnitAttr());
+      partialIteration->setAttr(kPartialIterationLabel, rewriter.getUnitAttr());
+    });
     rewriter.updateRootInPlace(forOp, [&]() {
       forOp->setAttr(kPeeledLoopLabel, rewriter.getUnitAttr());
     });
-    partialIteration->setAttr(kPartialIterationLabel, rewriter.getUnitAttr());
     return success();
   }
 

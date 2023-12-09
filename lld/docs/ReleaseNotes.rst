@@ -26,11 +26,11 @@ Non-comprehensive list of changes in this release
 ELF Improvements
 ----------------
 
-* ``ELFCOMPRESS_ZSTD`` compressed input sections are now supported.
-  (`D129406 <https://reviews.llvm.org/D129406>`_)
-* ``--compress-debug-sections=zstd`` is now available to compress debug
-  sections with zstd (``ELFCOMPRESS_ZSTD``).
-  (`D133548 <https://reviews.llvm.org/D133548>`_)
+* ``--fat-lto-objects`` option is added to support LLVM FatLTO.
+  Without ``--fat-lto-objects``, LLD will link LLVM FatLTO objects using the
+  relocatable object file. (`D146778 <https://reviews.llvm.org/D146778>`_)
+* common-page-size can now be larger than the system page-size.
+  (`#57618 <https://github.com/llvm/llvm-project/issues/57618>`_)
 
 Breaking changes
 ----------------
@@ -38,20 +38,11 @@ Breaking changes
 COFF Improvements
 -----------------
 
-* ...
+* Added support for ``--time-trace`` and associated ``--time-trace-granularity``.
+  This generates a .json profile trace of the linker execution.
 
 MinGW Improvements
 ------------------
-
-* The lld-specific options ``--guard-cf``, ``--no-guard-cf``,
-  ``--guard-longjmp`` and ``--no-guard-longjmp`` has been added to allow
-  enabling Control Flow Guard and long jump hardening. These options are
-  disabled by default, but enabling ``--guard-cf`` will also enable
-  ``--guard-longjmp`` unless ``--no-guard-longjmp`` is also specified.
-  ``--guard-longjmp`` depends on ``--guard-cf`` and cannot be used by itself.
-  Note that these features require the ``_load_config_used`` symbol to contain
-  the load config directory and be filled with the required symbols.
-  (`D132808 <https://reviews.llvm.org/D132808>`_)
 
 MachO Improvements
 ------------------
@@ -59,3 +50,5 @@ MachO Improvements
 WebAssembly Improvements
 ------------------------
 
+Fixes
+#####

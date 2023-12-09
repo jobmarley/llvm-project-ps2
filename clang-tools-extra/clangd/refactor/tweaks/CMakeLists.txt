@@ -17,7 +17,7 @@ add_clang_library(clangDaemonTweaks OBJECT
   DumpAST.cpp
   DefineInline.cpp
   DefineOutline.cpp
-  ExpandAutoType.cpp
+  ExpandDeducedType.cpp
   ExpandMacro.cpp
   ExtractFunction.cpp
   ExtractVariable.cpp
@@ -27,6 +27,7 @@ add_clang_library(clangDaemonTweaks OBJECT
   PopulateSwitch.cpp
   RawStringLiteral.cpp
   RemoveUsingNamespace.cpp
+  ScopifyEnum.cpp
   SpecialMembers.cpp
   SwapIfBranches.cpp
 
@@ -44,4 +45,5 @@ add_clang_library(clangDaemonTweaks OBJECT
 
   DEPENDS
   omp_gen
+  ClangDriverOptions
   )

@@ -8,6 +8,13 @@ let Command = "target modules dump symtab" in {
     Desc<"Do not demangle symbol names before showing them.">;
 }
 
+let Command = "target modules dump separate debug info" in {
+  def tm_json : Option<"json", "j">, Group<1>,
+    Desc<"Output the details in JSON format.">;
+  def tm_errors_only : Option<"errors-only", "e">, Group<1>,
+    Desc<"Filter to show only debug info files with errors.">;
+}
+
 let Command = "help" in {
   def help_hide_aliases : Option<"hide-aliases", "a">,
     Desc<"Hide aliases in the command list.">;
@@ -343,6 +350,11 @@ let Command = "disassemble" in {
     Desc<"Force disassembly of large functions.">;
 }
 
+let Command = "diagnostics dump" in {
+  def diagnostics_dump_directory : Option<"directory", "d">, Group<1>,
+    Arg<"Path">, Desc<"Dump the diagnostics to the given directory.">;
+}
+
 let Command = "expression" in {
   def expression_options_all_threads : Option<"all-threads", "a">,
     Groups<[1,2]>, Arg<"Boolean">, Desc<"Should we run all threads if the "
@@ -366,7 +378,7 @@ let Command = "expression" in {
     Arg<"Language">, Desc<"Specifies the Language to use when parsing the "
     "expression.  If not set the target.language setting is used.">;
   def expression_options_apply_fixits : Option<"apply-fixits", "X">,
-    Groups<[1,2]>, Arg<"Language">, Desc<"If true, simple fix-it hints will be "
+    Groups<[1,2]>, Arg<"Boolean">, Desc<"If true, simple fix-it hints will be "
     "automatically applied to the expression.">;
   def expression_options_description_verbosity :
     Option<"description-verbosity", "v">, Group<1>,
@@ -381,6 +393,11 @@ let Command = "expression" in {
     Arg<"Boolean">,
     Desc<"Controls whether the expression can fall back to being JITted if it's "
     "not supported by the interpreter (defaults to true).">;
+  def persistent_result : Option<"persistent-result", "\\x01">, Groups<[1,2]>,
+    Arg<"Boolean">,
+    Desc<"Persist expression result in a variable for subsequent use. "
+    "Expression results will be labeled with $-prefixed variables, e.g. $0, "
+    "$1, etc.">;
 }
 
 let Command = "frame diag" in {
@@ -665,6 +682,10 @@ let Command = "platform shell" in {
 let Command = "process launch" in {
   def process_launch_stop_at_entry : Option<"stop-at-entry", "s">,
     Desc<"Stop at the entry point of the program when launching a process.">;
+  def process_launch_stop_at_user_entry : Option<"stop-at-user-entry", "m">,
+    Desc<"Stop at the user entry point when launching a process. For C based "
+    "languages this will be the 'main' function, but this might differ for "
+    "other languages.">;
   def process_launch_disable_aslr : Option<"disable-aslr", "A">, Arg<"Boolean">,
     Desc<"Set whether to disable address space layout randomization when launching a process.">;
   def process_launch_plugin : Option<"plugin", "P">, Arg<"Plugin">,
@@ -794,6 +815,9 @@ let Command = "script add" in {
     EnumArg<"ScriptedCommandSynchronicity">,
     Desc<"Set the synchronicity of this command's executions with regard to "
     "LLDB event system.">;
+  def completion_type : Option<"completion-type", "C">,
+  EnumArg<"CompletionType">,
+  Desc<"Specify which completion type the command should use - if none is specified, the command won't use auto-completion.">;
 }
 
 let Command = "container add" in {
@@ -1093,6 +1117,19 @@ let Command = "thread plan list" in {
     Desc<"Display thread plans for unreported threads">;
 }
 
+let Command = "thread trace dump function calls" in {
+  def thread_trace_dump_function_calls_file : Option<"file", "F">, Group<1>,
+    Arg<"Filename">,
+    Desc<"Dump the function calls to a file instead of the standard output.">;
+  def thread_trace_dump_function_calls_json: Option<"json", "j">,
+    Group<1>,
+    Desc<"Dump in simple JSON format.">;
+  def thread_trace_dump_function_calls_pretty_json: Option<"pretty-json", "J">,
+    Group<1>,
+    Desc<"Dump in JSON format but pretty printing the output for easier "
+    "readability.">;
+}
+
 let Command = "thread trace dump instructions" in {
   def thread_trace_dump_instructions_forwards: Option<"forwards", "f">,
     Group<1>,
@@ -1171,6 +1208,11 @@ let Command = "type summary add" in {
     Desc<"Don't use this format for references-to-type objects.">;
   def type_summary_add_regex : Option<"regex", "x">,
     Desc<"Type names are actually regular expressions.">;
+  def type_summary_add_recognizer_function :
+    Option<"recognizer-function", "\\x01">,
+    Desc<"The names in the argument list are actually the names of python "
+    "functions that decide whether to use this summary for any given type. "
+    "Cannot be specified at the same time as --regex (-x).">;
   def type_summary_add_inline_children : Option<"inline-children", "c">,
     Group<1>, Required,
     Desc<"If true, inline all child values into summary string.">;
@@ -1212,6 +1254,11 @@ let Command = "type synth add" in {
     "children.">;
   def type_synth_add_regex : Option<"regex", "x">,
     Desc<"Type names are actually regular expressions.">;
+  def type_synth_add_recognizer_function :
+    Option<"recognizer-function", "\\x01">,
+    Desc<"The names in the argument list are actually the names of python "
+    "functions that decide whether to use this summary for any given type. "
+    "Cannot be specified at the same time as --regex (-x).">;
 }
 
 let Command = "type format add" in {

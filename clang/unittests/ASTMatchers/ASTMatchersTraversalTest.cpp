@@ -8,13 +8,14 @@
 
 #include "ASTMatchersTest.h"
 #include "clang/AST/Attrs.inc"
+#include "clang/AST/DeclCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
-#include "llvm/Support/Host.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 #include "gtest/gtest.h"
 
 namespace clang {
@@ -678,6 +679,48 @@ void check_match_co_yield() {
   EXPECT_TRUE(matchesConditionally(CoYieldCode, 
                                    coyieldExpr(isExpansionInMainFile()), 
                                    true, {"-std=c++20", "-I/"}, M));
+
+  StringRef NonCoroCode = R"cpp(
+#include <coro_header>
+void non_coro_function() {
+}
+)cpp";
+
+  EXPECT_TRUE(matchesConditionally(CoReturnCode, coroutineBodyStmt(), true,
+                                   {"-std=c++20", "-I/"}, M));
+  EXPECT_TRUE(matchesConditionally(CoAwaitCode, coroutineBodyStmt(), true,
+                                   {"-std=c++20", "-I/"}, M));
+  EXPECT_TRUE(matchesConditionally(CoYieldCode, coroutineBodyStmt(), true,
+                                   {"-std=c++20", "-I/"}, M));
+
+  EXPECT_FALSE(matchesConditionally(NonCoroCode, coroutineBodyStmt(), true,
+                                    {"-std=c++20", "-I/"}, M));
+
+  StringRef CoroWithDeclCode = R"cpp(
+#include <coro_header>
+void coro() {
+  int thevar;
+  co_return 1;
+}
+)cpp";
+  EXPECT_TRUE(matchesConditionally(
+      CoroWithDeclCode,
+      coroutineBodyStmt(hasBody(compoundStmt(
+          has(declStmt(containsDeclaration(0, varDecl(hasName("thevar")))))))),
+      true, {"-std=c++20", "-I/"}, M));
+
+  StringRef CoroWithTryCatchDeclCode = R"cpp(
+#include <coro_header>
+void coro() try {
+  int thevar;
+  co_return 1;
+} catch (...) {}
+)cpp";
+  EXPECT_TRUE(matchesConditionally(
+      CoroWithTryCatchDeclCode,
+      coroutineBodyStmt(hasBody(compoundStmt(has(cxxTryStmt(has(compoundStmt(has(
+          declStmt(containsDeclaration(0, varDecl(hasName("thevar")))))))))))),
+      true, {"-std=c++20", "-I/"}, M));
 }
 
 TEST(Matcher, isClassMessage) {
@@ -5413,6 +5456,18 @@ TEST(HasParent, NoDuplicateParents) {
     "template <typename T> int Foo() { return 1 + 2; }\n"
       "int x = Foo<int>() + Foo<unsigned>();",
     stmt().bind("node"), std::make_unique<HasDuplicateParents>()));
+}
+
+TEST(HasAnyBase, BindsInnerBoundNodes) {
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "struct Inner {}; struct Proxy : Inner {}; struct Main : public "
+      "Proxy {};",
+      cxxRecordDecl(hasName("Main"),
+                    hasAnyBase(cxxBaseSpecifier(hasType(
+                        cxxRecordDecl(hasName("Inner")).bind("base-class")))))
+          .bind("class"),
+      std::make_unique<VerifyIdIsBoundTo<CXXRecordDecl>>("base-class",
+                                                         "Inner")));
 }
 
 TEST(TypeMatching, PointeeTypes) {

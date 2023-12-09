@@ -3,7 +3,13 @@
 # An important constraint of the build is that it only produces libraries
 # based on the ability of the host toolchain to target various platforms.
 
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.20.0)
+
+if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)
+  set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+endif()
+include(${LLVM_COMMON_CMAKE_UTILS}/Modules/CMakePolicy.cmake
+  NO_POLICY_SCOPE)
 
 # Check if compiler-rt is built as a standalone project.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR COMPILER_RT_STANDALONE_BUILD)
@@ -11,8 +17,6 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR COMPILER_RT_STANDALONE
   set(COMPILER_RT_STANDALONE_BUILD TRUE)
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 endif()
-
-set(LLVM_COMMON_CMAKE_UTILS "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
 
 # Add path for custom compiler-rt modules.
 list(INSERT CMAKE_MODULE_PATH 0
@@ -35,10 +39,8 @@ include(CMakeDependentOption)
 
 option(COMPILER_RT_BUILD_BUILTINS "Build builtins" ON)
 mark_as_advanced(COMPILER_RT_BUILD_BUILTINS)
-option(COMPILER_RT_BUILD_CRT "Build crtbegin.o/crtend.o" ON)
-mark_as_advanced(COMPILER_RT_BUILD_CRT)
-option(COMPILER_RT_CRT_USE_EH_FRAME_REGISTRY "Use eh_frame in crtbegin.o/crtend.o" ON)
-mark_as_advanced(COMPILER_RT_CRT_USE_EH_FRAME_REGISTRY)
+option(COMPILER_RT_DISABLE_AARCH64_FMV "Disable AArch64 Function Multi Versioning support" OFF)
+mark_as_advanced(COMPILER_RT_DISABLE_AARCH64_FMV)
 option(COMPILER_RT_BUILD_SANITIZERS "Build sanitizers" ON)
 mark_as_advanced(COMPILER_RT_BUILD_SANITIZERS)
 option(COMPILER_RT_BUILD_XRAY "Build xray" ON)
@@ -57,6 +59,13 @@ option(COMPILER_RT_BUILD_GWP_ASAN "Build GWP-ASan, and link it into SCUDO" ON)
 mark_as_advanced(COMPILER_RT_BUILD_GWP_ASAN)
 option(COMPILER_RT_ENABLE_CET "Build Compiler RT with CET enabled" OFF)
 
+option(COMPILER_RT_SCUDO_STANDALONE_SYSROOT_PATH "Set custom sysroot for building SCUDO standalone" OFF)
+mark_as_advanced(COMPILER_RT_SCUDO_STANDALONE_SYSROOT_PATH)
+option(COMPILER_RT_SCUDO_STANDALONE_BUILD_SHARED "Build SCUDO standalone for shared libraries" ON)
+mark_as_advanced(COMPILER_RT_SCUDO_STANDALONE_BUILD_SHARED)
+option(COMPILER_RT_BUILD_SCUDO_STANDALONE_WITH_LLVM_LIBC "Build SCUDO standalone with LLVM's libc headers" OFF)
+mark_as_advanced(COMPILER_RT_BUILD_SCUDO_STANDALONE_WITH_LLVM_LIBC)
+
 if(FUCHSIA)
   set(COMPILER_RT_HWASAN_WITH_INTERCEPTORS_DEFAULT OFF)
 else()
@@ -72,7 +81,9 @@ if (COMPILER_RT_STANDALONE_BUILD)
   set(CMAKE_CXX_STANDARD_REQUIRED YES)
   set(CMAKE_CXX_EXTENSIONS NO)
 
-  load_llvm_config()
+  if (NOT LLVM_RUNTIMES_BUILD)
+    load_llvm_config()
+  endif()
   if (TARGET intrinsics_gen)
     # Loading the llvm config causes this target to be imported so place it
     # under the appropriate folder in an IDE.
@@ -130,7 +141,7 @@ pythonize_bool(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
 # We support running instrumented tests when we're not cross-compiling
 # and target a UNIX-like system or Windows.
 # We can run tests on Android even when we are cross-compiling.
-if(("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "${CMAKE_SYSTEM_NAME}" AND (UNIX OR WIN32))
+if((NOT "${CMAKE_CROSSCOMPILING}" AND (UNIX OR WIN32))
    OR ANDROID OR COMPILER_RT_EMULATOR)
   option(COMPILER_RT_CAN_EXECUTE_TESTS "Can we execute instrumented tests" ON)
 else()
@@ -364,20 +375,27 @@ if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "s390x")
 endif()
 
 if(MSVC)
-  # Replace the /M[DT][d] flags with /MT, and strip any definitions of _DEBUG,
-  # which cause definition mismatches at link time.
   # FIXME: In fact, sanitizers should support both /MT and /MD, see PR20214.
-  if(COMPILER_RT_HAS_MT_FLAG)
-    foreach(flag_var
-      CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
-      CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO
-      CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
-      CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-      string(REGEX REPLACE "/M[DT]d" "/MT" ${flag_var} "${${flag_var}}")
-      string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
-      string(REGEX REPLACE "/D_DEBUG" "" ${flag_var} "${${flag_var}}")
-    endforeach()
-  endif()
+  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
+
+  # Remove any /M[DT][d] flags, and strip any definitions of _DEBUG.
+  # Since we're using CMAKE_MSVC_RUNTIME_LIBRARY (CMP0091 set to NEW),
+  # these options shouldn't be included in these flags variables. However,
+  # package managers that don't know which mechanism is used for passing
+  # CRT choice flags might be passing them both ways - which leads to
+  # duplicate CRT choice options. Thus make sure to strip out these flags
+  # from these variables, when we're forcing a CRT choice other than what
+  # the user requested here.
+  foreach(flag_var
+    CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+    CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO
+    CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+    CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+    string(REGEX REPLACE "[/-]M[DT]d" "" ${flag_var} "${${flag_var}}")
+    string(REGEX REPLACE "[/-]MD" "" ${flag_var} "${${flag_var}}")
+    string(REGEX REPLACE "[/-]D_DEBUG" "" ${flag_var} "${${flag_var}}")
+  endforeach()
+
   append_list_if(COMPILER_RT_HAS_Oy_FLAG /Oy- SANITIZER_COMMON_CFLAGS)
   append_list_if(COMPILER_RT_HAS_GS_FLAG /GS- SANITIZER_COMMON_CFLAGS)
 
@@ -389,16 +407,12 @@ endif()
 
 append_list_if(COMPILER_RT_DEBUG -DSANITIZER_DEBUG=1 SANITIZER_COMMON_CFLAGS)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES Clang)
-  list(APPEND THREAD_SAFETY_FLAGS
-      "-Wthread-safety"
-      "-Wthread-safety-reference"
-      "-Wthread-safety-beta"
-  )
-  list(APPEND SANITIZER_COMMON_CFLAGS ${THREAD_SAFETY_FLAGS})
-  string(REPLACE ";" " " thread_safety_flags_space_sep "${THREAD_SAFETY_FLAGS}")
-  string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " ${thread_safety_flags_space_sep}")
-endif()
+append_list_if(COMPILER_RT_HAS_WTHREAD_SAFETY_FLAG -Wthread-safety THREAD_SAFETY_FLAGS)
+append_list_if(COMPILER_RT_HAS_WTHREAD_SAFETY_REFERENCE_FLAG -Wthread-safety-reference THREAD_SAFETY_FLAGS)
+append_list_if(COMPILER_RT_HAS_WTHREAD_SAFETY_BETA_FLAG -Wthread-safety-beta THREAD_SAFETY_FLAGS)
+list(APPEND SANITIZER_COMMON_CFLAGS ${THREAD_SAFETY_FLAGS})
+string(REPLACE ";" " " thread_safety_flags_space_sep "${THREAD_SAFETY_FLAGS}")
+string(APPEND COMPILER_RT_TEST_COMPILER_CFLAGS " ${thread_safety_flags_space_sep}")
 
 # If we're using MSVC,
 # always respect the optimization flags set by CMAKE_BUILD_TYPE instead.
@@ -474,6 +488,21 @@ append_list_if(COMPILER_RT_HAS_WD4722_FLAG /wd4722 SANITIZER_COMMON_CFLAGS)
 append_list_if(COMPILER_RT_HAS_WD4800_FLAG /wd4800 SANITIZER_COMMON_CFLAGS)
 
 append_list_if(MINGW -fms-extensions SANITIZER_COMMON_CFLAGS)
+
+# When lsan scans the stack for detecting reachable pointers, it's possible for
+# a leaked pointer, which was pushed to the stack on an earlier function call,
+# to still exist on the stack when doing a leak check if that part of the stack
+# was not overwritten. In particular, if there's any uninitialized data in the
+# lsan runtime, and the SP we start from is sufficiently deep into the runtime,
+# then a leaked pointer could be marked as reachable. Such instances could be
+# mitigated by clobbering any uninitialized data. Note that this won't cover
+# all possible uninitialized stack contents, such as those used for register
+# spill slots, unused portions for alignment, or even local variables not
+# yet in scope at a certain point in the function.
+#
+# Note that this type of issue was discovered with lsan, but can apply to other
+# sanitizers.
+append_list_if(COMPILER_RT_HAS_TRIVIAL_AUTO_INIT -ftrivial-auto-var-init=pattern SANITIZER_COMMON_CFLAGS)
 
 # Set common link flags.
 # TODO: We should consider using the same model as libc++, that is use either
@@ -579,17 +608,16 @@ if (SANITIZER_CXX_ABI_LIBNAME STREQUAL "libc++")
     # because we added -nodefaultlibs there earlier, and adding would result in
     # a warning, but if we switch to -nostdlib++, we would need to add it here.
     # append_list_if(CXX_SUPPORTS_UNWINDLIB_NONE_FLAG --unwindlib=none SANITIZER_COMMON_LINK_FLAGS)
-
-    if (SANITIZER_USE_STATIC_LLVM_UNWINDER AND (TARGET unwind_static OR HAVE_LIBUNWIND))
-      list(APPEND SANITIZER_CXX_ABI_LIBRARIES unwind_static)
-    elseif (TARGET unwind_shared OR HAVE_LIBUNWIND)
-      list(APPEND SANITIZER_CXX_ABI_LIBRARIES unwind_shared)
-    endif()
-
-    if (SANITIZER_USE_STATIC_CXX_ABI AND (TARGET cxxabi_static OR HAVE_LIBCXXABI))
-      list(APPEND SANITIZER_CXX_ABI_LIBRARIES cxxabi_static)
-    elseif (TARGET cxxabi_shared OR HAVE_LIBCXXABI)
-      list(APPEND SANITIZER_CXX_ABI_LIBRARIES cxxabi_shared)
+    if(SANITIZER_USE_STATIC_CXX_ABI)
+      if(TARGET libcxx-abi-static)
+        set(SANITIZER_CXX_ABI_LIBRARIES libcxx-abi-static)
+      endif()
+    else()
+      if(TARGET libcxx-abi-shared)
+        set(SANITIZER_CXX_ABI_LIBRARIES libcxx-abi-shared)
+      elseif(TARGET libcxx-abi-static)
+        set(SANITIZER_CXX_ABI_LIBRARIES libcxx-abi-static)
+      endif()
     endif()
   else()
     append_list_if(COMPILER_RT_HAS_LIBCXX c++ SANITIZER_CXX_ABI_LIBRARIES)
@@ -619,7 +647,13 @@ elseif (SANITIZER_TEST_CXX_LIBNAME STREQUAL "libstdc++")
 endif()
 
 # Unittests support.
-set(COMPILER_RT_GTEST_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googletest)
+# FIXME: When compiler-rt is build using -DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON, then
+# The LLVM_THIRD_PARTY_DIR variable is not set.
+if (NOT LLVM_THIRD_PARTY_DIR)
+  set(LLVM_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party")
+endif()
+
+set(COMPILER_RT_GTEST_PATH ${LLVM_THIRD_PARTY_DIR}/unittest/googletest)
 set(COMPILER_RT_GTEST_SOURCE ${COMPILER_RT_GTEST_PATH}/src/gtest-all.cc)
 set(COMPILER_RT_GTEST_CFLAGS
   -DGTEST_NO_LLVM_SUPPORT=1
@@ -629,7 +663,7 @@ set(COMPILER_RT_GTEST_CFLAGS
 )
 
 # Mocking support.
-set(COMPILER_RT_GMOCK_PATH ${LLVM_MAIN_SRC_DIR}/utils/unittest/googlemock)
+set(COMPILER_RT_GMOCK_PATH ${LLVM_THIRD_PARTY_DIR}/unittest/googlemock)
 set(COMPILER_RT_GMOCK_SOURCE ${COMPILER_RT_GMOCK_PATH}/src/gmock-all.cc)
 set(COMPILER_RT_GMOCK_CFLAGS
   -DGTEST_NO_LLVM_SUPPORT=1
@@ -695,13 +729,15 @@ if(COMPILER_RT_USE_LIBCXX)
   endif()
 endif()
 
-set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/tools/lld)
-if(EXISTS ${COMPILER_RT_LLD_PATH}/ AND LLVM_TOOL_LLD_BUILD)
-  set(COMPILER_RT_HAS_LLD TRUE)
-else()
-  set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/../lld)
-  if(EXISTS ${COMPILER_RT_LLD_PATH}/ AND LLVM_TOOL_LLD_BUILD)
+if (LINKER_IS_LLD OR LLVM_TOOL_LLD_BUILD)
+  set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/tools/lld)
+  if(EXISTS ${COMPILER_RT_LLD_PATH}/)
     set(COMPILER_RT_HAS_LLD TRUE)
+  else()
+    set(COMPILER_RT_LLD_PATH ${LLVM_MAIN_SRC_DIR}/../lld)
+    if(EXISTS ${COMPILER_RT_LLD_PATH}/)
+      set(COMPILER_RT_HAS_LLD TRUE)
+    endif()
   endif()
 endif()
 
@@ -713,6 +749,9 @@ if(ANDROID)
 endif()
 pythonize_bool(COMPILER_RT_HAS_LLD)
 pythonize_bool(COMPILER_RT_TEST_USE_LLD)
+
+option(COMPILER_RT_ENABLE_INTERNAL_SYMBOLIZER "Build Compiler RT linked with in LLVM symbolizer" OFF)
+mark_as_advanced(COMPILER_RT_ENABLE_INTERNAL_SYMBOLIZER)
 
 add_subdirectory(lib)
 

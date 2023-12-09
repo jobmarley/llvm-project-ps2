@@ -70,9 +70,35 @@
 #define SA_SIGINFO 0x00000004
 #define SA_RESTART 0x10000000
 #define SA_RESTORER 0x04000000
+#define SA_ONSTACK 0x08000000
+
+// Signal stack flags
+#define SS_ONSTACK 0x1
+#define SS_DISABLE 0x2
+
+#ifdef __x86_64__
+#define MINSIGSTKSZ 2048
+#define SIGSTKSZ 8192
+#elif defined(__aarch64__)
+#define MINSIGSTKSZ 5120
+#define SIGSTKSZ 16384
+#elif defined(__riscv)
+#define MINSIGSTKSZ 2048
+#define SIGSTKSZ 8192
+#else
+#error "Signal stack sizes not defined for your platform."
+#endif
 
 #define SIG_DFL ((__sighandler_t)0)
 #define SIG_IGN ((__sighandler_t)1)
 #define SIG_ERR ((__sighandler_t)-1)
+
+// SIGCHLD si_codes
+#define CLD_EXITED 1    // child has exited
+#define CLD_KILLED 2    // child was killed
+#define CLD_DUMPED 3    // child terminated abnormally
+#define CLD_TRAPPED 4   // traced child has trapped
+#define CLD_STOPPED 5   // child has stopped
+#define CLD_CONTINUED 6 // stopped child has continued
 
 #endif // __LLVM_LIBC_MACROS_LINUX_SIGNUM_MACROS_H

@@ -13,6 +13,8 @@
 #include <__config>
 #include <__functional/binary_function.h>
 #include <__functional/unary_function.h>
+#include <__type_traits/integral_constant.h>
+#include <__type_traits/operation_traits.h>
 #include <__utility/forward.h>
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
@@ -23,7 +25,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 // Arithmetic operations
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -38,7 +40,15 @@ struct _LIBCPP_TEMPLATE_VIS plus
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(plus);
 
-#if _LIBCPP_STD_VER > 11
+// The non-transparent std::plus specialization is only equivalent to a raw plus
+// operator when we don't perform an implicit conversion when calling it.
+template <class _Tp>
+struct __desugars_to<__plus_tag, plus<_Tp>, _Tp, _Tp> : true_type {};
+
+template <class _Tp, class _Up>
+struct __desugars_to<__plus_tag, plus<void>, _Tp, _Up> : true_type {};
+
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS plus<void>
 {
@@ -52,7 +62,7 @@ struct _LIBCPP_TEMPLATE_VIS plus<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -67,7 +77,7 @@ struct _LIBCPP_TEMPLATE_VIS minus
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(minus);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS minus<void>
 {
@@ -81,7 +91,7 @@ struct _LIBCPP_TEMPLATE_VIS minus<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -96,7 +106,7 @@ struct _LIBCPP_TEMPLATE_VIS multiplies
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(multiplies);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS multiplies<void>
 {
@@ -110,7 +120,7 @@ struct _LIBCPP_TEMPLATE_VIS multiplies<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -125,7 +135,7 @@ struct _LIBCPP_TEMPLATE_VIS divides
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(divides);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS divides<void>
 {
@@ -139,7 +149,7 @@ struct _LIBCPP_TEMPLATE_VIS divides<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -154,7 +164,7 @@ struct _LIBCPP_TEMPLATE_VIS modulus
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(modulus);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS modulus<void>
 {
@@ -168,7 +178,7 @@ struct _LIBCPP_TEMPLATE_VIS modulus<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -183,7 +193,7 @@ struct _LIBCPP_TEMPLATE_VIS negate
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(negate);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS negate<void>
 {
@@ -199,7 +209,7 @@ struct _LIBCPP_TEMPLATE_VIS negate<void>
 
 // Bitwise operations
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -214,7 +224,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_and
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(bit_and);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS bit_and<void>
 {
@@ -228,7 +238,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_and<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 struct _LIBCPP_TEMPLATE_VIS bit_not
     : __unary_function<_Tp, _Tp>
@@ -252,7 +262,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_not<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -267,7 +277,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_or
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(bit_or);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS bit_or<void>
 {
@@ -281,7 +291,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_or<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -296,7 +306,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_xor
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(bit_xor);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS bit_xor<void>
 {
@@ -312,7 +322,7 @@ struct _LIBCPP_TEMPLATE_VIS bit_xor<void>
 
 // Comparison operations
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -327,7 +337,7 @@ struct _LIBCPP_TEMPLATE_VIS equal_to
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(equal_to);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS equal_to<void>
 {
@@ -341,7 +351,16 @@ struct _LIBCPP_TEMPLATE_VIS equal_to<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+// The non-transparent std::equal_to specialization is only equivalent to a raw equality
+// comparison when we don't perform an implicit conversion when calling it.
+template <class _Tp>
+struct __desugars_to<__equal_tag, equal_to<_Tp>, _Tp, _Tp> : true_type {};
+
+// In the transparent case, we do not enforce that
+template <class _Tp, class _Up>
+struct __desugars_to<__equal_tag, equal_to<void>, _Tp, _Up> : true_type {};
+
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -356,7 +375,7 @@ struct _LIBCPP_TEMPLATE_VIS not_equal_to
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(not_equal_to);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS not_equal_to<void>
 {
@@ -370,7 +389,7 @@ struct _LIBCPP_TEMPLATE_VIS not_equal_to<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -385,7 +404,7 @@ struct _LIBCPP_TEMPLATE_VIS less
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(less);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS less<void>
 {
@@ -399,7 +418,7 @@ struct _LIBCPP_TEMPLATE_VIS less<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -414,7 +433,7 @@ struct _LIBCPP_TEMPLATE_VIS less_equal
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(less_equal);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS less_equal<void>
 {
@@ -428,7 +447,7 @@ struct _LIBCPP_TEMPLATE_VIS less_equal<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -443,7 +462,7 @@ struct _LIBCPP_TEMPLATE_VIS greater_equal
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(greater_equal);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS greater_equal<void>
 {
@@ -457,7 +476,7 @@ struct _LIBCPP_TEMPLATE_VIS greater_equal<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -472,7 +491,7 @@ struct _LIBCPP_TEMPLATE_VIS greater
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(greater);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS greater<void>
 {
@@ -488,7 +507,7 @@ struct _LIBCPP_TEMPLATE_VIS greater<void>
 
 // Logical operations
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -503,7 +522,7 @@ struct _LIBCPP_TEMPLATE_VIS logical_and
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(logical_and);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS logical_and<void>
 {
@@ -517,7 +536,7 @@ struct _LIBCPP_TEMPLATE_VIS logical_and<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -532,7 +551,7 @@ struct _LIBCPP_TEMPLATE_VIS logical_not
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(logical_not);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS logical_not<void>
 {
@@ -546,7 +565,7 @@ struct _LIBCPP_TEMPLATE_VIS logical_not<void>
 };
 #endif
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <class _Tp = void>
 #else
 template <class _Tp>
@@ -561,7 +580,7 @@ struct _LIBCPP_TEMPLATE_VIS logical_or
 };
 _LIBCPP_CTAD_SUPPORTED_FOR_TYPE(logical_or);
 
-#if _LIBCPP_STD_VER > 11
+#if _LIBCPP_STD_VER >= 14
 template <>
 struct _LIBCPP_TEMPLATE_VIS logical_or<void>
 {

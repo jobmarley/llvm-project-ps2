@@ -70,8 +70,8 @@ public:
   void SetUp() {
     // Boilerplate that creates a MachineFunction and associated blocks.
 
-    Mod->setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-"
-                       "n8:16:32:64-S128");
+    Mod->setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-"
+                       "f80:128-n8:16:32:64-S128");
     Triple TargetTriple("x86_64--");
     std::string Error;
     const Target *T = TargetRegistry::lookupTarget("", TargetTriple, Error);
@@ -79,9 +79,9 @@ public:
       GTEST_SKIP();
 
     TargetOptions Options;
-    Machine = std::unique_ptr<TargetMachine>(
-        T->createTargetMachine(Triple::normalize("x86_64--"), "", "", Options,
-                               None, None, CodeGenOpt::Aggressive));
+    Machine = std::unique_ptr<TargetMachine>(T->createTargetMachine(
+        Triple::normalize("x86_64--"), "", "", Options, std::nullopt,
+        std::nullopt, CodeGenOptLevel::Aggressive));
 
     auto Type = FunctionType::get(Type::getVoidTy(Ctx), false);
     auto F =
@@ -100,7 +100,8 @@ public:
     OurFile = DIB.createFile("xyzzy.c", "/cave");
     OurCU =
         DIB.createCompileUnit(dwarf::DW_LANG_C99, OurFile, "nou", false, "", 0);
-    auto OurSubT = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
+    auto OurSubT =
+        DIB.createSubroutineType(DIB.getOrCreateTypeArray(std::nullopt));
     OurFunc =
         DIB.createFunction(OurCU, "bees", "", OurFile, 1, OurSubT, 1,
                            DINode::FlagZero, DISubprogram::SPFlagDefinition);
@@ -474,8 +475,8 @@ body:  |
     auto MIRParse = createMIRParser(std::move(MemBuf), Ctx);
     Mod = MIRParse->parseIRModule();
     assert(Mod);
-    Mod->setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-"
-                       "n8:16:32:64-S128");
+    Mod->setDataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-"
+                       "f80:128-n8:16:32:64-S128");
 
     bool Result = MIRParse->parseMachineFunctions(*Mod, *MMI);
     assert(!Result && "Failed to parse unit test machine function?");
@@ -1814,7 +1815,7 @@ TEST_F(InstrRefLDVTest, pickVPHILocDiamond) {
   DbgOpID RaxPHIInBlk3ID = addValueDbgOp(RaxPHIInBlk3);
   DbgOpID ConstZeroID = addConstDbgOp(MachineOperand::CreateImm(0));
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   DIExpression *TwoOpExpr =
       DIExpression::get(Ctx, {dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_LLVM_arg,
@@ -2008,7 +2009,7 @@ TEST_F(InstrRefLDVTest, pickVPHILocLoops) {
   DbgOpID RspPHIInBlk1ID = addValueDbgOp(RspPHIInBlk1);
   DbgOpID RaxPHIInBlk1ID = addValueDbgOp(RaxPHIInBlk1);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   DIExpression *TwoOpExpr =
       DIExpression::get(Ctx, {dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_LLVM_arg,
@@ -2143,7 +2144,7 @@ TEST_F(InstrRefLDVTest, pickVPHILocBadlyNestedLoops) {
   addValueDbgOp(RaxPHIInBlk1);
   DbgOpID RbxPHIInBlk1ID = addValueDbgOp(RbxPHIInBlk1);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   SmallVector<DbgValue, 32> VLiveOuts;
   VLiveOuts.resize(5, DbgValue(EmptyProps, DbgValue::Undef));
@@ -2277,7 +2278,7 @@ TEST_F(InstrRefLDVTest, vlocJoinDiamond) {
   DbgOpID LiveInRspID = DbgOpID(false, 0);
   DbgOpID LiveInRaxID = DbgOpID(false, 1);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   SmallVector<DbgValue, 32> VLiveOuts;
   VLiveOuts.resize(4, DbgValue(EmptyProps, DbgValue::Undef));
@@ -2461,7 +2462,7 @@ TEST_F(InstrRefLDVTest, vlocJoinLoops) {
   DbgOpID LiveInRspID = DbgOpID(false, 0);
   DbgOpID LiveInRaxID = DbgOpID(false, 1);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   SmallVector<DbgValue, 32> VLiveOuts;
   VLiveOuts.resize(3, DbgValue(EmptyProps, DbgValue::Undef));
@@ -2562,7 +2563,7 @@ TEST_F(InstrRefLDVTest, vlocJoinBadlyNestedLoops) {
   DbgOpID LiveInRaxID = DbgOpID(false, 1);
   DbgOpID LiveInRbxID = DbgOpID(false, 2);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   SmallVector<DbgValue, 32> VLiveOuts;
   VLiveOuts.resize(5, DbgValue(EmptyProps, DbgValue::Undef));
@@ -2648,7 +2649,7 @@ TEST_F(InstrRefLDVTest, VLocSingleBlock) {
   DbgOpID LiveInRspID = addValueDbgOp(LiveInRsp);
   MInLocs[0][0] = MOutLocs[0][0] = LiveInRsp;
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
 
   SmallSet<DebugVariable, 4> AllVars;
@@ -2711,7 +2712,7 @@ TEST_F(InstrRefLDVTest, VLocDiamondBlocks) {
   initValueArray(MInLocs, 4, 2);
   initValueArray(MOutLocs, 4, 2);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
 
   SmallSet<DebugVariable, 4> AllVars;
@@ -2933,7 +2934,7 @@ TEST_F(InstrRefLDVTest, VLocSimpleLoop) {
   initValueArray(MInLocs, 3, 2);
   initValueArray(MOutLocs, 3, 2);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
   DIExpression *TwoOpExpr =
       DIExpression::get(Ctx, {dwarf::DW_OP_LLVM_arg, 0, dwarf::DW_OP_LLVM_arg,
@@ -3154,7 +3155,7 @@ TEST_F(InstrRefLDVTest, VLocSimpleLoop) {
   VLocs[1].Vars.clear();
 
   // Test that we can eliminate PHIs. A PHI will be placed at the loop head
-  // because there's a def in in.
+  // because there's a def in it.
   MInLocs[1][0] = LiveInRsp;
   MOutLocs[1][0] = LiveInRsp;
   VLocs[0].Vars.insert({Var, DbgValue(LiveInRspID, EmptyProps)});
@@ -3212,7 +3213,7 @@ TEST_F(InstrRefLDVTest, VLocNestedLoop) {
   initValueArray(MInLocs, 5, 2);
   initValueArray(MOutLocs, 5, 2);
 
-  DebugVariable Var(FuncVariable, None, nullptr);
+  DebugVariable Var(FuncVariable, std::nullopt, nullptr);
   DbgValueProperties EmptyProps(EmptyExpr, false, false);
 
   SmallSet<DebugVariable, 4> AllVars;

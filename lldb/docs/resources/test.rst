@@ -1,9 +1,6 @@
 Testing
 =======
 
-.. contents::
-   :local:
-
 Test Suite Structure
 --------------------
 
@@ -229,7 +226,7 @@ good testing practices.
     time (e.g., C and C++) there is also usually no process necessary to test
     the `SBType`-related parts of the API. With those languages it's also
     possible to test `SBValue` by running expressions with
-    `SBTarget.EvaluateExpression` or the `expect_expr` testing utility.
+    `SBTarget.EvaluateExpression` or the ``expect_expr`` testing utility.
 
     Functionality that always requires a running process is everything that
     tests the `SBProcess`, `SBThread`, and `SBFrame` classes. The same is true
@@ -315,27 +312,27 @@ A better way to write the test above would be using LLDB's testing function
     self.expect_expr("2 + 2", result_value="0")
 
 **Prefer using specific asserts over the generic assertTrue/assertFalse.**.
-    The `self.assertTrue`/`self.assertFalse` functions should always be your
+    The ``self.assertTrue``/``self.assertFalse`` functions should always be your
     last option as they give non-descriptive error messages. The test class has
-    several expressive asserts such as `self.assertIn` that automatically
+    several expressive asserts such as ``self.assertIn`` that automatically
     generate an explanation how the received values differ from the expected
-    ones. Check the documentation of Python's `unittest` module to see what
+    ones. Check the documentation of Python's ``unittest`` module to see what
     asserts are available. LLDB also has a few custom asserts that are tailored
     to our own data types.
 
 +-----------------------------------------------+-----------------------------------------------------------------+
-| **Assert**                                    | **Description**                                               |
+| **Assert**                                    | **Description**                                                 |
 +-----------------------------------------------+-----------------------------------------------------------------+
-| ``assertSuccess``                             | Assert that an ``lldb.SBError`` is in the "success" state.    |
+| ``assertSuccess``                             | Assert that an ``lldb.SBError`` is in the "success" state.      |
 +-----------------------------------------------+-----------------------------------------------------------------+
-| ``assertState``                               | Assert that two states (``lldb.eState*``) are equal.          |
+| ``assertState``                               | Assert that two states (``lldb.eState*``) are equal.            |
 +-----------------------------------------------+-----------------------------------------------------------------+
 | ``assertStopReason``                          | Assert that two stop reasons (``lldb.eStopReason*``) are equal. |
 +-----------------------------------------------+-----------------------------------------------------------------+
 
     If you can't find a specific assert that fits your needs and you fall back
     to a generic assert, make sure you put useful information into the assert's
-    `msg` argument that helps explain the failure.
+    ``msg`` argument that helps explain the failure.
 
 ::
 
@@ -409,6 +406,21 @@ The 'child_send1.txt' file gets generated during the test run, so it makes sense
 TestSTTYBeforeAndAfter.py file to do the cleanup instead of artificially adding it as part of the default cleanup action which serves to
 cleanup those intermediate and a.out files.
 
+CI
+--
+
+LLVM Buildbot is the place where volunteers provide machines for building and
+testing. Everyone can `add a buildbot for LLDB <https://llvm.org/docs/HowToAddABuilder.html>`_.
+
+An overview of all LLDB builders can be found here:
+
+`https://lab.llvm.org/buildbot/#/builders?tags=lldb <https://lab.llvm.org/buildbot/#/builders?tags=lldb>`_
+
+Building and testing for macOS uses a different platform called GreenDragon. It
+has a dedicated tab for LLDB: `https://green.lab.llvm.org/green/view/LLDB/
+<https://green.lab.llvm.org/green/view/LLDB/>`_
+
+
 Running The Tests
 -----------------
 
@@ -471,7 +483,7 @@ run as part of a test suite.
 
 ::
 
-   $ ./bin/llvm-lit -sv tools/lldb/test --filter <test>
+   $ ./bin/llvm-lit -sv <llvm-project-root>/lldb/test --filter <test>
 
 
 Because lit automatically scans a directory for tests, it's also possible to
@@ -479,7 +491,7 @@ pass a subdirectory to run a specific subset of the tests.
 
 ::
 
-   $ ./bin/llvm-lit -sv tools/lldb/test/Shell/Commands/CommandScriptImmediateOutput
+   $ ./bin/llvm-lit -sv <llvm-project-root>/lldb/test/Shell/Commands/CommandScriptImmediateOutput
 
 
 For the SB API tests it is possible to forward arguments to ``dotest.py`` by
@@ -487,7 +499,7 @@ passing ``--param`` to lit and setting a value for ``dotest-args``.
 
 ::
 
-   $ ./bin/llvm-lit -sv tools/lldb/test --param dotest-args='-C gcc'
+   $ ./bin/llvm-lit -sv <llvm-project-root>/lldb/test --param dotest-args='-C gcc'
 
 
 Below is an overview of running individual test in the unit and API test suites
@@ -577,9 +589,9 @@ Running tests in QEMU System Emulation Environment
 ``````````````````````````````````````````````````
 
 QEMU can be used to test LLDB in an emulation environment in the absence of
-actual hardware. `QEMU based testing <https://lldb.llvm.org/use/qemu-testing.html>`_
-page describes how to setup an emulation environment using QEMU helper scripts
-found under llvm-project/lldb/scripts/lldb-test-qemu. These scripts currently
+actual hardware. :doc:`/use/qemu-testing` describes how to setup an
+emulation environment using QEMU helper scripts found in
+``llvm-project/lldb/scripts/lldb-test-qemu``. These scripts currently
 work with Arm or AArch64, but support for other architectures can be added easily.
 
 Debugging Test Failures
@@ -598,8 +610,6 @@ line to your ``~/.pdbrc``:
 ::
 
    alias lldb self.dbg.HandleCommand("%*")
-
-::
 
 Debugging Test Failures on Windows
 ``````````````````````````````````

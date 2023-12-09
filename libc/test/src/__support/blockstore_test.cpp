@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "src/__support/blockstore.h"
-#include "utils/UnitTest/Test.h"
+#include "test/UnitTest/Test.h"
 
 struct Element {
   int a;
@@ -15,13 +15,13 @@ struct Element {
   unsigned c;
 };
 
-class LlvmLibcBlockStoreTest : public __llvm_libc::testing::Test {
+class LlvmLibcBlockStoreTest : public LIBC_NAMESPACE::testing::Test {
 public:
   template <size_t BLOCK_SIZE, size_t ELEMENT_COUNT, bool REVERSE>
   void populate_and_iterate() {
-    __llvm_libc::cpp::BlockStore<Element, BLOCK_SIZE, REVERSE> block_store;
+    LIBC_NAMESPACE::cpp::BlockStore<Element, BLOCK_SIZE, REVERSE> block_store;
     for (int i = 0; i < int(ELEMENT_COUNT); ++i)
-      block_store.push_back({i, 2 * i, 3 * unsigned(i)});
+      ASSERT_TRUE(block_store.push_back({i, 2 * i, 3 * unsigned(i)}));
     auto end = block_store.end();
     int i = 0;
     for (auto iter = block_store.begin(); iter != end; ++iter, ++i) {
@@ -38,28 +38,30 @@ public:
       }
     }
     ASSERT_EQ(i, int(ELEMENT_COUNT));
-    __llvm_libc::cpp::BlockStore<Element, BLOCK_SIZE, REVERSE>::destroy(
+    LIBC_NAMESPACE::cpp::BlockStore<Element, BLOCK_SIZE, REVERSE>::destroy(
         &block_store);
   }
 
   template <bool REVERSE> void back_test() {
-    using __llvm_libc::cpp::BlockStore;
+    using LIBC_NAMESPACE::cpp::BlockStore;
     BlockStore<int, 4, REVERSE> block_store;
     for (int i = 0; i < 20; i++)
-      block_store.push_back(i);
+      ASSERT_TRUE(block_store.push_back(i));
     for (int i = 19; i >= 0; i--, block_store.pop_back())
       ASSERT_EQ(block_store.back(), i);
     block_store.destroy(&block_store);
   }
 
   template <bool REVERSE> void empty_test() {
-    using __llvm_libc::cpp::BlockStore;
+    using LIBC_NAMESPACE::cpp::BlockStore;
     BlockStore<int, 2, REVERSE> block_store;
 
     ASSERT_TRUE(block_store.empty());
-    block_store.push_back(1);
-    for (int i = 0; i < 10; i++, block_store.push_back(1))
+    ASSERT_TRUE(block_store.push_back(1));
+    for (int i = 0; i < 10; i++) {
       ASSERT_FALSE(block_store.empty());
+      ASSERT_TRUE(block_store.push_back(1));
+    }
     block_store.destroy(&block_store);
   }
 };
@@ -88,10 +90,11 @@ TEST_F(LlvmLibcBlockStoreTest, PopulateAndIterateReverse10) {
   populate_and_iterate<4, 10, true>();
 }
 
-TEST_F(LlvmLibcBlockStoreTest, Back) {
-  back_test<false>();
-  back_test<true>();
-}
+TEST_F(LlvmLibcBlockStoreTest, Back) { back_test<false>(); }
+
+// FIXME: Combing this test with the above test makes the AMDGPU backend
+// generate code which hangs. This should be fixed in the clang compiler.
+TEST_F(LlvmLibcBlockStoreTest, BackReverse) { back_test<true>(); }
 
 TEST_F(LlvmLibcBlockStoreTest, Empty) {
   empty_test<false>();

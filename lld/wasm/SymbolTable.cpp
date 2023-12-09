@@ -12,6 +12,7 @@
 #include "InputElement.h"
 #include "WriterUtils.h"
 #include "lld/Common/CommonLinkerContext.h"
+#include <optional>
 
 #define DEBUG_TYPE "lld"
 
@@ -19,11 +20,10 @@ using namespace llvm;
 using namespace llvm::wasm;
 using namespace llvm::object;
 
-namespace lld {
-namespace wasm {
+namespace lld::wasm {
 SymbolTable *symtab;
 
-void SymbolTable::addFile(InputFile *file) {
+void SymbolTable::addFile(InputFile *file, StringRef symName) {
   log("Processing: " + toString(file));
 
   // .a file
@@ -38,13 +38,22 @@ void SymbolTable::addFile(InputFile *file) {
     return;
   }
 
+  // stub file
+  if (auto *f = dyn_cast<StubFile>(file)) {
+    f->parse();
+    stubFiles.push_back(f);
+    return;
+  }
+
   if (config->trace)
     message(toString(file));
 
   // LLVM bitcode file
   if (auto *f = dyn_cast<BitcodeFile>(file)) {
-    f->parse();
+    // This order, first adding to `bitcodeFiles` and then parsing is necessary.
+    // See https://github.com/llvm/llvm-project/pull/73095
     bitcodeFiles.push_back(f);
+    f->parse(symName);
     return;
   }
 
@@ -226,7 +235,8 @@ DefinedData *SymbolTable::addOptionalDataSymbol(StringRef name,
   else if (!s || s->isDefined())
     return nullptr;
   LLVM_DEBUG(dbgs() << "addOptionalDataSymbol: " << name << "\n");
-  auto *rtn = replaceSymbol<DefinedData>(s, name, WASM_SYMBOL_VISIBILITY_HIDDEN);
+  auto *rtn = replaceSymbol<DefinedData>(
+      s, name, WASM_SYMBOL_VISIBILITY_HIDDEN | WASM_SYMBOL_ABSOLUTE);
   rtn->setVA(value);
   rtn->referenced = true;
   return rtn;
@@ -236,7 +246,8 @@ DefinedData *SymbolTable::addSyntheticDataSymbol(StringRef name,
                                                  uint32_t flags) {
   LLVM_DEBUG(dbgs() << "addSyntheticDataSymbol: " << name << "\n");
   assert(!find(name));
-  return replaceSymbol<DefinedData>(insertName(name).first, name, flags);
+  return replaceSymbol<DefinedData>(insertName(name).first, name,
+                                    flags | WASM_SYMBOL_ABSOLUTE);
 }
 
 DefinedGlobal *SymbolTable::addSyntheticGlobal(StringRef name, uint32_t flags,
@@ -461,8 +472,9 @@ Symbol *SymbolTable::addDefinedTable(StringRef name, uint32_t flags,
 // become available when the LTO object is read.  In this case we silently
 // replace the empty attributes with the valid ones.
 template <typename T>
-static void setImportAttributes(T *existing, Optional<StringRef> importName,
-                                Optional<StringRef> importModule,
+static void setImportAttributes(T *existing,
+                                std::optional<StringRef> importName,
+                                std::optional<StringRef> importModule,
                                 uint32_t flags, InputFile *file) {
   if (importName) {
     if (!existing->importName)
@@ -492,8 +504,8 @@ static void setImportAttributes(T *existing, Optional<StringRef> importName,
 }
 
 Symbol *SymbolTable::addUndefinedFunction(StringRef name,
-                                          Optional<StringRef> importName,
-                                          Optional<StringRef> importModule,
+                                          std::optional<StringRef> importName,
+                                          std::optional<StringRef> importModule,
                                           uint32_t flags, InputFile *file,
                                           const WasmSignature *sig,
                                           bool isCalledDirectly) {
@@ -522,6 +534,9 @@ Symbol *SymbolTable::addUndefinedFunction(StringRef name,
       lazy->signature = sig;
     } else {
       lazy->fetch();
+      if (!config->whyExtract.empty())
+        config->whyExtractRecords.emplace_back(toString(file), s->getFile(),
+                                               *s);
     }
   } else {
     auto existingFunction = dyn_cast<FunctionSymbol>(s);
@@ -546,6 +561,8 @@ Symbol *SymbolTable::addUndefinedFunction(StringRef name,
                           file);
       if (isCalledDirectly)
         existingUndefined->isCalledDirectly = true;
+      if (s->isWeak())
+        s->flags = flags;
     }
   }
 
@@ -572,13 +589,15 @@ Symbol *SymbolTable::addUndefinedData(StringRef name, uint32_t flags,
       lazy->fetch();
   } else if (s->isDefined()) {
     checkDataType(s, file);
+  } else if (s->isWeak()) {
+    s->flags = flags;
   }
   return s;
 }
 
 Symbol *SymbolTable::addUndefinedGlobal(StringRef name,
-                                        Optional<StringRef> importName,
-                                        Optional<StringRef> importModule,
+                                        std::optional<StringRef> importName,
+                                        std::optional<StringRef> importModule,
                                         uint32_t flags, InputFile *file,
                                         const WasmGlobalType *type) {
   LLVM_DEBUG(dbgs() << "addUndefinedGlobal: " << name << "\n");
@@ -597,12 +616,14 @@ Symbol *SymbolTable::addUndefinedGlobal(StringRef name,
     lazy->fetch();
   else if (s->isDefined())
     checkGlobalType(s, file, type);
+  else if (s->isWeak())
+    s->flags = flags;
   return s;
 }
 
 Symbol *SymbolTable::addUndefinedTable(StringRef name,
-                                       Optional<StringRef> importName,
-                                       Optional<StringRef> importModule,
+                                       std::optional<StringRef> importName,
+                                       std::optional<StringRef> importModule,
                                        uint32_t flags, InputFile *file,
                                        const WasmTableType *type) {
   LLVM_DEBUG(dbgs() << "addUndefinedTable: " << name << "\n");
@@ -621,12 +642,14 @@ Symbol *SymbolTable::addUndefinedTable(StringRef name,
     lazy->fetch();
   else if (s->isDefined())
     checkTableType(s, file, type);
+  else if (s->isWeak())
+    s->flags = flags;
   return s;
 }
 
 Symbol *SymbolTable::addUndefinedTag(StringRef name,
-                                     Optional<StringRef> importName,
-                                     Optional<StringRef> importModule,
+                                     std::optional<StringRef> importName,
+                                     std::optional<StringRef> importModule,
                                      uint32_t flags, InputFile *file,
                                      const WasmSignature *sig) {
   LLVM_DEBUG(dbgs() << "addUndefinedTag: " << name << "\n");
@@ -645,6 +668,8 @@ Symbol *SymbolTable::addUndefinedTag(StringRef name,
     lazy->fetch();
   else if (s->isDefined())
     checkTagType(s, file, sig);
+  else if (s->isWeak())
+    s->flags = flags;
   return s;
 }
 
@@ -746,7 +771,10 @@ void SymbolTable::addLazy(ArchiveFile *file, const Archive::Symbol *sym) {
   }
 
   LLVM_DEBUG(dbgs() << "replacing existing undefined\n");
+  const InputFile *oldFile = s->getFile();
   file->addMember(sym);
+  if (!config->whyExtract.empty())
+    config->whyExtractRecords.emplace_back(toString(oldFile), s->getFile(), *s);
 }
 
 bool SymbolTable::addComdat(StringRef name) {
@@ -948,5 +976,4 @@ void SymbolTable::handleSymbolVariants() {
   }
 }
 
-} // namespace wasm
-} // namespace lld
+} // namespace wasm::lld

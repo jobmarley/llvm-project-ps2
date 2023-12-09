@@ -15,6 +15,7 @@
 #include "CodeGenTarget.h"
 #include "X86RecognizableInstr.h"
 #include "llvm/TableGen/Error.h"
+#include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
 
 using namespace llvm;
@@ -32,14 +33,12 @@ class X86EVEX2VEXTablesEmitter {
   // to make the search more efficient
   std::map<uint64_t, std::vector<const CodeGenInstruction *>> VEXInsts;
 
-  typedef std::pair<const CodeGenInstruction *, const CodeGenInstruction *> Entry;
-  typedef std::pair<StringRef, StringRef> Predicate;
+  typedef std::pair<const CodeGenInstruction *, const CodeGenInstruction *>
+      Entry;
 
   // Represent both compress tables
   std::vector<Entry> EVEX2VEX128;
   std::vector<Entry> EVEX2VEX256;
-  // Represent predicates of VEX instructions.
-  std::vector<Predicate> EVEX2VEXPredicates;
 
 public:
   X86EVEX2VEXTablesEmitter(RecordKeeper &R) : Records(R), Target(R) {}
@@ -51,9 +50,6 @@ private:
   // Prints the given table as a C++ array of type
   // X86EvexToVexCompressTableEntry
   void printTable(const std::vector<Entry> &Table, raw_ostream &OS);
-  // Prints function which checks target feature specific predicate.
-  void printCheckPredicate(const std::vector<Predicate> &Predicates,
-                           raw_ostream &OS);
 };
 
 void X86EVEX2VEXTablesEmitter::printTable(const std::vector<Entry> &Table,
@@ -74,19 +70,6 @@ void X86EVEX2VEXTablesEmitter::printTable(const std::vector<Entry> &Table,
   }
 
   OS << "};\n\n";
-}
-
-void X86EVEX2VEXTablesEmitter::printCheckPredicate(
-    const std::vector<Predicate> &Predicates, raw_ostream &OS) {
-  OS << "static bool CheckVEXInstPredicate"
-     << "(MachineInstr &MI, const X86Subtarget *Subtarget) {\n"
-     << "  unsigned Opc = MI.getOpcode();\n"
-     << "  switch (Opc) {\n"
-     << "    default: return true;\n";
-  for (const auto &Pair : Predicates)
-    OS << "    case X86::" << Pair.first << ": return " << Pair.second << ";\n";
-  OS << "  }\n"
-     << "}\n\n";
 }
 
 // Return true if the 2 BitsInits are equal
@@ -113,10 +96,10 @@ public:
   bool operator()(const CodeGenInstruction *VEXInst) {
     RecognizableInstrBase VEXRI(*VEXInst);
     RecognizableInstrBase EVEXRI(*EVEXInst);
-    bool VEX_W = VEXRI.HasVEX_W;
-    bool EVEX_W = EVEXRI.HasVEX_W;
-    bool VEX_WIG  = VEXRI.IgnoresVEX_W;
-    bool EVEX_WIG  = EVEXRI.IgnoresVEX_W;
+    bool VEX_W = VEXRI.HasREX_W;
+    bool EVEX_W = EVEXRI.HasREX_W;
+    bool VEX_WIG  = VEXRI.IgnoresW;
+    bool EVEX_WIG  = EVEXRI.IgnoresW;
     bool EVEX_W1_VEX_W0 = EVEXInst->TheDef->getValueAsBit("EVEX_W1_VEX_W0");
 
     if (VEXRI.IsCodeGenOnly != EVEXRI.IsCodeGenOnly ||
@@ -163,18 +146,6 @@ public:
 };
 
 void X86EVEX2VEXTablesEmitter::run(raw_ostream &OS) {
-  auto getPredicates = [&](const CodeGenInstruction *Inst) {
-    std::vector<Record *> PredicatesRecords =
-        Inst->TheDef->getValueAsListOfDefs("Predicates");
-    // Currently we only do AVX related checks and assume each instruction
-    // has one and only one AVX related predicates.
-    for (unsigned i = 0, e = PredicatesRecords.size(); i != e; ++i)
-      if (PredicatesRecords[i]->getName().startswith("HasAVX"))
-        return PredicatesRecords[i]->getValueAsString("CondString");
-    llvm_unreachable(
-        "Instruction with checkPredicate set must have one predicate!");
-  };
-
   emitSourceFileHeader("X86 EVEX2VEX tables", OS);
 
   ArrayRef<const CodeGenInstruction *> NumberedInstructions =
@@ -184,6 +155,9 @@ void X86EVEX2VEXTablesEmitter::run(raw_ostream &OS) {
     const Record *Def = Inst->TheDef;
     // Filter non-X86 instructions.
     if (!Def->isSubClassOf("X86Inst"))
+      continue;
+    // _REV instruction should not appear before encoding optimization
+    if (Def->getName().ends_with("_REV"))
       continue;
     RecognizableInstrBase RI(*Inst);
 
@@ -224,23 +198,13 @@ void X86EVEX2VEXTablesEmitter::run(raw_ostream &OS) {
       EVEX2VEX256.push_back(std::make_pair(EVEXInst, VEXInst)); // {0,1}
     else
       EVEX2VEX128.push_back(std::make_pair(EVEXInst, VEXInst)); // {0,0}
-
-    // Adding predicate check to EVEX2VEXPredicates table when needed.
-    if (VEXInst->TheDef->getValueAsBit("checkVEXPredicate"))
-      EVEX2VEXPredicates.push_back(
-          std::make_pair(EVEXInst->TheDef->getName(), getPredicates(VEXInst)));
   }
 
   // Print both tables
   printTable(EVEX2VEX128, OS);
   printTable(EVEX2VEX256, OS);
-  // Print CheckVEXInstPredicate function.
-  printCheckPredicate(EVEX2VEXPredicates, OS);
 }
-}
+} // namespace
 
-namespace llvm {
-void EmitX86EVEX2VEXTables(RecordKeeper &RK, raw_ostream &OS) {
-  X86EVEX2VEXTablesEmitter(RK).run(OS);
-}
-}
+static TableGen::Emitter::OptClass<X86EVEX2VEXTablesEmitter>
+    X("gen-x86-EVEX2VEX-tables", "Generate X86 EVEX to VEX compress tables");

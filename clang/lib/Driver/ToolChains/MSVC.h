@@ -11,10 +11,10 @@
 
 #include "AMDGPU.h"
 #include "Cuda.h"
-#include "clang/Basic/DebugInfoOptions.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Tool.h"
 #include "clang/Driver/ToolChain.h"
+#include "llvm/Frontend/Debug/Options.h"
 #include "llvm/WindowsDriver/MSVCPaths.h"
 
 namespace clang {
@@ -23,7 +23,7 @@ namespace tools {
 
 /// Visual studio tools.
 namespace visualstudio {
-class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
+class LLVM_LIBRARY_VISIBILITY Linker final : public Tool {
 public:
   Linker(const ToolChain &TC) : Tool("visualstudio::Linker", "linker", TC) {}
 
@@ -50,7 +50,6 @@ public:
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
 
-  bool IsIntegratedAssemblerDefault() const override;
   UnwindTableLevel
   getDefaultUnwindTableLevel(const llvm::opt::ArgList &Args) const override;
   bool isPICDefault() const override;
@@ -60,9 +59,10 @@ public:
   /// Set CodeView as the default debug info format for non-MachO binary
   /// formats, and to DWARF otherwise. Users can use -gcodeview and -gdwarf to
   /// override the default.
-  codegenoptions::DebugInfoFormat getDefaultDebugFormat() const override {
-    return getTriple().isOSBinFormatMachO() ? codegenoptions::DIF_DWARF
-                                            : codegenoptions::DIF_CodeView;
+  llvm::codegenoptions::DebugInfoFormat getDefaultDebugFormat() const override {
+    return getTriple().isOSBinFormatMachO()
+               ? llvm::codegenoptions::DIF_DWARF
+               : llvm::codegenoptions::DIF_CodeView;
   }
 
   /// Set the debugger tuning to "default", since we're definitely not tuning
@@ -133,7 +133,7 @@ protected:
   Tool *buildLinker() const override;
   Tool *buildAssembler() const override;
 private:
-  llvm::Optional<llvm::StringRef> WinSdkDir, WinSdkVersion, WinSysRoot;
+  std::optional<llvm::StringRef> WinSdkDir, WinSdkVersion, WinSysRoot;
   std::string VCToolChainPath;
   llvm::ToolsetLayout VSLayout = llvm::ToolsetLayout::OlderVS;
   CudaInstallationDetector CudaInstallation;

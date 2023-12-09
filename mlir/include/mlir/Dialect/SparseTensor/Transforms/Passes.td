@@ -11,13 +11,45 @@
 
 include "mlir/Pass/PassBase.td"
 
-def SparseTensorRewrite : Pass<"sparse-tensor-rewrite", "ModuleOp"> {
+def SparseReinterpretMap : Pass<"sparse-reinterpret-map", "ModuleOp"> {
+  let summary = "Reinterprets sparse tensor type mappings";
+  let description = [{
+    A pass that reinterprets the mappings in all sparse tensor types in a
+    way that enables subsequent sparsification. This involves expressing all
+    `linalg.generic` operations in terms of level coordinates (rather than
+    the dimension coordinates of the input tensors) to align the iteration
+    space with the potentially remapped level space as well as resolving cycles
+    in the resulting iteration graphs with explicit sparse tensor conversions
+    where needed.
+  }];
+  let constructor = "mlir::createSparseReinterpretMapPass()";
+  let dependentDialects = [
+    "affine::AffineDialect",
+    "linalg::LinalgDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+  let options = [
+    Option<"scope", "scope", "mlir::ReinterpretMapScope",
+       "mlir::ReinterpretMapScope::kAll",
+       "Set the reiterpretation scope", [{llvm::cl::values(
+         clEnumValN(mlir::ReinterpretMapScope::kAll, "all",
+                    "Run on every applicable operations."),
+         clEnumValN(mlir::ReinterpretMapScope::kGenericOnly,
+                    "only-generic",
+                    "Run only on linalg.generic operations."),
+         clEnumValN(mlir::ReinterpretMapScope::kExceptGeneric,
+                    "except-generic",
+                    "Run on operations expect linalg.generic (e.g., foreach)"))}]>,
+  ];
+}
+
+def PreSparsificationRewrite : Pass<"pre-sparsification-rewrite", "ModuleOp"> {
   let summary = "Applies sparse tensor rewriting rules prior to sparsification";
   let description = [{
     A pass that applies rewriting rules to sparse tensor operations prior
     to running the actual sparsification pass.
   }];
-  let constructor = "mlir::createSparseTensorRewritePass()";
+  let constructor = "mlir::createPreSparsificationRewritePass()";
   let dependentDialects = [
     "arith::ArithDialect",
     "bufferization::BufferizationDialect",
@@ -26,16 +58,12 @@ def SparseTensorRewrite : Pass<"sparse-tensor-rewrite", "ModuleOp"> {
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",
   ];
-  let options = [
-    Option<"enableRuntimeLibrary", "enable-runtime-library", "bool",
-           "true", "Enable runtime library for manipulating sparse tensors">
-  ];
 }
 
 def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
   let summary = "Automatically generate sparse tensor code from sparse tensor types";
   let description = [{
-    A pass that implements the core functionality of a **sparse compiler**.
+    A pass that implements the core functionality of a **sparsifier**.
     Each Linalg operation (MLIR's tensor index notation) that operates on
     sparse tensor types is converted into code in which the sparsity is
     explicit both in terms of co-iterating looping logic as well as
@@ -58,8 +86,8 @@ def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
 
     // Multiply a sparse matrix A with a dense vector b into a dense vector x.
     func.func @kernel_matvec(%arga: tensor<?x?xf64, #SparseMatrix>,
-                        %argb: tensor<?xf64>,
-                        %argx: tensor<?xf64>) -> tensor<?xf64> {
+                             %argb: tensor<?xf64>,
+                             %argx: tensor<?xf64>) -> tensor<?xf64> {
       %0 = linalg.generic #matvec
         ins(%arga, %argb: tensor<?x?xf64, #SparseMatrix>, tensor<?xf64>)
         outs(%argx: tensor<?xf64>) {
@@ -74,7 +102,7 @@ def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
   }];
   let constructor = "mlir::createSparsificationPass()";
   let dependentDialects = [
-    "AffineDialect",
+    "affine::AffineDialect",
     "arith::ArithDialect",
     "bufferization::BufferizationDialect",
     "LLVM::LLVMDialect",
@@ -82,7 +110,6 @@ def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",
-    "vector::VectorDialect",
   ];
   // TODO(57514): These enum options are duplicated in Passes.h.
   let options = [
@@ -103,27 +130,59 @@ def SparsificationPass : Pass<"sparsification", "ModuleOp"> {
              clEnumValN(mlir::SparseParallelizationStrategy::kAnyStorageAnyLoop,
                         "any-storage-any-loop",
                         "Enable sparse parallelization for any storage and loop."))}]>,
-    Option<"vectorization", "vectorization-strategy", "mlir::SparseVectorizationStrategy",
-           "mlir::SparseVectorizationStrategy::kNone",
-           "Set the vectorization strategy", [{llvm::cl::values(
-             clEnumValN(mlir::SparseVectorizationStrategy::kNone, "none",
-                        "Turn off sparse vectorization."),
-             clEnumValN(mlir::SparseVectorizationStrategy::kDenseInnerLoop,
-                        "dense-inner-loop",
-                        "Enable vectorization for dense inner loops."),
-             clEnumValN(mlir::SparseVectorizationStrategy::kAnyStorageInnerLoop,
-                        "any-storage-inner-loop",
-                        "Enable sparse vectorization for inner loops with any storage."))}]>,
-    Option<"vectorLength", "vl", "int32_t", "1",
-           "Set the vector length">,
-    Option<"enableSIMDIndex32", "enable-simd-index32", "bool", "false",
-           "Enable i32 indexing into vectors (for efficiency)">,
-    Option<"enableVLAVectorization", "enable-vla-vectorization", "bool",
-           "false", "Enable vector length agnostic vectorization">,
     Option<"enableRuntimeLibrary", "enable-runtime-library", "bool",
-           "true", "Enable runtime library for manipulating sparse tensors">
+           "true", "Enable runtime library for manipulating sparse tensors">,
   ];
 }
+
+def StageSparseOperations : Pass<"stage-sparse-ops", "func::FuncOp"> {
+  let summary = "Decompose a complex sparse operation into multiple stages";
+  let description = [{
+    A pass that decomposes a complex sparse operation into multiple stages.
+    E.g., CSR -> CSC is staged into CSR -> COO (unordered) -> sort -> CSC.
+  }];
+  let constructor = "mlir::createStageSparseOperationsPass()";
+  let dependentDialects = [
+    "sparse_tensor::SparseTensorDialect",
+  ];
+}
+
+def LowerSparseOpsToForeach : Pass<"lower-sparse-ops-to-foreach", "ModuleOp"> {
+  let summary = "Applies sparse tensor rewriting rules after sparsification";
+  let description = [{
+    A pass that lowers high-level sparse operations to sparse_tensor.foreach.
+  }];
+  let constructor = "mlir::createLowerSparseOpsToForeachPass()";
+  let dependentDialects = [
+    "affine::AffineDialect",
+    "arith::ArithDialect",
+    "bufferization::BufferizationDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+  let options = [
+    Option<"enableRuntimeLibrary", "enable-runtime-library", "bool",
+           "true", "Enable runtime library for manipulating sparse tensors">,
+    Option<"enableConvert", "enable-convert", "bool",
+           "true", "Enable rewriting rules for the convert operator">,
+  ];
+}
+
+def LowerForeachToSCF : Pass<"lower-sparse-foreach-to-scf", "func::FuncOp"> {
+  let summary = "Decompose a complex sparse operation into multiple stages";
+  let description = [{
+    A pass that lowers sparse_tensor.foreach operation to scf dialect.
+  }];
+  let constructor = "mlir::createLowerForeachToSCFPass()";
+  let dependentDialects = [
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+}
+
 
 def SparseTensorConversionPass : Pass<"sparse-tensor-conversion", "ModuleOp"> {
   let summary = "Convert sparse tensors and primitives to library calls";
@@ -141,17 +200,19 @@ def SparseTensorConversionPass : Pass<"sparse-tensor-conversion", "ModuleOp"> {
 
     ```mlir
       Before:
-        %c1 = arith.constant 1 : index
-        %0 = sparse_tensor.pointers %arg0, %c1
-          : tensor<8x8xf32, #sparse_tensor.encoding<{
-              dimLevelType = [ "dense", "compressed" ],
-              pointerBitWidth = 0,
-              indexBitWidth = 0
-            }>> to memref<?xindex>
+        func.func @foo(%arg0: tensor<8x8xf32, #CSR>) -> memref<?xindex> {
+          %0 = sparse_tensor.pointers %arg0 {dimension = 1 : index}
+             : tensor<8x8xf32, #CSR> to memref<?xindex>
+          return %0 : memref<?xindex>
+        }
 
       After:
-        %c1 = arith.constant 1 : index
-        %0 = call @sparsePointers(%arg0, %c1) : (!llvm.ptr<i8>, index) -> memref<?xindex>
+        func.func @foo(%arg0: !llvm.ptr) -> memref<?xindex> {
+          %c1 = arith.constant 1 : index
+          %0 = call @sparsePointers0(%arg0, %c1)
+             : (!llvm.ptr, index) -> memref<?xindex>
+          return %0 : memref<?xindex>
+        }
     ```
   }];
   let constructor = "mlir::createSparseTensorConversionPass()";
@@ -163,11 +224,6 @@ def SparseTensorConversionPass : Pass<"sparse-tensor-conversion", "ModuleOp"> {
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",
-    "vector::VectorDialect",
-  ];
-  let options = [
-    Option<"sparseToSparse", "s2s-strategy", "int32_t", "0",
-           "Set the strategy for sparse-to-sparse conversion">,
   ];
 }
 
@@ -186,7 +242,21 @@ def SparseTensorCodegen : Pass<"sparse-tensor-codegen", "ModuleOp"> {
     Example of the conversion:
 
     ```mlir
-    TBD
+      Before:
+        func.func @foo(%arg0: tensor<8x8xf32, #CSR>) -> memref<?xindex> {
+          %0 = sparse_tensor.pointers %arg0 {dimension = 1 : index}
+             : tensor<8x8xf32, #CSR> to memref<?xindex>
+          return %0 : memref<?xindex>
+        }
+
+      After:
+        func.func @foo(%arg0: memref<2xindex>,
+                       %arg1: memref<3xindex>,
+                       %arg2: memref<?xindex>,
+                       %arg3: memref<?xindex>,
+                       %arg4: memref<?xf32>) -> memref<?xindex> {
+          return %arg2 : memref<?xindex>
+        }
     ```
   }];
   let constructor = "mlir::createSparseTensorCodegenPass()";
@@ -197,6 +267,16 @@ def SparseTensorCodegen : Pass<"sparse-tensor-codegen", "ModuleOp"> {
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",
+  ];
+  let options = [
+    Option<"enableBufferInitialization", "enable-buffer-initialization", "bool",
+           "false", "Enable zero-initialization of the memory buffers">,
+    Option<"createSparseDeallocs", "create-sparse-deallocs", "bool",
+           "true", "Specify if the temporary buffers created by the sparse "
+                   "compiler should be deallocated. For compatibility with core "
+                   "bufferization passes. "
+                   "This option is only used when enable-runtime-library=false. "
+                   "See also create-deallocs for BufferizationOption.">,
   ];
 }
 
@@ -210,6 +290,138 @@ def SparseBufferRewrite : Pass<"sparse-buffer-rewrite", "ModuleOp"> {
   let constructor = "mlir::createSparseBufferRewritePass()";
   let dependentDialects = [
     "arith::ArithDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+  let options = [
+    Option<"enableBufferInitialization", "enable-buffer-initialization", "bool",
+           "false", "Enable zero-initialization of the memory buffers">,
+  ];
+}
+
+def SparseVectorization : Pass<"sparse-vectorization", "ModuleOp"> {
+  let summary = "Vectorizes loops after sparsification";
+  let description = [{
+    A pass that converts loops after sparsification into vector loops.
+    The vector dialect is used as target to provide an architectural
+    neutral way of exploiting any platform that supports SIMD instructions.
+
+    The vector length (viz. `vl`) describes the number of packed data elements
+    (e.g. both vector<16xf32> and vector<16xf64> have a vector length of 16 even
+    though the actual bitwidths differ). A small multiple of the actual lengths
+    supported in hardware typically results in efficient SIMD code, since the
+    backend will map longer vectors to multiple vector registers, thereby
+    effectively unrolling an addition level within the generated for-loop.
+
+    Example of the conversion:
+
+    ```mlir
+      Before:
+        %3 = memref.load %2[] : memref<f32>
+        %4 = scf.for %arg3 = %c0 to %c1024 step %c1 iter_args(%arg4 = %3) -> (f32) {
+          %6 = memref.load %0[%arg3] : memref<?xf32>
+          %7 = memref.load %1[%arg3] : memref<1024xf32>
+          %8 = arith.mulf %6, %7 : f32
+          %9 = arith.addf %arg4, %8 : f32
+          scf.yield %9 : f32
+        }
+        memref.store %4, %2[] : memref<f32>
+
+      After:
+        %3 = memref.load %2[] : memref<f32>
+        %4 = vector.insertelement %3, %cst[%c0 : index] : vector<32xf32>
+        %5 = scf.for %arg3 = %c0 to %c1024 step %c32 iter_args(%arg4 = %4) -> (vector<32xf32>) {
+          %8 = vector.load %0[%arg3] : memref<?xf32>, vector<32xf32>
+          %9 = vector.load %1[%arg3] : memref<1024xf32>, vector<32xf32>
+          %10 = arith.mulf %8, %9 : vector<32xf32>
+          %11 = arith.addf %arg4, %10 : vector<32xf32>
+          scf.yield %11 : vector<32xf32>
+        }
+        %6 = vector.reduction <add>, %5 : vector<32xf32> into f32
+        memref.store %6, %2[] : memref<f32>
+    ```
+  }];
+  let constructor = "mlir::createSparseVectorizationPass()";
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+    "vector::VectorDialect",
+  ];
+  let options = [
+    Option<"vectorLength", "vl", "int32_t", "0",
+           "Set the vector length (use 0 to disable vectorization)">,
+    Option<"enableVLAVectorization", "enable-vla-vectorization", "bool",
+           "false", "Enable vector length agnostic vectorization">,
+    Option<"enableSIMDIndex32", "enable-simd-index32", "bool", "false",
+           "Enable i32 indexing into vectors (for efficient gather/scatter)">,
+  ];
+}
+
+def SparseGPUCodegen : Pass<"sparse-gpu-codegen", "ModuleOp"> {
+  let summary = "Generates GPU code during sparsification";
+  let description = [{
+    Enables the sparsifier to use GPU acceleration. When the number of GPU
+    threads is set to zero, the pass tries to enable GPU acceleration by
+    means of direct library calls (like cuSPARSE).
+  }];
+  let constructor = "mlir::createSparseGPUCodegenPass()";
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "bufferization::BufferizationDialect",
+    "gpu::GPUDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+  let options = [
+    Option<"numThreads", "num-threads", "int32_t", "1024", "Sets the number of GPU threads">,
+    Option<"enableRuntimeLibrary", "enable-runtime-library", "bool",
+           "true", "Enable runtime library for manipulating sparse tensors">,
+  ];
+}
+
+def StorageSpecifierToLLVM : Pass<"sparse-storage-specifier-to-llvm", "ModuleOp"> {
+  let summary = "Lower sparse storage specifer to llvm structure";
+  let description = [{
+     This pass rewrites sparse tensor storage specifier-related operations into
+     LLVMDialect, and converts sparse tensor storage specifier into an llvm.struct.
+
+     Example of the conversion:
+     ```mlir
+     Before:
+       %0 = sparse_tensor.storage_specifier.get %arg0 dim_sz at 0
+       : !sparse_tensor.storage_specifier<#CSR> to i64
+
+     After:
+       %0 = llvm.extractvalue %arg0[0, 0] : !llvm.struct<(array<2 x i64>, array<3 x i64>)>
+     ```
+  }];
+  let constructor = "mlir::createStorageSpecifierToLLVMPass()";
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "LLVM::LLVMDialect",
+    "sparse_tensor::SparseTensorDialect",
+  ];
+}
+
+def SparsificationAndBufferization : Pass<"sparsification-and-bufferization", "ModuleOp"> {
+  let summary = "Mini-pipeline that combines bufferization and sparsifiation";
+  let description = [{
+     This pass forms a mini-pipeline that combines bufferization and sparsifiation.
+  }];
+  let constructor = "mlir::createSparsificationAndBufferizationPass()";
+  let dependentDialects = [
+    "affine::AffineDialect",
+    "arith::ArithDialect",
+    "bufferization::BufferizationDialect",
+    "gpu::GPUDialect",
+    "LLVM::LLVMDialect",
+    "linalg::LinalgDialect",
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "sparse_tensor::SparseTensorDialect",

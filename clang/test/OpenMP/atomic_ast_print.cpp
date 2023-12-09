@@ -1,18 +1,18 @@
-// RUN: %clang_cc1 -verify -fopenmp -ast-print %s | FileCheck %s
-// RUN: %clang_cc1 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -verify -fopenmp -fopenmp-version=50 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp -fopenmp-version=50 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 
-// RUN: %clang_cc1 -verify -fopenmp-simd -ast-print %s | FileCheck %s
-// RUN: %clang_cc1 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
+// RUN: %clang_cc1 -verify -fopenmp-simd -fopenmp-version=50 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -fopenmp-simd -fopenmp-version=50 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck %s
 
-// RUN: %clang_cc1 -DOMP51 -verify -fopenmp -fopenmp-version=51 -ast-print %s | FileCheck --check-prefixes=CHECK,CHECK-51 %s
-// RUN: %clang_cc1 -DOMP51 -fopenmp -fopenmp-version=51 -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -DOMP51 -fopenmp -fopenmp-version=51 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck --check-prefixes=CHECK,CHECK-51 %s
+// RUN: %clang_cc1 -DOMP51 -verify -fopenmp -ast-print %s | FileCheck --check-prefixes=CHECK,CHECK-51 %s
+// RUN: %clang_cc1 -DOMP51 -fopenmp -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -DOMP51 -fopenmp -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck --check-prefixes=CHECK,CHECK-51 %s
 
-// RUN: %clang_cc1 -DOMP51 -verify -fopenmp-simd -fopenmp-version=51 -ast-print %s | FileCheck --check-prefixes=CHECK,CHECK-51 %s
-// RUN: %clang_cc1 -DOMP51 -fopenmp-simd -fopenmp-version=51 -x c++ -std=c++11 -emit-pch -o %t %s
-// RUN: %clang_cc1 -DOMP51 -fopenmp-simd -fopenmp-version=51 -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck --check-prefixes=CHECK,CHECK-51 %s
+// RUN: %clang_cc1 -DOMP51 -verify -fopenmp-simd -ast-print %s | FileCheck --check-prefixes=CHECK,CHECK-51 %s
+// RUN: %clang_cc1 -DOMP51 -fopenmp-simd -x c++ -std=c++11 -emit-pch -o %t %s
+// RUN: %clang_cc1 -DOMP51 -fopenmp-simd -std=c++11 -include-pch %t -fsyntax-only -verify %s -ast-print | FileCheck --check-prefixes=CHECK,CHECK-51 %s
 // expected-no-diagnostics
 
 #ifndef HEADER
@@ -226,6 +226,12 @@ T foo(T argc) {
   { v = a; if (a < b) { a = b; } }
 #pragma omp atomic compare capture hint(6)
   { v = a == b; if (v) a = c; }
+#pragma omp atomic compare fail(acquire)
+  { if (a < c) { a = c; } }
+#pragma omp atomic compare fail(relaxed)
+  { if (a < c) { a = c; } }
+#pragma omp atomic compare fail(seq_cst)
+  { if (a < c) { a = c; } }
 #endif
   return T();
 }
@@ -1099,6 +1105,12 @@ int main(int argc, char **argv) {
   { v = a; if (a < b) { a = b; } }
 #pragma omp atomic compare capture hint(6)
   { v = a == b; if (v) a = c; }
+#pragma omp atomic compare fail(acquire)
+  if(a < b) { a = b; }
+#pragma omp atomic compare fail(relaxed)
+  if(a < b) { a = b; }
+#pragma omp atomic compare fail(seq_cst)
+  if(a < b) { a = b; }
 #endif
   // CHECK-NEXT: #pragma omp atomic
   // CHECK-NEXT: a++;
@@ -1428,6 +1440,18 @@ int main(int argc, char **argv) {
   // CHECK-51-NEXT: v = a == b;
   // CHECK-51-NEXT: if (v)
   // CHECK-51-NEXT: a = c;
+  // CHECK-51-NEXT: }
+  // CHECK-51-NEXT: #pragma omp atomic compare fail(acquire)
+  // CHECK-51-NEXT: if (a < b) {
+  // CHECK-51-NEXT: a = b;
+  // CHECK-51-NEXT: }
+  // CHECK-51-NEXT: #pragma omp atomic compare fail(relaxed)
+  // CHECK-51-NEXT: if (a < b) {
+  // CHECK-51-NEXT: a = b;
+  // CHECK-51-NEXT: }
+  // CHECK-51-NEXT: #pragma omp atomic compare fail(seq_cst)
+  // CHECK-51-NEXT: if (a < b) {
+  // CHECK-51-NEXT: a = b;
   // CHECK-51-NEXT: }
   // expect-note@+1 {{in instantiation of function template specialization 'foo<int>' requested here}}
   return foo(a);
@@ -6412,6 +6436,383 @@ void bbaarr() {
 // CHECK-51-NEXT: double x, e, d;
 // CHECK-51-NEXT: ffoo(&x, e, d);
 // CHECK-51-NEXT: }
+// CHECK-51-NEXT: }
+
+int xevd() {
+  int x, v, e, d;
+
+#pragma omp atomic compare capture
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+#pragma omp atomic compare capture acq_rel
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture acq_rel
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture acq_rel
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture acq_rel
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture acq_rel
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture acq_rel
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+#pragma omp atomic compare capture acquire
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture acquire
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture acquire
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture acquire
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture acquire
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture acquire
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+#pragma omp atomic compare capture relaxed
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture relaxed
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture relaxed
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture relaxed
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture relaxed
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture relaxed
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+#pragma omp atomic compare capture release
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture release
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture release
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture release
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture release
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture release
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+#pragma omp atomic compare capture seq_cst
+  {
+    v = x;
+    x = x > e ? e : x;
+  }
+#pragma omp atomic compare capture seq_cst
+  {
+    v = x;
+    x = x < e ? e : x;
+  }
+#pragma omp atomic compare capture seq_cst
+  {
+    v = x;
+    x = x == e ? d : x;
+  }
+#pragma omp atomic compare capture seq_cst
+  {
+    x = x > e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture seq_cst
+  {
+    x = x < e ? e : x;
+    v = x;
+  }
+#pragma omp atomic compare capture seq_cst
+  {
+    x = x == e ? d : x;
+    v = x;
+  }
+
+  return v;
+}
+
+// CHECK-51: int xevd() {
+// CHECK-51-NEXT: int x, v, e, d;
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acq_rel
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture acquire
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture relaxed
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture release
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x > e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: #pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x < e ? e : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: pragma omp atomic compare capture seq_cst
+// CHECK-51-NEXT: {
+// CHECK-51-NEXT: x = x == e ? d : x;
+// CHECK-51-NEXT: v = x;
+// CHECK-51-NEXT: }
+// CHECK-51-NEXT: return v;
 // CHECK-51-NEXT: }
 
 #endif

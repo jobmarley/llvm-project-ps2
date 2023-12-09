@@ -178,13 +178,14 @@ typedef unsigned long long kmp_uint64;
 #if KMP_ARCH_X86 || KMP_ARCH_ARM || KMP_ARCH_MIPS
 #define KMP_SIZE_T_SPEC KMP_UINT32_SPEC
 #elif KMP_ARCH_X86_64 || KMP_ARCH_PPC64 || KMP_ARCH_AARCH64 ||                 \
-    KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64
+    KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64 ||             \
+    KMP_ARCH_VE || KMP_ARCH_S390X
 #define KMP_SIZE_T_SPEC KMP_UINT64_SPEC
 #else
 #error "Can't determine size_t printf format specifier."
 #endif
 
-#if KMP_ARCH_X86
+#if KMP_ARCH_X86 || KMP_ARCH_ARM
 #define KMP_SIZE_T_MAX (0xFFFFFFFF)
 #else
 #define KMP_SIZE_T_MAX (0xFFFFFFFFFFFFFFFF)
@@ -456,7 +457,7 @@ enum kmp_mem_fence_type {
 
 // Synchronization primitives
 
-#if KMP_ASM_INTRINS && KMP_OS_WINDOWS
+#if KMP_ASM_INTRINS && KMP_OS_WINDOWS && !((KMP_ARCH_AARCH64 || KMP_ARCH_ARM) && (KMP_COMPILER_CLANG || KMP_COMPILER_GCC))
 
 #if KMP_MSVC_COMPAT && !KMP_COMPILER_CLANG
 #pragma intrinsic(InterlockedExchangeAdd)
@@ -596,27 +597,26 @@ inline kmp_int32 __kmp_compare_and_store_ptr(void *volatile *p, void *cv,
 }
 
 // The _RET versions return the value instead of a bool
-/*
+
 #define KMP_COMPARE_AND_STORE_RET8(p, cv, sv)                                  \
    _InterlockedCompareExchange8((p), (sv), (cv))
 #define KMP_COMPARE_AND_STORE_RET16(p, cv, sv)                                 \
   _InterlockedCompareExchange16((p), (sv), (cv))
-*/
+
 #define KMP_COMPARE_AND_STORE_RET64(p, cv, sv)                                 \
   _InterlockedCompareExchange64((volatile kmp_int64 *)(p), (kmp_int64)(sv),    \
                                 (kmp_int64)(cv))
 
-/*
+
 #define KMP_XCHG_FIXED8(p, v)                                                  \
   _InterlockedExchange8((volatile kmp_int8 *)(p), (kmp_int8)(v));
-*/
-// #define KMP_XCHG_FIXED16(p, v) _InterlockedExchange16((p), (v));
-// #define KMP_XCHG_REAL64(p, v) __kmp_xchg_real64((p), (v)));
+#define KMP_XCHG_FIXED16(p, v) _InterlockedExchange16((p), (v));
+#define KMP_XCHG_REAL64(p, v) __kmp_xchg_real64((p), (v));
 
-// inline kmp_real64 __kmp_xchg_real64(volatile kmp_real64 *p, kmp_real64 v) {
-//   kmp_int64 tmp = _InterlockedExchange64((volatile kmp_int64 *)p, *(kmp_int64
-//   *)&v); return *(kmp_real64 *)&tmp;
-// }
+inline kmp_real64 __kmp_xchg_real64(volatile kmp_real64 *p, kmp_real64 v) {
+  kmp_int64 tmp = _InterlockedExchange64((volatile kmp_int64 *)p, *(kmp_int64
+  *)&v); return *(kmp_real64 *)&tmp;
+}
 
 #else // !KMP_ARCH_AARCH64
 
@@ -1044,7 +1044,8 @@ extern kmp_real64 __kmp_xchg_real64(volatile kmp_real64 *p, kmp_real64 v);
 #endif /* KMP_OS_WINDOWS */
 
 #if KMP_ARCH_PPC64 || KMP_ARCH_ARM || KMP_ARCH_AARCH64 || KMP_ARCH_MIPS ||     \
-    KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64
+    KMP_ARCH_MIPS64 || KMP_ARCH_RISCV64 || KMP_ARCH_LOONGARCH64 ||             \
+    KMP_ARCH_VE || KMP_ARCH_S390X
 #if KMP_OS_WINDOWS
 #undef KMP_MB
 #define KMP_MB() std::atomic_thread_fence(std::memory_order_seq_cst)
@@ -1283,9 +1284,9 @@ bool __kmp_atomic_compare_store_rel(std::atomic<T> *p, T expected, T desired) {
 
 // Symbol lookup on Linux/Windows
 #if KMP_OS_WINDOWS
-extern void *__kmp_lookup_symbol(const char *name);
+extern void *__kmp_lookup_symbol(const char *name, bool next = false);
 #define KMP_DLSYM(name) __kmp_lookup_symbol(name)
-#define KMP_DLSYM_NEXT(name) nullptr
+#define KMP_DLSYM_NEXT(name) __kmp_lookup_symbol(name, true)
 #else
 #define KMP_DLSYM(name) dlsym(RTLD_DEFAULT, name)
 #define KMP_DLSYM_NEXT(name) dlsym(RTLD_NEXT, name)

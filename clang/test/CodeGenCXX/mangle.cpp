@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -no-opaque-pointers -emit-llvm %s -o - -triple=x86_64-apple-darwin9 -fblocks -std=c++11 | FileCheck %s
+// RUN: %clang_cc1 -emit-llvm %s -o - -triple=x86_64-apple-darwin9 -fblocks -std=c++11 | FileCheck %s
 struct X { };
 struct Y { };
 
@@ -280,13 +280,13 @@ struct Ops {
   void *v;
 };
 
-// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %struct.Ops* @_ZN3OpsplERKS_
+// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN3OpsplERKS_
 Ops& Ops::operator+(const Ops&) { return *this; }
-// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %struct.Ops* @_ZN3OpsmiERKS_
+// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN3OpsmiERKS_
 Ops& Ops::operator-(const Ops&) { return *this; }
-// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %struct.Ops* @_ZN3OpsanERKS_
+// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN3OpsanERKS_
 Ops& Ops::operator&(const Ops&) { return *this; }
-// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %struct.Ops* @_ZN3OpsmlERKS_
+// CHECK-LABEL: define{{.*}} nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) ptr @_ZN3OpsmlERKS_
 Ops& Ops::operator*(const Ops&) { return *this; }
 
 // PR5861
@@ -302,7 +302,7 @@ template<typename T, typename = Policy<P, true> > class Alloc
   T *allocate(int, const void*) { return 0; }
 };
 
-// CHECK-LABEL: define weak_odr noundef i8* @_ZN6PR58615AllocIcNS_6PolicyINS_1PELb1EEEE8allocateEiPKv
+// CHECK-LABEL: define weak_odr noundef ptr @_ZN6PR58615AllocIcNS_6PolicyINS_1PELb1EEEE8allocateEiPKv
 template class Alloc<char>;
 }
 
@@ -395,7 +395,6 @@ namespace test2 {
   // CHECK-LABEL: define linkonce_odr noundef i32 @_ZN5test211read_memberINS_1AEEEDtptcvPT_Li0E6memberERS2_(
 }
 
-// rdar://problem/9280586
 namespace test3 {
   struct AmbiguousBase { int ab; };
   struct Path1 : AmbiguousBase { float p; };
@@ -477,7 +476,6 @@ namespace test9 {
   }
 }
 
-// <rdar://problem/7825453>
 namespace test10 {
   template <char P1> struct S {};
   template <char P2> void f(struct S<false ? 'a' : P2> ) {}
@@ -522,12 +520,11 @@ namespace test14 {
       static int a(), x;
     };
     // CHECK-LABEL: define{{.*}} i32 @_ZN6test141S1aEv
-    // CHECK: load i32, i32* @_ZN6test141S1xE
+    // CHECK: load i32, ptr @_ZN6test141S1xE
     int S::a() { return S::x; }
   }
 }
 
-// rdar://problem/8204122
 namespace test15 {
   enum E { e = 3 };
   template <int I> struct S {};
@@ -538,7 +535,6 @@ namespace test15 {
   template void f<7>(S<7 + e>);
 }
 
-// rdar://problem/8302148
 namespace test17 {
   template <int N> struct A {};
 
@@ -583,7 +579,6 @@ namespace test18 {
   // CHECK-LABEL: define weak_odr void @_ZN6test181fINS_1AEEEvNS_1SIXadsrT_onanEEE
 }
 
-// rdar://problem/8332117
 namespace test19 {
   struct A {
     template <typename T> int f();
@@ -622,7 +617,6 @@ namespace test20 {
   template void test1<int>(decltype(f<>(int())));
 }
 
-// rdar:// 8620510
 namespace test21 {
   // CHECK-LABEL: define{{.*}} void @_ZN6test2112vla_arg_funcEiPA_i(
   void vla_arg_func(int X, int a[X][X]) {}
@@ -633,7 +627,6 @@ namespace test22 {
   void f(decltype(nullptr)) { }
 }
 
-// rdar://problem/8913416
 namespace test23 {
   typedef void * const vpc;
 
@@ -659,7 +652,6 @@ namespace test24 {
   }
 }
 
-// rdar://problem/8806641
 namespace test25 {
   template <void (*fn)()> struct A {
     static void call() { fn(); }
@@ -900,7 +892,7 @@ namespace test39 {
 }
 
 namespace test40 {
-  // CHECK: i32* {{.*}} @_ZZN6test401fEvE1a_0
+  // CHECK: ptr {{.*}} @_ZZN6test401fEvE1a_0
   void h(int&);
   inline void f() {
     if (0) {
@@ -950,7 +942,7 @@ namespace test44 {
   void f() {
     obj.bar();
   }
-  // CHECK-LABEL: define linkonce_odr void @_ZN6test443foo3barEv(%"struct.test44::foo"* {{[^,]*}} %this)
+  // CHECK-LABEL: define linkonce_odr void @_ZN6test443foo3barEv(ptr {{[^,]*}} %this)
 }
 
 namespace test45 {
@@ -960,7 +952,7 @@ namespace test45 {
   template <typename T>
   void f(enum T::e *) {}
   template void f<S>(S::e *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test451fINS_1SEEEvPTeNT_1eE(i32* noundef %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test451fINS_1SEEEvPTeNT_1eE(ptr noundef %0)
 }
 
 namespace test46 {
@@ -970,7 +962,7 @@ namespace test46 {
   template <typename T>
   void f(struct T::s *) {}
   template void f<S>(S::s *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test461fINS_1SEEEvPTsNT_1sE(%"struct.test46::S::s"* noundef %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test461fINS_1SEEEvPTsNT_1sE(ptr noundef %0)
 }
 
 namespace test47 {
@@ -980,7 +972,7 @@ namespace test47 {
   template <typename T>
   void f(class T::c *) {}
   template void f<S>(S::c *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test471fINS_1SEEEvPTsNT_1cE(%"class.test47::S::c"* noundef %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test471fINS_1SEEEvPTsNT_1cE(ptr noundef %0)
 }
 
 namespace test48 {
@@ -990,7 +982,7 @@ namespace test48 {
   template <typename T>
   void f(union T::u *) {}
   template void f<S>(S::u *);
-  // CHECK-LABEL: define weak_odr void @_ZN6test481fINS_1SEEEvPTuNT_1uE(%"union.test48::S::u"* noundef %0)
+  // CHECK-LABEL: define weak_odr void @_ZN6test481fINS_1SEEEvPTuNT_1uE(ptr noundef %0)
 }
 
 namespace test49 {

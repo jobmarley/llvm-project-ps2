@@ -67,6 +67,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -191,7 +192,7 @@ public:
   SafeStack(Function &F, const TargetLoweringBase &TL, const DataLayout &DL,
             DomTreeUpdater *DTU, ScalarEvolution &SE)
       : F(F), TL(TL), DL(DL), DTU(DTU), SE(SE),
-        StackPtrTy(Type::getInt8PtrTy(F.getContext())),
+        StackPtrTy(PointerType::getUnqual(F.getContext())),
         IntPtrTy(DL.getIntPtrType(F.getContext())),
         Int32Ty(Type::getInt32Ty(F.getContext())),
         Int8Ty(Type::getInt8Ty(F.getContext())) {}
@@ -792,7 +793,7 @@ bool SafeStack::run() {
         DILocation::get(SP->getContext(), SP->getScopeLine(), 0, SP));
   if (SafeStackUsePointerAddress) {
     FunctionCallee Fn = F.getParent()->getOrInsertFunction(
-        "__safestack_pointer_address", StackPtrTy->getPointerTo(0));
+        "__safestack_pointer_address", IRB.getPtrTy(0));
     UnsafeStackPtr = IRB.CreateCall(Fn);
   } else {
     UnsafeStackPtr = TL.getSafeStackPointerLocation(IRB);
@@ -896,7 +897,7 @@ public:
 
     DominatorTree *DT;
     bool ShouldPreserveDominatorTree;
-    Optional<DominatorTree> LazilyComputedDomTree;
+    std::optional<DominatorTree> LazilyComputedDomTree;
 
     // Do we already have a DominatorTree avaliable from the previous pass?
     // Note that we should *NOT* require it, to avoid the case where we end up
@@ -907,7 +908,7 @@ public:
     } else {
       // Otherwise, we need to compute it.
       LazilyComputedDomTree.emplace(F);
-      DT = LazilyComputedDomTree.getPointer();
+      DT = &*LazilyComputedDomTree;
       ShouldPreserveDominatorTree = false;
     }
 

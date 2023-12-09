@@ -1,4 +1,4 @@
-! RUN: %python %S/test_folding.py %s %flang_fc1
+! RUN: %python %S/test_folding.py %s %flang_fc1 -pedantic
 ! Test intrinsic function folding edge case (both expected value and messages)
 ! These tests make assumptions regarding real(4) extrema.
 
@@ -17,26 +17,25 @@ module real_tests
   !WARN: warning: division by zero
   real(4), parameter :: r4_ninf = -1._4/0._4
 
-  !WARN: warning: invalid argument on intrinsic function
+  !WARN: warning: invalid argument on evaluation of intrinsic function or operation
   real(4), parameter :: nan_r4_acos1 = acos(1.1)
   TEST_ISNAN(nan_r4_acos1)
-  !WARN: warning: invalid argument on intrinsic function
+  !WARN: warning: invalid argument on evaluation of intrinsic function or operation
   real(4), parameter :: nan_r4_acos2 = acos(r4_pmax)
   TEST_ISNAN(nan_r4_acos2)
-  !WARN: warning: invalid argument on intrinsic function
+  !WARN: warning: invalid argument on evaluation of intrinsic function or operation
   real(4), parameter :: nan_r4_acos3 = acos(r4_nmax)
   TEST_ISNAN(nan_r4_acos3)
-  !WARN: warning: invalid argument on intrinsic function
+  !WARN: warning: invalid argument on evaluation of intrinsic function or operation
   real(4), parameter :: nan_r4_acos4 = acos(r4_ninf)
   TEST_ISNAN(nan_r4_acos4)
-  !WARN: warning: invalid argument on intrinsic function
+  !WARN: warning: invalid argument on evaluation of intrinsic function or operation
   real(4), parameter :: nan_r4_acos5 = acos(r4_pinf)
   TEST_ISNAN(nan_r4_acos5)
   !WARN: warning: second argument to MOD must not be zero
   real(4), parameter :: nan_r4_mod = mod(3.5, 0.)
   TEST_ISNAN(nan_r4_mod)
-
-  !WARN: warning: overflow on intrinsic function
+  !WARN: warning: overflow on evaluation of intrinsic function or operation
   logical, parameter :: test_exp_overflow = exp(256._4).EQ.r4_pinf
 end module
 
@@ -58,13 +57,13 @@ module specific_extremums
   ! specified for f18 (converting the result).
   integer(8), parameter :: max_i32_8 = 2_8**31-1
   integer, parameter :: expected_min0 = int(min(max_i32_8, 2_8*max_i32_8), 4)
-  !WARN: portability: argument types do not match specific intrinsic 'min0' requirements; using 'min' generic instead and converting the result to INTEGER(4) if needed
+  !WARN: portability: Argument types do not match specific intrinsic 'min0' requirements; using 'min' generic instead and converting the result to INTEGER(4) if needed
   integer, parameter :: result_min0 =  min0(max_i32_8, 2_8*max_i32_8)
   ! result_min0 would be -2  if arguments were converted to default integer.
   logical, parameter :: test_min0 = expected_min0 .EQ. result_min0
 
   real, parameter :: expected_amax0 = real(max(max_i32_8, 2_8*max_i32_8), 4)
-  !WARN: portability: argument types do not match specific intrinsic 'amax0' requirements; using 'max' generic instead and converting the result to REAL(4) if needed
+  !WARN: portability: Argument types do not match specific intrinsic 'amax0' requirements; using 'max' generic instead and converting the result to REAL(4) if needed
   real, parameter :: result_amax0 = amax0(max_i32_8, 2_8*max_i32_8)
   ! result_amax0 would be 2.1474836E+09 if arguments were converted to default integer first.
   logical, parameter :: test_amax0 = expected_amax0 .EQ. result_amax0

@@ -745,18 +745,18 @@ template <typename W, int P> Real<W, P> Real<W, P>::SPACING() const {
     return *this;
   } else if (IsInfinite()) {
     return NotANumber();
-  } else if (IsZero()) {
-    return TINY();
+  } else if (IsZero() || IsSubnormal()) {
+    return TINY(); // mandated by standard
   } else {
     Real result;
     result.Normalize(false, Exponent(), Fraction::MASKR(1));
-    return result;
+    return result.IsZero() ? TINY() : result;
   }
 }
 
 // 16.9.171
 template <typename W, int P>
-Real<W, P> Real<W, P>::SET_EXPONENT(int expo) const {
+Real<W, P> Real<W, P>::SET_EXPONENT(std::int64_t expo) const {
   if (IsNotANumber()) {
     return *this;
   } else if (IsInfinite()) {
@@ -764,7 +764,7 @@ Real<W, P> Real<W, P>::SET_EXPONENT(int expo) const {
   } else if (IsZero()) {
     return *this;
   } else {
-    return SCALE(Integer<32>(expo - UnbiasedExponent() - 1)).value;
+    return SCALE(Integer<64>(expo - UnbiasedExponent() - 1)).value;
   }
 }
 

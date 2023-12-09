@@ -54,22 +54,26 @@
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(im)InstanceMethod",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(cm)ClassMethod",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(py)Property",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "conformsTo",
       "source": "c:objc(cs)Interface",
-      "target": "c:objc(pl)Protocol"
+      "target": "c:objc(pl)Protocol",
+      "targetFallback": "Protocol"
     }
   ],
   "symbols": [
@@ -99,8 +103,8 @@
       },
       "location": {
         "position": {
-          "character": 12,
-          "line": 3
+          "character": 11,
+          "line": 2
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -167,8 +171,8 @@
       },
       "location": {
         "position": {
-          "character": 1,
-          "line": 8
+          "character": 0,
+          "line": 7
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -240,8 +244,8 @@
       },
       "location": {
         "position": {
-          "character": 1,
-          "line": 9
+          "character": 0,
+          "line": 8
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -278,39 +282,7 @@
         },
         {
           "kind": "text",
-          "spelling": " ("
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
-          "spelling": ") "
+          "spelling": " "
         },
         {
           "kind": "typeIdentifier",
@@ -324,6 +296,10 @@
         {
           "kind": "identifier",
           "spelling": "Property"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -336,8 +312,8 @@
       },
       "location": {
         "position": {
-          "character": 15,
-          "line": 7
+          "character": 14,
+          "line": 6
         },
         "uri": "file://INPUT_DIR/input.h"
       },

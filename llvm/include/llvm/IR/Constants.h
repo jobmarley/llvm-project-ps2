@@ -23,8 +23,6 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/None.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Constant.h"
@@ -38,6 +36,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace llvm {
 
@@ -112,8 +111,12 @@ public:
   /// either getSExtValue() or getZExtValue() will yield a correctly sized and
   /// signed value for the type Ty.
   /// Get a ConstantInt for a specific signed value.
-  static ConstantInt *getSigned(IntegerType *Ty, int64_t V);
-  static Constant *getSigned(Type *Ty, int64_t V);
+  static ConstantInt *getSigned(IntegerType *Ty, int64_t V) {
+    return get(Ty, V, true);
+  }
+  static Constant *getSigned(Type *Ty, int64_t V) {
+    return get(Ty, V, true);
+  }
 
   /// Return a ConstantInt with the specified value and an implied Type. The
   /// type is the integer type that corresponds to the bit width of the value.
@@ -265,11 +268,6 @@ class ConstantFP final : public ConstantData {
 
 public:
   ConstantFP(const ConstantFP &) = delete;
-
-  /// Floating point negation must be implemented with f(x) = -0.0 - x. This
-  /// method returns the negative zero constant for floating point or vector
-  /// floating point types; for all other types, it returns the null value.
-  static Constant *getZeroValueForNegation(Type *Ty);
 
   /// This returns a ConstantFP, or a vector containing a splat of a ConstantFP,
   /// for the specified value in the specified type. This should only be used
@@ -699,7 +697,7 @@ public:
   /// ArrayRef<ElementTy>. Calls get(LLVMContext, ArrayRef<ElementTy>).
   template <typename ArrayTy>
   static Constant *get(LLVMContext &Context, ArrayTy &Elts) {
-    return ConstantDataArray::get(Context, makeArrayRef(Elts));
+    return ConstantDataArray::get(Context, ArrayRef(Elts));
   }
 
   /// getRaw() constructor - Return a constant with array type with an element
@@ -844,6 +842,33 @@ public:
   }
 };
 
+/// A constant target extension type default initializer
+class ConstantTargetNone final : public ConstantData {
+  friend class Constant;
+
+  explicit ConstantTargetNone(TargetExtType *T)
+      : ConstantData(T, Value::ConstantTargetNoneVal) {}
+
+  void destroyConstantImpl();
+
+public:
+  ConstantTargetNone(const ConstantTargetNone &) = delete;
+
+  /// Static factory methods - Return objects of the specified value.
+  static ConstantTargetNone *get(TargetExtType *T);
+
+  /// Specialize the getType() method to always return an TargetExtType,
+  /// which reduces the amount of casting needed in parts of the compiler.
+  inline TargetExtType *getType() const {
+    return cast<TargetExtType>(Value::getType());
+  }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast.
+  static bool classof(const Value *V) {
+    return V->getValueID() == ConstantTargetNoneVal;
+  }
+};
+
 /// The address of a basic block.
 ///
 class BlockAddress final : public Constant {
@@ -950,6 +975,11 @@ public:
     return cast<GlobalValue>(Op<0>().get());
   }
 
+  /// NoCFIValue is always a pointer.
+  PointerType *getType() const {
+    return cast<PointerType>(Value::getType());
+  }
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {
     return V->getValueID() == NoCFIValueVal;
@@ -1001,16 +1031,6 @@ public:
   ///
   static Constant *getSizeOf(Type *Ty);
 
-  /// getOffsetOf constant expr - computes the offset of a struct field in a
-  /// target independent way (Note: the return type is an i64).
-  ///
-  static Constant *getOffsetOf(StructType *STy, unsigned FieldNo);
-
-  /// getOffsetOf constant expr - This is a generalized form of getOffsetOf,
-  /// which supports any aggregate type, and any Constant index.
-  ///
-  static Constant *getOffsetOf(Type *Ty, Constant *FieldNo);
-
   static Constant *getNeg(Constant *C, bool HasNUW = false,
                           bool HasNSW = false);
   static Constant *getNot(Constant *C);
@@ -1020,25 +1040,10 @@ public:
                           bool HasNSW = false);
   static Constant *getMul(Constant *C1, Constant *C2, bool HasNUW = false,
                           bool HasNSW = false);
-  static Constant *getAnd(Constant *C1, Constant *C2);
-  static Constant *getOr(Constant *C1, Constant *C2);
   static Constant *getXor(Constant *C1, Constant *C2);
-  static Constant *getUMin(Constant *C1, Constant *C2);
   static Constant *getShl(Constant *C1, Constant *C2, bool HasNUW = false,
                           bool HasNSW = false);
-  static Constant *getLShr(Constant *C1, Constant *C2, bool isExact = false);
-  static Constant *getAShr(Constant *C1, Constant *C2, bool isExact = false);
   static Constant *getTrunc(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getSExt(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getZExt(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getFPTrunc(Constant *C, Type *Ty,
-                              bool OnlyIfReduced = false);
-  static Constant *getFPExtend(Constant *C, Type *Ty,
-                               bool OnlyIfReduced = false);
-  static Constant *getUIToFP(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getSIToFP(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getFPToUI(Constant *C, Type *Ty, bool OnlyIfReduced = false);
-  static Constant *getFPToSI(Constant *C, Type *Ty, bool OnlyIfReduced = false);
   static Constant *getPtrToInt(Constant *C, Type *Ty,
                                bool OnlyIfReduced = false);
   static Constant *getIntToPtr(Constant *C, Type *Ty,
@@ -1083,14 +1088,6 @@ public:
     return getShl(C1, C2, true, false);
   }
 
-  static Constant *getExactAShr(Constant *C1, Constant *C2) {
-    return getAShr(C1, C2, true);
-  }
-
-  static Constant *getExactLShr(Constant *C1, Constant *C2) {
-    return getLShr(C1, C2, true);
-  }
-
   /// If C is a scalar/fixed width vector of known powers of 2, then this
   /// function returns a new scalar/fixed width vector obtained from logBase2
   /// of C. Undef vector elements are set to zero.
@@ -1128,28 +1125,11 @@ public:
   static Constant *getCast(unsigned ops, Constant *C, Type *Ty,
                            bool OnlyIfReduced = false);
 
-  // Create a ZExt or BitCast cast constant expression
-  static Constant *
-  getZExtOrBitCast(Constant *C, ///< The constant to zext or bitcast
-                   Type *Ty     ///< The type to zext or bitcast C to
-  );
-
-  // Create a SExt or BitCast cast constant expression
-  static Constant *
-  getSExtOrBitCast(Constant *C, ///< The constant to sext or bitcast
-                   Type *Ty     ///< The type to sext or bitcast C to
-  );
-
   // Create a Trunc or BitCast cast constant expression
   static Constant *
   getTruncOrBitCast(Constant *C, ///< The constant to trunc or bitcast
                     Type *Ty     ///< The type to trunc or bitcast C to
   );
-
-  /// Create either an sext, trunc or nothing, depending on whether Ty is
-  /// wider, narrower or the same as C->getType(). This only works with
-  /// integer or vector of integer types.
-  static Constant *getSExtOrTrunc(Constant *C, Type *Ty);
 
   /// Create a BitCast, AddrSpaceCast, or a PtrToInt cast constant
   /// expression.
@@ -1165,29 +1145,11 @@ public:
       Type *Ty     ///< The type to bitcast or addrspacecast C to
   );
 
-  /// Create a ZExt, Bitcast or Trunc for integer -> integer casts
-  static Constant *
-  getIntegerCast(Constant *C,  ///< The integer constant to be casted
-                 Type *Ty,     ///< The integer type to cast to
-                 bool IsSigned ///< Whether C should be treated as signed or not
-  );
-
-  /// Create a FPExt, Bitcast or FPTrunc for fp -> fp casts
-  static Constant *getFPCast(Constant *C, ///< The integer constant to be casted
-                             Type *Ty     ///< The integer type to cast to
-  );
-
   /// Return true if this is a convert constant expression
   bool isCast() const;
 
   /// Return true if this is a compare constant expression
   bool isCompare() const;
-
-  /// Select constant expr
-  ///
-  /// \param OnlyIfReducedTy see \a getWithOperands() docs.
-  static Constant *getSelect(Constant *C, Constant *V1, Constant *V2,
-                             Type *OnlyIfReducedTy = nullptr);
 
   /// get - Return a binary or shift operator constant expression,
   /// folding if possible.
@@ -1213,32 +1175,32 @@ public:
   /// Getelementptr form.  Value* is only accepted for convenience;
   /// all elements must be Constants.
   ///
-  /// \param InRangeIndex the inrange index if present or None.
+  /// \param InRangeIndex the inrange index if present or std::nullopt.
   /// \param OnlyIfReducedTy see \a getWithOperands() docs.
-  static Constant *getGetElementPtr(Type *Ty, Constant *C,
-                                    ArrayRef<Constant *> IdxList,
-                                    bool InBounds = false,
-                                    Optional<unsigned> InRangeIndex = None,
-                                    Type *OnlyIfReducedTy = nullptr) {
+  static Constant *
+  getGetElementPtr(Type *Ty, Constant *C, ArrayRef<Constant *> IdxList,
+                   bool InBounds = false,
+                   std::optional<unsigned> InRangeIndex = std::nullopt,
+                   Type *OnlyIfReducedTy = nullptr) {
     return getGetElementPtr(
-        Ty, C, makeArrayRef((Value *const *)IdxList.data(), IdxList.size()),
+        Ty, C, ArrayRef((Value *const *)IdxList.data(), IdxList.size()),
         InBounds, InRangeIndex, OnlyIfReducedTy);
   }
-  static Constant *getGetElementPtr(Type *Ty, Constant *C, Constant *Idx,
-                                    bool InBounds = false,
-                                    Optional<unsigned> InRangeIndex = None,
-                                    Type *OnlyIfReducedTy = nullptr) {
+  static Constant *
+  getGetElementPtr(Type *Ty, Constant *C, Constant *Idx, bool InBounds = false,
+                   std::optional<unsigned> InRangeIndex = std::nullopt,
+                   Type *OnlyIfReducedTy = nullptr) {
     // This form of the function only exists to avoid ambiguous overload
     // warnings about whether to convert Idx to ArrayRef<Constant *> or
     // ArrayRef<Value *>.
     return getGetElementPtr(Ty, C, cast<Value>(Idx), InBounds, InRangeIndex,
                             OnlyIfReducedTy);
   }
-  static Constant *getGetElementPtr(Type *Ty, Constant *C,
-                                    ArrayRef<Value *> IdxList,
-                                    bool InBounds = false,
-                                    Optional<unsigned> InRangeIndex = None,
-                                    Type *OnlyIfReducedTy = nullptr);
+  static Constant *
+  getGetElementPtr(Type *Ty, Constant *C, ArrayRef<Value *> IdxList,
+                   bool InBounds = false,
+                   std::optional<unsigned> InRangeIndex = std::nullopt,
+                   Type *OnlyIfReducedTy = nullptr);
 
   /// Create an "inbounds" getelementptr. See the documentation for the
   /// "inbounds" flag in LangRef.html for details.
@@ -1323,6 +1285,18 @@ public:
   /// Whether creating a constant expression for this binary operator is
   /// supported.
   static bool isSupportedBinOp(unsigned Opcode);
+
+  /// Whether creating a constant expression for this cast is desirable.
+  static bool isDesirableCastOp(unsigned Opcode);
+
+  /// Whether creating a constant expression for this cast is supported.
+  static bool isSupportedCastOp(unsigned Opcode);
+
+  /// Whether creating a constant expression for this getelementptr type is
+  /// supported.
+  static bool isSupportedGetElementPtr(const Type *SrcElemTy) {
+    return !SrcElemTy->isScalableTy();
+  }
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {

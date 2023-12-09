@@ -11,6 +11,8 @@
 #define FORTRAN_RUNTIME_SUPPORT_H_
 
 #include "flang/Runtime/entry-names.h"
+#include <cstddef>
+#include <cstdint>
 
 namespace Fortran::runtime {
 

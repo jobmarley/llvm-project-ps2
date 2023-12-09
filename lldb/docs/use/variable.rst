@@ -1,9 +1,6 @@
 Variable Formatting
 ===================
 
-.. contents::
-   :local:
-
 LLDB has a data formatters subsystem that allows users to define custom display
 options for their variables.
 
@@ -132,8 +129,8 @@ This is done by typing
 
 at the LLDB command line.
 
-The ``--format`` (which you can shorten to -f) option accepts a :doc:`format
-name<formatting>`. Then, you provide one or more types to which you want the
+The ``--format`` (which you can shorten to -f) option accepts a `format
+name`_. Then, you provide one or more types to which you want the
 new format applied.
 
 A frequent scenario is that your program has a typedef for a numeric type that
@@ -248,6 +245,8 @@ format or till you let your program run again.
 
 Finally, this is a list of formatting options available out of which you can
 pick:
+
+.. _`format name`:
 
 +-----------------------------------------------+------------------+--------------------------------------------------------------------------+
 | **Format name**                               | **Abbreviation** | **Description**                                                          |
@@ -969,7 +968,7 @@ functions. It is possible to declare this synthetic child without
 including it in the range of children displayed by LLDB. For example,
 this subset of a synthetic children provider class would allow the
 synthetic value to be dereferenced without actually showing any
-synthtic children in the UI:
+synthetic children in the UI:
 
 .. code-block:: python
 
@@ -1108,6 +1107,39 @@ only need to see the ones named B, H and Q, you can define a filter:
       (char) H = 'H'
       (std::string) Q = "Hello world"
    }
+
+Callback-based type matching
+----------------------------
+
+Even though regular expression matching works well for the vast majority of data
+formatters (you normally know the name of the type you're writing a formatter
+for), there are some cases where it's useful to look at the type before deciding
+what formatter to apply.
+
+As an example scenario, imagine we have a code generator that produces some
+classes that inherit from a common ``GeneratedObject`` class, and we have a
+summary function and a synthetic child provider that work for all
+``GeneratedObject`` instances (they all follow the same pattern). However, there
+is no common pattern in the name of these classes, so we can't register the
+formatter neither by name nor by regular expression.
+
+In that case, you can write a recognizer function like this:
+
+::
+
+   def is_generated_object(sbtype, internal_dict):
+     for base in sbtype.get_bases_array():
+       if base.GetName() == "GeneratedObject"
+         return True
+     return False
+
+And pass this function to ``type summary add`` and ``type synthetic add`` using
+the flag ``--recognizer-function``.
+
+::
+
+   (lldb) type summary add --expand --python-function my_summary_function --recognizer-function is_generated_object
+   (lldb) type synthetic add --python-class my_child_provider --recognizer-function is_generated_object
 
 Objective-C Dynamic Type Discovery
 ----------------------------------

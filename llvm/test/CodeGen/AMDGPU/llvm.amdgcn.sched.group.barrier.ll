@@ -26,7 +26,7 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @test_sched_group_barrier_pipeline_READ_VALU_WRITE(<32 x i32> addrspace(1)* noalias %in, <32 x i32> addrspace(1)* noalias %out) #0 {
+define amdgpu_kernel void @test_sched_group_barrier_pipeline_READ_VALU_WRITE(ptr addrspace(1) noalias %in, ptr addrspace(1) noalias %out) #0 {
 ; GCN-LABEL: test_sched_group_barrier_pipeline_READ_VALU_WRITE:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dwordx4 s[0:3], s[0:1], 0x24
@@ -161,11 +161,11 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_READ_VALU_WRITE(<32
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000040) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #2
-  %gep1 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %in, i32 %tid
-  %load = load <32 x i32>, <32 x i32> addrspace(1)* %gep1
+  %gep1 = getelementptr <32 x i32>, ptr addrspace(1) %in, i32 %tid
+  %load = load <32 x i32>, ptr addrspace(1) %gep1
   %mul = mul <32 x i32> %load, %load
-  %gep2 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %out, i32 %tid
-  store <32 x i32> %mul, <32 x i32> addrspace(1)* %gep2
+  %gep2 = getelementptr <32 x i32>, ptr addrspace(1) %out, i32 %tid
+  store <32 x i32> %mul, ptr addrspace(1) %gep2
   ; 8 VMEM read
   call void @llvm.amdgcn.sched.group.barrier(i32 32, i32 8, i32 0)
   ; 30 VALU
@@ -175,7 +175,7 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_READ_VALU_WRITE(<32
   ret void
 }
 
-define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VALU(<32 x i32> addrspace(1)* noalias %in, <32 x i32> addrspace(1)* noalias %out) #0 {
+define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VALU(ptr addrspace(1) noalias %in, ptr addrspace(1) noalias %out) #0 {
 ; GCN-LABEL: test_sched_group_barrier_pipeline_alternating_READ_VALU:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dwordx4 s[0:3], s[0:1], 0x24
@@ -336,11 +336,11 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VA
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000040) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #2
-  %gep1 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %in, i32 %tid
-  %load = load <32 x i32>, <32 x i32> addrspace(1)* %gep1
+  %gep1 = getelementptr <32 x i32>, ptr addrspace(1) %in, i32 %tid
+  %load = load <32 x i32>, ptr addrspace(1) %gep1
   %mul = mul <32 x i32> %load, %load
-  %gep2 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %out, i32 %tid
-  store <32 x i32> %mul, <32 x i32> addrspace(1)* %gep2
+  %gep2 = getelementptr <32 x i32>, ptr addrspace(1) %out, i32 %tid
+  store <32 x i32> %mul, ptr addrspace(1) %gep2
   ; 1 VMEM read
   call void @llvm.amdgcn.sched.group.barrier(i32 32, i32 1, i32 0)
   ; 2 VALU
@@ -378,7 +378,7 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VA
   ret void
 }
 
-define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VALU_WRITE(<32 x i32> addrspace(1)* noalias %in, <32 x i32> addrspace(1)* noalias %out) #0 {
+define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VALU_WRITE(ptr addrspace(1) noalias %in, ptr addrspace(1) noalias %out) #0 {
 ; GCN-LABEL: test_sched_group_barrier_pipeline_alternating_READ_VALU_WRITE:
 ; GCN:       ; %bb.0:
 ; GCN-NEXT:    s_load_dwordx4 s[0:3], s[0:1], 0x24
@@ -555,11 +555,11 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VA
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000040) size(1) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_endpgm
   %tid = call i32 @llvm.amdgcn.workitem.id.x() #2
-  %gep1 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %in, i32 %tid
-  %load = load <32 x i32>, <32 x i32> addrspace(1)* %gep1
+  %gep1 = getelementptr <32 x i32>, ptr addrspace(1) %in, i32 %tid
+  %load = load <32 x i32>, ptr addrspace(1) %gep1
   %mul = mul <32 x i32> %load, %load
-  %gep2 = getelementptr <32 x i32>, <32 x i32> addrspace(1)* %out, i32 %tid
-  store <32 x i32> %mul, <32 x i32> addrspace(1)* %gep2
+  %gep2 = getelementptr <32 x i32>, ptr addrspace(1) %out, i32 %tid
+  store <32 x i32> %mul, ptr addrspace(1) %gep2
   ; 1 VMEM read
   call void @llvm.amdgcn.sched.group.barrier(i32 32, i32 1, i32 0)
   ; 2 VALU
@@ -611,7 +611,7 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_alternating_READ_VA
   ret void
 }
 
-define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_cluster(<32 x float> addrspace(3)* noalias %in, <32 x float> addrspace(3)* noalias %out) #0 {
+define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_cluster(ptr addrspace(3) noalias %in, ptr addrspace(3) noalias %out) #0 {
 ; GCN-LABEL: test_sched_group_barrier_pipeline_MFMA_cluster:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x24
@@ -825,31 +825,31 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_cluster(<32 x 
 ; EXACTCUTOFF-NEXT:    s_endpgm
 entry:
   %idx = call i32 @llvm.amdgcn.workitem.id.x()
-  %load.0.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %in, i32 %idx
-  %load.0 = load <32 x float>, <32 x float> addrspace(3)* %load.0.addr
-  %load.1.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.0.addr, i32 64
-  %load.1 = load <32 x float>, <32 x float> addrspace(3)* %load.1.addr
-  %load.2.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.1.addr, i32 128
-  %load.2 = load <32 x float>, <32 x float> addrspace(3)* %load.2.addr
-  %load.3.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.2.addr, i32 192
-  %load.3 = load <32 x float>, <32 x float> addrspace(3)* %load.3.addr
-  %load.4.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.3.addr, i32 256
-  %load.4 = load <32 x float>, <32 x float> addrspace(3)* %load.4.addr
+  %load.0.addr = getelementptr <32 x float>, ptr addrspace(3) %in, i32 %idx
+  %load.0 = load <32 x float>, ptr addrspace(3) %load.0.addr
+  %load.1.addr = getelementptr <32 x float>, ptr addrspace(3) %load.0.addr, i32 64
+  %load.1 = load <32 x float>, ptr addrspace(3) %load.1.addr
+  %load.2.addr = getelementptr <32 x float>, ptr addrspace(3) %load.1.addr, i32 128
+  %load.2 = load <32 x float>, ptr addrspace(3) %load.2.addr
+  %load.3.addr = getelementptr <32 x float>, ptr addrspace(3) %load.2.addr, i32 192
+  %load.3 = load <32 x float>, ptr addrspace(3) %load.3.addr
+  %load.4.addr = getelementptr <32 x float>, ptr addrspace(3) %load.3.addr, i32 256
+  %load.4 = load <32 x float>, ptr addrspace(3) %load.4.addr
   %mai.0 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.0, i32 0, i32 0, i32 0)
   %mai.1 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.1, i32 0, i32 0, i32 0)
   %mai.2 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.2, i32 0, i32 0, i32 0)
   %mai.3 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.3, i32 0, i32 0, i32 0)
   %mai.4 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.4, i32 0, i32 0, i32 0)
-  %store.0.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 %idx
-  store <32 x float> %mai.0, <32 x float> addrspace(3)* %store.0.addr
-  %store.1.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 64
-  store <32 x float> %mai.1, <32 x float> addrspace(3)* %store.1.addr
-  %store.2.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 128
-  store <32 x float> %mai.2, <32 x float> addrspace(3)* %store.2.addr
-  %store.3.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 192
-  store <32 x float> %mai.3, <32 x float> addrspace(3)* %store.3.addr
-  %store.4.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 256
-  store <32 x float> %mai.4, <32 x float> addrspace(3)* %store.4.addr
+  %store.0.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 %idx
+  store <32 x float> %mai.0, ptr addrspace(3) %store.0.addr
+  %store.1.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 64
+  store <32 x float> %mai.1, ptr addrspace(3) %store.1.addr
+  %store.2.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 128
+  store <32 x float> %mai.2, ptr addrspace(3) %store.2.addr
+  %store.3.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 192
+  store <32 x float> %mai.3, ptr addrspace(3) %store.3.addr
+  %store.4.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 256
+  store <32 x float> %mai.4, ptr addrspace(3) %store.4.addr
   ; 40 DS read
   call void @llvm.amdgcn.sched.group.barrier(i32 256, i32 40, i32 0)
   ; 5 MFMA
@@ -859,72 +859,72 @@ entry:
   ret void
 }
 
-define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(<32 x float> addrspace(3)* noalias %in, <32 x float> addrspace(3)* noalias %out) #0 {
+define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(ptr addrspace(3) noalias %in, ptr addrspace(3) noalias %out) #0 {
 ; GCN-LABEL: test_sched_group_barrier_pipeline_MFMA_interleave:
 ; GCN:       ; %bb.0: ; %entry
 ; GCN-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x24
-; GCN-NEXT:    v_lshlrev_b32_e32 v0, 7, v0
+; GCN-NEXT:    v_lshlrev_b32_e32 v1, 7, v0
 ; GCN-NEXT:    v_mov_b32_e32 v2, 1.0
 ; GCN-NEXT:    v_mov_b32_e32 v3, 2.0
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
-; GCN-NEXT:    v_add_u32_e32 v1, s0, v0
-; GCN-NEXT:    ds_read_b128 a[28:31], v1 offset:112
-; GCN-NEXT:    ds_read_b128 a[24:27], v1 offset:96
-; GCN-NEXT:    ds_read_b128 a[20:23], v1 offset:80
-; GCN-NEXT:    ds_read_b128 a[16:19], v1 offset:64
-; GCN-NEXT:    ds_read_b128 a[0:3], v1
-; GCN-NEXT:    ds_read_b128 a[4:7], v1 offset:16
-; GCN-NEXT:    ds_read_b128 a[8:11], v1 offset:32
-; GCN-NEXT:    ds_read_b128 a[12:15], v1 offset:48
+; GCN-NEXT:    v_add_u32_e32 v0, s0, v1
+; GCN-NEXT:    ds_read_b128 a[28:31], v0 offset:112
+; GCN-NEXT:    ds_read_b128 a[24:27], v0 offset:96
+; GCN-NEXT:    ds_read_b128 a[20:23], v0 offset:80
+; GCN-NEXT:    ds_read_b128 a[16:19], v0 offset:64
+; GCN-NEXT:    ds_read_b128 a[0:3], v0
+; GCN-NEXT:    ds_read_b128 a[4:7], v0 offset:16
+; GCN-NEXT:    ds_read_b128 a[8:11], v0 offset:32
+; GCN-NEXT:    ds_read_b128 a[12:15], v0 offset:48
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; GCN-NEXT:    v_add_u32_e32 v0, s1, v0
+; GCN-NEXT:    v_add_u32_e32 v1, s1, v1
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 1
-; GCN-NEXT:    ds_write_b128 v0, a[28:31] offset:112
-; GCN-NEXT:    ds_write_b128 v0, a[24:27] offset:96
-; GCN-NEXT:    ds_write_b128 v0, a[20:23] offset:80
-; GCN-NEXT:    ds_write_b128 v0, a[16:19] offset:64
-; GCN-NEXT:    ds_write_b128 v0, a[12:15] offset:48
-; GCN-NEXT:    ds_write_b128 v0, a[8:11] offset:32
-; GCN-NEXT:    ds_write_b128 v0, a[4:7] offset:16
-; GCN-NEXT:    ds_write_b128 v0, a[0:3]
-; GCN-NEXT:    ds_read_b128 a[28:31], v1 offset:8304
-; GCN-NEXT:    ds_read_b128 a[24:27], v1 offset:8288
-; GCN-NEXT:    ds_read_b128 a[20:23], v1 offset:8272
-; GCN-NEXT:    ds_read_b128 a[16:19], v1 offset:8256
-; GCN-NEXT:    ds_read_b128 a[12:15], v1 offset:8240
-; GCN-NEXT:    ds_read_b128 a[8:11], v1 offset:8224
-; GCN-NEXT:    ds_read_b128 a[4:7], v1 offset:8208
-; GCN-NEXT:    ds_read_b128 a[0:3], v1 offset:8192
+; GCN-NEXT:    ds_write_b128 v1, a[28:31] offset:112
+; GCN-NEXT:    ds_write_b128 v1, a[24:27] offset:96
+; GCN-NEXT:    ds_write_b128 v1, a[20:23] offset:80
+; GCN-NEXT:    ds_write_b128 v1, a[16:19] offset:64
+; GCN-NEXT:    ds_write_b128 v1, a[12:15] offset:48
+; GCN-NEXT:    ds_write_b128 v1, a[8:11] offset:32
+; GCN-NEXT:    ds_write_b128 v1, a[4:7] offset:16
+; GCN-NEXT:    ds_write_b128 v1, a[0:3]
+; GCN-NEXT:    ds_read_b128 a[28:31], v0 offset:8304
+; GCN-NEXT:    ds_read_b128 a[24:27], v0 offset:8288
+; GCN-NEXT:    ds_read_b128 a[20:23], v0 offset:8272
+; GCN-NEXT:    ds_read_b128 a[16:19], v0 offset:8256
+; GCN-NEXT:    ds_read_b128 a[12:15], v0 offset:8240
+; GCN-NEXT:    ds_read_b128 a[8:11], v0 offset:8224
+; GCN-NEXT:    ds_read_b128 a[4:7], v0 offset:8208
+; GCN-NEXT:    ds_read_b128 a[0:3], v0 offset:8192
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; GCN-NEXT:    v_mov_b32_e32 v0, s1
+; GCN-NEXT:    v_mov_b32_e32 v1, s1
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 1
-; GCN-NEXT:    ds_write_b128 v0, a[24:27] offset:8288
-; GCN-NEXT:    ds_write_b128 v0, a[28:31] offset:8304
-; GCN-NEXT:    ds_write_b128 v0, a[16:19] offset:8256
-; GCN-NEXT:    ds_write_b128 v0, a[20:23] offset:8272
-; GCN-NEXT:    ds_write_b128 v0, a[8:11] offset:8224
-; GCN-NEXT:    ds_write_b128 v0, a[12:15] offset:8240
-; GCN-NEXT:    ds_write_b128 v0, a[0:3] offset:8192
-; GCN-NEXT:    ds_write_b128 v0, a[4:7] offset:8208
-; GCN-NEXT:    ds_read_b128 a[28:31], v1 offset:24688
-; GCN-NEXT:    ds_read_b128 a[24:27], v1 offset:24672
-; GCN-NEXT:    ds_read_b128 a[20:23], v1 offset:24656
-; GCN-NEXT:    ds_read_b128 a[16:19], v1 offset:24640
-; GCN-NEXT:    ds_read_b128 a[12:15], v1 offset:24624
-; GCN-NEXT:    ds_read_b128 a[8:11], v1 offset:24608
-; GCN-NEXT:    ds_read_b128 a[4:7], v1 offset:24592
-; GCN-NEXT:    ds_read_b128 a[0:3], v1 offset:24576
+; GCN-NEXT:    ds_write_b128 v1, a[24:27] offset:8288
+; GCN-NEXT:    ds_write_b128 v1, a[28:31] offset:8304
+; GCN-NEXT:    ds_write_b128 v1, a[16:19] offset:8256
+; GCN-NEXT:    ds_write_b128 v1, a[20:23] offset:8272
+; GCN-NEXT:    ds_write_b128 v1, a[8:11] offset:8224
+; GCN-NEXT:    ds_write_b128 v1, a[12:15] offset:8240
+; GCN-NEXT:    ds_write_b128 v1, a[0:3] offset:8192
+; GCN-NEXT:    ds_write_b128 v1, a[4:7] offset:8208
+; GCN-NEXT:    ds_read_b128 a[28:31], v0 offset:24688
+; GCN-NEXT:    ds_read_b128 a[24:27], v0 offset:24672
+; GCN-NEXT:    ds_read_b128 a[20:23], v0 offset:24656
+; GCN-NEXT:    ds_read_b128 a[16:19], v0 offset:24640
+; GCN-NEXT:    ds_read_b128 a[12:15], v0 offset:24624
+; GCN-NEXT:    ds_read_b128 a[8:11], v0 offset:24608
+; GCN-NEXT:    ds_read_b128 a[4:7], v0 offset:24592
+; GCN-NEXT:    ds_read_b128 a[0:3], v0 offset:24576
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
@@ -933,47 +933,47 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(<32
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 2
-; GCN-NEXT:    ds_write_b128 v0, a[24:27] offset:16480
-; GCN-NEXT:    ds_write_b128 v0, a[28:31] offset:16496
-; GCN-NEXT:    ds_write_b128 v0, a[16:19] offset:16448
-; GCN-NEXT:    ds_write_b128 v0, a[20:23] offset:16464
-; GCN-NEXT:    ds_write_b128 v0, a[8:11] offset:16416
-; GCN-NEXT:    ds_write_b128 v0, a[12:15] offset:16432
-; GCN-NEXT:    ds_write_b128 v0, a[0:3] offset:16384
-; GCN-NEXT:    ds_write_b128 v0, a[4:7] offset:16400
-; GCN-NEXT:    ds_read_b128 a[28:31], v1 offset:49264
-; GCN-NEXT:    ds_read_b128 a[24:27], v1 offset:49248
-; GCN-NEXT:    ds_read_b128 a[20:23], v1 offset:49232
-; GCN-NEXT:    ds_read_b128 a[16:19], v1 offset:49216
-; GCN-NEXT:    ds_read_b128 a[12:15], v1 offset:49200
-; GCN-NEXT:    ds_read_b128 a[8:11], v1 offset:49184
-; GCN-NEXT:    ds_read_b128 a[4:7], v1 offset:49168
-; GCN-NEXT:    ds_read_b128 a[0:3], v1 offset:49152
+; GCN-NEXT:    ds_write_b128 v1, a[24:27] offset:16480
+; GCN-NEXT:    ds_write_b128 v1, a[28:31] offset:16496
+; GCN-NEXT:    ds_write_b128 v1, a[16:19] offset:16448
+; GCN-NEXT:    ds_write_b128 v1, a[20:23] offset:16464
+; GCN-NEXT:    ds_write_b128 v1, a[8:11] offset:16416
+; GCN-NEXT:    ds_write_b128 v1, a[12:15] offset:16432
+; GCN-NEXT:    ds_write_b128 v1, a[0:3] offset:16384
+; GCN-NEXT:    ds_write_b128 v1, a[4:7] offset:16400
+; GCN-NEXT:    ds_read_b128 a[28:31], v0 offset:49264
+; GCN-NEXT:    ds_read_b128 a[24:27], v0 offset:49248
+; GCN-NEXT:    ds_read_b128 a[20:23], v0 offset:49232
+; GCN-NEXT:    ds_read_b128 a[16:19], v0 offset:49216
+; GCN-NEXT:    ds_read_b128 a[12:15], v0 offset:49200
+; GCN-NEXT:    ds_read_b128 a[8:11], v0 offset:49184
+; GCN-NEXT:    ds_read_b128 a[4:7], v0 offset:49168
+; GCN-NEXT:    ds_read_b128 a[0:3], v0 offset:49152
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; GCN-NEXT:    v_add_u32_e32 v1, 0x6000, v1
+; GCN-NEXT:    v_add_u32_e32 v0, 0x6000, v0
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 1
-; GCN-NEXT:    ds_write_b128 v0, a[24:27] offset:24672
-; GCN-NEXT:    ds_write_b128 v0, a[28:31] offset:24688
-; GCN-NEXT:    ds_write_b128 v0, a[16:19] offset:24640
-; GCN-NEXT:    ds_write_b128 v0, a[20:23] offset:24656
-; GCN-NEXT:    ds_write_b128 v0, a[8:11] offset:24608
-; GCN-NEXT:    ds_write_b128 v0, a[12:15] offset:24624
-; GCN-NEXT:    ds_write_b128 v0, a[0:3] offset:24576
-; GCN-NEXT:    ds_write_b128 v0, a[4:7] offset:24592
-; GCN-NEXT:    ds_read_b128 a[28:31], v1 offset:57456
-; GCN-NEXT:    ds_read_b128 a[24:27], v1 offset:57440
-; GCN-NEXT:    ds_read_b128 a[20:23], v1 offset:57424
-; GCN-NEXT:    ds_read_b128 a[16:19], v1 offset:57408
-; GCN-NEXT:    ds_read_b128 a[0:3], v1 offset:57344
-; GCN-NEXT:    ds_read_b128 a[4:7], v1 offset:57360
-; GCN-NEXT:    ds_read_b128 a[8:11], v1 offset:57376
-; GCN-NEXT:    ds_read_b128 a[12:15], v1 offset:57392
+; GCN-NEXT:    ds_write_b128 v1, a[24:27] offset:24672
+; GCN-NEXT:    ds_write_b128 v1, a[28:31] offset:24688
+; GCN-NEXT:    ds_write_b128 v1, a[16:19] offset:24640
+; GCN-NEXT:    ds_write_b128 v1, a[20:23] offset:24656
+; GCN-NEXT:    ds_write_b128 v1, a[8:11] offset:24608
+; GCN-NEXT:    ds_write_b128 v1, a[12:15] offset:24624
+; GCN-NEXT:    ds_write_b128 v1, a[0:3] offset:24576
+; GCN-NEXT:    ds_write_b128 v1, a[4:7] offset:24592
+; GCN-NEXT:    ds_read_b128 a[28:31], v0 offset:57456
+; GCN-NEXT:    ds_read_b128 a[24:27], v0 offset:57440
+; GCN-NEXT:    ds_read_b128 a[20:23], v0 offset:57424
+; GCN-NEXT:    ds_read_b128 a[16:19], v0 offset:57408
+; GCN-NEXT:    ds_read_b128 a[0:3], v0 offset:57344
+; GCN-NEXT:    ds_read_b128 a[4:7], v0 offset:57360
+; GCN-NEXT:    ds_read_b128 a[8:11], v0 offset:57376
+; GCN-NEXT:    ds_read_b128 a[12:15], v0 offset:57392
 ; GCN-NEXT:    s_waitcnt lgkmcnt(0)
 ; GCN-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
@@ -982,82 +982,82 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(<32
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 7
 ; GCN-NEXT:    s_nop 2
-; GCN-NEXT:    ds_write_b128 v0, a[24:27] offset:32864
-; GCN-NEXT:    ds_write_b128 v0, a[28:31] offset:32880
-; GCN-NEXT:    ds_write_b128 v0, a[16:19] offset:32832
-; GCN-NEXT:    ds_write_b128 v0, a[20:23] offset:32848
-; GCN-NEXT:    ds_write_b128 v0, a[8:11] offset:32800
-; GCN-NEXT:    ds_write_b128 v0, a[12:15] offset:32816
-; GCN-NEXT:    ds_write_b128 v0, a[0:3] offset:32768
-; GCN-NEXT:    ds_write_b128 v0, a[4:7] offset:32784
+; GCN-NEXT:    ds_write_b128 v1, a[24:27] offset:32864
+; GCN-NEXT:    ds_write_b128 v1, a[28:31] offset:32880
+; GCN-NEXT:    ds_write_b128 v1, a[16:19] offset:32832
+; GCN-NEXT:    ds_write_b128 v1, a[20:23] offset:32848
+; GCN-NEXT:    ds_write_b128 v1, a[8:11] offset:32800
+; GCN-NEXT:    ds_write_b128 v1, a[12:15] offset:32816
+; GCN-NEXT:    ds_write_b128 v1, a[0:3] offset:32768
+; GCN-NEXT:    ds_write_b128 v1, a[4:7] offset:32784
 ; GCN-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; GCN-NEXT:    s_endpgm
 ;
 ; EXACTCUTOFF-LABEL: test_sched_group_barrier_pipeline_MFMA_interleave:
 ; EXACTCUTOFF:       ; %bb.0: ; %entry
 ; EXACTCUTOFF-NEXT:    s_load_dwordx2 s[0:1], s[0:1], 0x24
-; EXACTCUTOFF-NEXT:    v_lshlrev_b32_e32 v0, 7, v0
+; EXACTCUTOFF-NEXT:    v_lshlrev_b32_e32 v1, 7, v0
 ; EXACTCUTOFF-NEXT:    v_mov_b32_e32 v2, 1.0
 ; EXACTCUTOFF-NEXT:    v_mov_b32_e32 v3, 2.0
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
-; EXACTCUTOFF-NEXT:    v_add_u32_e32 v1, s0, v0
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v1 offset:112
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v1 offset:96
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v1 offset:80
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v1 offset:64
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v1
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v1 offset:16
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v1 offset:32
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v1 offset:48
+; EXACTCUTOFF-NEXT:    v_add_u32_e32 v0, s0, v1
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v0 offset:112
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v0 offset:96
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v0 offset:80
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v0 offset:64
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v0
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v0 offset:16
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v0 offset:32
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v0 offset:48
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
 ; EXACTCUTOFF-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; EXACTCUTOFF-NEXT:    v_add_u32_e32 v0, s1, v0
+; EXACTCUTOFF-NEXT:    v_add_u32_e32 v1, s1, v1
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 1
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[28:31] offset:112
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[24:27] offset:96
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[20:23] offset:80
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[16:19] offset:64
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[12:15] offset:48
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[8:11] offset:32
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[4:7] offset:16
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[0:3]
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v1 offset:8304
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v1 offset:8288
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v1 offset:8272
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v1 offset:8256
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v1 offset:8240
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v1 offset:8224
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v1 offset:8208
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v1 offset:8192
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[28:31] offset:112
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[24:27] offset:96
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[20:23] offset:80
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[16:19] offset:64
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[12:15] offset:48
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[8:11] offset:32
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[4:7] offset:16
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[0:3]
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v0 offset:8304
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v0 offset:8288
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v0 offset:8272
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v0 offset:8256
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v0 offset:8240
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v0 offset:8224
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v0 offset:8208
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v0 offset:8192
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
 ; EXACTCUTOFF-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; EXACTCUTOFF-NEXT:    v_mov_b32_e32 v0, s1
+; EXACTCUTOFF-NEXT:    v_mov_b32_e32 v1, s1
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 1
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[24:27] offset:8288
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[28:31] offset:8304
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[16:19] offset:8256
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[20:23] offset:8272
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[8:11] offset:8224
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[12:15] offset:8240
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[0:3] offset:8192
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[4:7] offset:8208
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v1 offset:24688
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v1 offset:24672
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v1 offset:24656
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v1 offset:24640
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v1 offset:24624
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v1 offset:24608
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v1 offset:24592
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v1 offset:24576
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[24:27] offset:8288
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[28:31] offset:8304
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[16:19] offset:8256
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[20:23] offset:8272
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[8:11] offset:8224
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[12:15] offset:8240
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[0:3] offset:8192
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[4:7] offset:8208
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v0 offset:24688
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v0 offset:24672
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v0 offset:24656
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v0 offset:24640
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v0 offset:24624
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v0 offset:24608
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v0 offset:24592
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v0 offset:24576
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
 ; EXACTCUTOFF-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
@@ -1066,47 +1066,47 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(<32
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 2
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[24:27] offset:16480
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[28:31] offset:16496
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[16:19] offset:16448
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[20:23] offset:16464
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[8:11] offset:16416
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[12:15] offset:16432
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[0:3] offset:16384
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[4:7] offset:16400
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v1 offset:49264
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v1 offset:49248
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v1 offset:49232
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v1 offset:49216
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v1 offset:49200
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v1 offset:49184
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v1 offset:49168
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v1 offset:49152
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[24:27] offset:16480
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[28:31] offset:16496
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[16:19] offset:16448
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[20:23] offset:16464
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[8:11] offset:16416
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[12:15] offset:16432
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[0:3] offset:16384
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[4:7] offset:16400
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v0 offset:49264
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v0 offset:49248
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v0 offset:49232
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v0 offset:49216
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v0 offset:49200
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v0 offset:49184
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v0 offset:49168
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v0 offset:49152
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
 ; EXACTCUTOFF-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
-; EXACTCUTOFF-NEXT:    v_add_u32_e32 v1, 0x6000, v1
+; EXACTCUTOFF-NEXT:    v_add_u32_e32 v0, 0x6000, v0
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000100) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000008) size(1) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 1
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[24:27] offset:24672
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[28:31] offset:24688
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[16:19] offset:24640
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[20:23] offset:24656
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[8:11] offset:24608
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[12:15] offset:24624
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[0:3] offset:24576
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[4:7] offset:24592
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v1 offset:57456
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v1 offset:57440
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v1 offset:57424
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v1 offset:57408
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v1 offset:57344
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v1 offset:57360
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v1 offset:57376
-; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v1 offset:57392
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[24:27] offset:24672
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[28:31] offset:24688
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[16:19] offset:24640
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[20:23] offset:24656
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[8:11] offset:24608
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[12:15] offset:24624
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[0:3] offset:24576
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[4:7] offset:24592
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[28:31], v0 offset:57456
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[24:27], v0 offset:57440
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[20:23], v0 offset:57424
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[16:19], v0 offset:57408
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[0:3], v0 offset:57344
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[4:7], v0 offset:57360
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[8:11], v0 offset:57376
+; EXACTCUTOFF-NEXT:    ds_read_b128 a[12:15], v0 offset:57392
 ; EXACTCUTOFF-NEXT:    s_waitcnt lgkmcnt(0)
 ; EXACTCUTOFF-NEXT:    v_mfma_f32_32x32x1f32 a[0:31], v2, v3, a[0:31]
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
@@ -1115,43 +1115,43 @@ define amdgpu_kernel void @test_sched_group_barrier_pipeline_MFMA_interleave(<32
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 7
 ; EXACTCUTOFF-NEXT:    s_nop 2
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[24:27] offset:32864
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[28:31] offset:32880
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[16:19] offset:32832
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[20:23] offset:32848
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[8:11] offset:32800
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[12:15] offset:32816
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[0:3] offset:32768
-; EXACTCUTOFF-NEXT:    ds_write_b128 v0, a[4:7] offset:32784
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[24:27] offset:32864
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[28:31] offset:32880
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[16:19] offset:32832
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[20:23] offset:32848
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[8:11] offset:32800
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[12:15] offset:32816
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[0:3] offset:32768
+; EXACTCUTOFF-NEXT:    ds_write_b128 v1, a[4:7] offset:32784
 ; EXACTCUTOFF-NEXT:    ; sched_group_barrier mask(0x00000200) size(8) SyncID(0)
 ; EXACTCUTOFF-NEXT:    s_endpgm
 entry:
   %idx = call i32 @llvm.amdgcn.workitem.id.x()
-  %load.0.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %in, i32 %idx
-  %load.0 = load <32 x float>, <32 x float> addrspace(3)* %load.0.addr
-  %load.1.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.0.addr, i32 64
-  %load.1 = load <32 x float>, <32 x float> addrspace(3)* %load.1.addr
-  %load.2.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.1.addr, i32 128
-  %load.2 = load <32 x float>, <32 x float> addrspace(3)* %load.2.addr
-  %load.3.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.2.addr, i32 192
-  %load.3 = load <32 x float>, <32 x float> addrspace(3)* %load.3.addr
-  %load.4.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %load.3.addr, i32 256
-  %load.4 = load <32 x float>, <32 x float> addrspace(3)* %load.4.addr
+  %load.0.addr = getelementptr <32 x float>, ptr addrspace(3) %in, i32 %idx
+  %load.0 = load <32 x float>, ptr addrspace(3) %load.0.addr
+  %load.1.addr = getelementptr <32 x float>, ptr addrspace(3) %load.0.addr, i32 64
+  %load.1 = load <32 x float>, ptr addrspace(3) %load.1.addr
+  %load.2.addr = getelementptr <32 x float>, ptr addrspace(3) %load.1.addr, i32 128
+  %load.2 = load <32 x float>, ptr addrspace(3) %load.2.addr
+  %load.3.addr = getelementptr <32 x float>, ptr addrspace(3) %load.2.addr, i32 192
+  %load.3 = load <32 x float>, ptr addrspace(3) %load.3.addr
+  %load.4.addr = getelementptr <32 x float>, ptr addrspace(3) %load.3.addr, i32 256
+  %load.4 = load <32 x float>, ptr addrspace(3) %load.4.addr
   %mai.0 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.0, i32 0, i32 0, i32 0)
   %mai.1 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.1, i32 0, i32 0, i32 0)
   %mai.2 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.2, i32 0, i32 0, i32 0)
   %mai.3 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.3, i32 0, i32 0, i32 0)
   %mai.4 = tail call <32 x float> @llvm.amdgcn.mfma.f32.32x32x1f32(float 1.0, float 2.0, <32 x float> %load.4, i32 0, i32 0, i32 0)
-  %store.0.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 %idx
-  store <32 x float> %mai.0, <32 x float> addrspace(3)* %store.0.addr
-  %store.1.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 64
-  store <32 x float> %mai.1, <32 x float> addrspace(3)* %store.1.addr
-  %store.2.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 128
-  store <32 x float> %mai.2, <32 x float> addrspace(3)* %store.2.addr
-  %store.3.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 192
-  store <32 x float> %mai.3, <32 x float> addrspace(3)* %store.3.addr
-  %store.4.addr = getelementptr <32 x float>, <32 x float> addrspace(3)* %out, i32 256
-  store <32 x float> %mai.4, <32 x float> addrspace(3)* %store.4.addr
+  %store.0.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 %idx
+  store <32 x float> %mai.0, ptr addrspace(3) %store.0.addr
+  %store.1.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 64
+  store <32 x float> %mai.1, ptr addrspace(3) %store.1.addr
+  %store.2.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 128
+  store <32 x float> %mai.2, ptr addrspace(3) %store.2.addr
+  %store.3.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 192
+  store <32 x float> %mai.3, ptr addrspace(3) %store.3.addr
+  %store.4.addr = getelementptr <32 x float>, ptr addrspace(3) %out, i32 256
+  store <32 x float> %mai.4, ptr addrspace(3) %store.4.addr
   ; 8 DS read
   call void @llvm.amdgcn.sched.group.barrier(i32 256, i32 8, i32 0)
   ; 1 MFMA

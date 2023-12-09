@@ -21,6 +21,7 @@
 #include "clang/Lex/PreprocessorOptions.h"
 #include "llvm/Testing/Support/Error.h"
 #include "gtest/gtest.h"
+#include <optional>
 
 using namespace clang;
 
@@ -92,7 +93,7 @@ TEST_F(PPDependencyDirectivesTest, MacroGuard) {
                    "#include \"head3.h\"\n#include \"head3.h\"\n"));
   FileMgr.setVirtualFileSystem(VFS);
 
-  Optional<FileEntryRef> FE;
+  OptionalFileEntryRef FE;
   ASSERT_THAT_ERROR(FileMgr.getFileRef("main.c").moveInto(FE),
                     llvm::Succeeded());
   SourceMgr.setMainFileID(
@@ -105,19 +106,19 @@ TEST_F(PPDependencyDirectivesTest, MacroGuard) {
   SmallVector<std::unique_ptr<DepDirectives>> DepDirectivesObjects;
 
   auto getDependencyDirectives = [&](FileEntryRef File)
-      -> Optional<ArrayRef<dependency_directives_scan::Directive>> {
+      -> std::optional<ArrayRef<dependency_directives_scan::Directive>> {
     DepDirectivesObjects.push_back(std::make_unique<DepDirectives>());
     StringRef Input = (*FileMgr.getBufferForFile(File))->getBuffer();
     bool Err = scanSourceForDependencyDirectives(
         Input, DepDirectivesObjects.back()->Tokens,
         DepDirectivesObjects.back()->Directives);
     EXPECT_FALSE(Err);
-    return llvm::makeArrayRef(DepDirectivesObjects.back()->Directives);
+    return llvm::ArrayRef(DepDirectivesObjects.back()->Directives);
   };
 
   auto PPOpts = std::make_shared<PreprocessorOptions>();
   PPOpts->DependencyDirectivesForFile = [&](FileEntryRef File)
-      -> Optional<ArrayRef<dependency_directives_scan::Directive>> {
+      -> std::optional<ArrayRef<dependency_directives_scan::Directive>> {
     return getDependencyDirectives(File);
   };
 
@@ -132,17 +133,16 @@ TEST_F(PPDependencyDirectivesTest, MacroGuard) {
   SmallVector<StringRef> IncludedFiles;
   PP.addPPCallbacks(std::make_unique<IncludeCollector>(PP, IncludedFiles));
   PP.EnterMainSourceFile();
-  while (true) {
-    Token tok;
-    PP.Lex(tok);
-    if (tok.is(tok::eof))
-      break;
-  }
+  PP.LexTokensUntilEOF();
 
-  SmallVector<StringRef> ExpectedIncludes{
+  SmallVector<std::string> IncludedFilesSlash;
+  for (StringRef IncludedFile : IncludedFiles)
+    IncludedFilesSlash.push_back(
+        llvm::sys::path::convert_to_slash(IncludedFile));
+  SmallVector<std::string> ExpectedIncludes{
       "main.c", "./head1.h", "./head2.h", "./head2.h", "./head3.h", "./head3.h",
   };
-  EXPECT_EQ(IncludedFiles, ExpectedIncludes);
+  EXPECT_EQ(IncludedFilesSlash, ExpectedIncludes);
 }
 
 } // anonymous namespace

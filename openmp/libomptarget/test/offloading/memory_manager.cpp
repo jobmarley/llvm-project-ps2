@@ -1,5 +1,6 @@
 // RUN: %libomptarget-compilexx-run-and-check-generic
 
+// UNSUPPORTED: amdgcn-amd-amdhsa
 // UNSUPPORTED: x86_64-pc-linux-gnu
 // UNSUPPORTED: x86_64-pc-linux-gnu-LTO
 
@@ -27,8 +28,7 @@ int main(int argc, char *argv[]) {
       }
       int buffer[n];
 #pragma omp target teams distribute parallel for is_device_ptr(p)              \
-    map(from                                                                   \
-        : buffer)
+    map(from : buffer)
       for (int j = 0; j < n; ++j) {
         buffer[j] = p[j];
       }

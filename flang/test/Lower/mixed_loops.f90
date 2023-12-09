@@ -1,5 +1,5 @@
-! RUN: bbc -emit-fir -o - %s | FileCheck %s
-! RUN: %flang_fc1 -emit-fir -o - %s | FileCheck %s
+! RUN: bbc -emit-fir -hlfir=false -o - %s | FileCheck %s
+! RUN: %flang_fc1 -emit-fir -flang-deprecated-no-hlfir -o - %s | FileCheck %s
 
 ! Test while loop inside do loop.
 ! CHECK-LABEL: while_inside_do_loop
@@ -52,16 +52,17 @@ subroutine while_inside_do_loop
   ! CHECK: %[[TDEC:.*]] = arith.subi %[[T2]], %[[C1_AGAIN]] : i32
   ! CHECK: fir.store %[[TDEC]] to %[[T_REF]]
   ! CHECK: %[[I3:.*]] = fir.load %[[I_REF]] : !fir.ref<i32>
-  ! CHECK: %[[IINC:.*]] = arith.addi %[[I3]], %[[C1]] : i32
+  ! CHECK: %[[C1_2:.*]] = arith.constant 1 : i32
+  ! CHECK: %[[IINC:.*]] = arith.addi %[[I3]], %[[C1_2]] : i32
   ! CHECK: fir.store %[[IINC]] to %[[I_REF]] : !fir.ref<i32>
   ! CHECK: br ^[[HDR1]]
   end do
 
   ! CHECK: ^[[EXIT1]]:  // pred: ^[[HDR1]]
   ! CHECK: %[[IPRINT:.*]] = fir.load %[[I_REF]] : !fir.ref<i32>
-  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[IPRINT]]) : (!fir.ref<i8>, i32) -> i1
+  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[IPRINT]]) {{.*}}: (!fir.ref<i8>, i32) -> i1
   ! CHECK: %[[JPRINT:.*]] = fir.load %[[J_REF]] : !fir.ref<i32>
-  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[JPRINT]]) : (!fir.ref<i8>, i32) -> i1
+  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[JPRINT]]) {{.*}}: (!fir.ref<i8>, i32) -> i1
   print *, i, j
 end subroutine
 
@@ -115,8 +116,8 @@ subroutine do_inside_while_loop
 
   ! CHECK: ^[[EXIT1]]:  // pred: ^[[HDR1]]
   ! CHECK: %[[IPRINT:.*]] = fir.load %[[I_REF]] : !fir.ref<i32>
-  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[IPRINT]]) : (!fir.ref<i8>, i32) -> i1
+  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[IPRINT]]) {{.*}}: (!fir.ref<i8>, i32) -> i1
   ! CHECK: %[[JPRINT:.*]] = fir.load %[[J_REF]] : !fir.ref<i32>
-  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[JPRINT]]) : (!fir.ref<i8>, i32) -> i1
+  ! CHECK: fir.call @_FortranAioOutputInteger32(%{{.*}}, %[[JPRINT]]) {{.*}}: (!fir.ref<i8>, i32) -> i1
   print *, i, j
 end subroutine

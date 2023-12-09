@@ -13,6 +13,8 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/iterator_range.h"
 
+namespace lldb_private::plugin {
+namespace dwarf {
 class DWARFDIE : public DWARFBaseDIE {
 public:
   class child_iterator;
@@ -30,17 +32,15 @@ public:
 
   const char *GetPubname() const;
 
-  const char *GetQualifiedName(std::string &storage) const;
-
   using DWARFBaseDIE::GetName;
-  void GetName(lldb_private::Stream &s) const;
+  void GetName(Stream &s) const;
 
-  void AppendTypeName(lldb_private::Stream &s) const;
+  void AppendTypeName(Stream &s) const;
 
-  lldb_private::Type *ResolveType() const;
+  Type *ResolveType() const;
 
   // Resolve a type by UID using this DIE's DWARF file
-  lldb_private::Type *ResolveTypeUID(const DWARFDIE &die) const;
+  Type *ResolveTypeUID(const DWARFDIE &die) const;
 
   // Functions for obtaining DIE relations and references
 
@@ -74,8 +74,7 @@ public:
 
   /// Return this DIE's decl context as it is needed to look up types
   /// in Clang's -gmodules debug info format.
-  void GetDeclContext(
-      llvm::SmallVectorImpl<lldb_private::CompilerContext> &context) const;
+  std::vector<CompilerContext> GetDeclContext() const;
 
   // Getting attribute values from the DIE.
   //
@@ -85,12 +84,12 @@ public:
   DWARFDIE
   GetAttributeValueAsReferenceDIE(const dw_attr_t attr) const;
 
-  bool
-  GetDIENamesAndRanges(const char *&name, const char *&mangled,
-                       DWARFRangeList &ranges, int &decl_file, int &decl_line,
-                       int &decl_column, int &call_file, int &call_line,
-                       int &call_column,
-                       lldb_private::DWARFExpressionList *frame_base) const;
+  bool GetDIENamesAndRanges(
+      const char *&name, const char *&mangled, DWARFRangeList &ranges,
+      std::optional<int> &decl_file, std::optional<int> &decl_line,
+      std::optional<int> &decl_column, std::optional<int> &call_file,
+      std::optional<int> &call_line, std::optional<int> &call_column,
+      DWARFExpressionList *frame_base) const;
 
   /// The range of all the children of this DIE.
   llvm::iterator_range<child_iterator> children() const;
@@ -128,5 +127,7 @@ public:
     return *this;
   }
 };
+} // namespace dwarf
+} // namespace lldb_private::plugin
 
 #endif // LLDB_SOURCE_PLUGINS_SYMBOLFILE_DWARF_DWARFDIE_H

@@ -18,11 +18,11 @@
 #include "X86InstrInfo.h"
 #include "X86MachineFunctionInfo.h"
 #include "X86Subtarget.h"
-#include "llvm/Analysis/EHPersonalities.h"
 #include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/Passes.h" // For IDs of passes that are preserved.
+#include "llvm/IR/EHPersonalities.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/Target/TargetMachine.h"
 using namespace llvm;
@@ -49,7 +49,7 @@ public:
   const X86MachineFunctionInfo *X86FI = nullptr;
   const X86FrameLowering *X86FL = nullptr;
 
-  bool runOnMachineFunction(MachineFunction &Fn) override;
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
   MachineFunctionProperties getRequiredProperties() const override {
     return MachineFunctionProperties().set(
@@ -77,7 +77,7 @@ private:
   /// placed into separate block guarded by check for al register(for SystemV
   /// abi).
   void ExpandVastartSaveXmmRegs(
-      MachineBasicBlock *MBB,
+      MachineBasicBlock *EntryBlk,
       MachineBasicBlock::iterator VAStartPseudoInstr) const;
 };
 char X86ExpandPseudo::ID = 0;
@@ -264,6 +264,7 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
   MachineInstr &MI = *MBBI;
   unsigned Opcode = MI.getOpcode();
   const DebugLoc &DL = MBBI->getDebugLoc();
+  bool HasEGPR = STI->hasEGPR();
   switch (Opcode) {
   default:
     return false;
@@ -466,10 +467,14 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     Register Reg0 = TRI->getSubReg(Reg, X86::sub_mask_0);
     Register Reg1 = TRI->getSubReg(Reg, X86::sub_mask_1);
 
-    auto MIBLo = BuildMI(MBB, MBBI, DL, TII->get(X86::KMOVWkm))
-      .addReg(Reg0, RegState::Define | getDeadRegState(DstIsDead));
-    auto MIBHi = BuildMI(MBB, MBBI, DL, TII->get(X86::KMOVWkm))
-      .addReg(Reg1, RegState::Define | getDeadRegState(DstIsDead));
+    auto MIBLo =
+        BuildMI(MBB, MBBI, DL,
+                TII->get(HasEGPR ? X86::KMOVWkm_EVEX : X86::KMOVWkm))
+            .addReg(Reg0, RegState::Define | getDeadRegState(DstIsDead));
+    auto MIBHi =
+        BuildMI(MBB, MBBI, DL,
+                TII->get(HasEGPR ? X86::KMOVWkm_EVEX : X86::KMOVWkm))
+            .addReg(Reg1, RegState::Define | getDeadRegState(DstIsDead));
 
     for (int i = 0; i < X86::AddrNumOperands; ++i) {
       MIBLo.add(MBBI->getOperand(1 + i));
@@ -500,8 +505,10 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     Register Reg0 = TRI->getSubReg(Reg, X86::sub_mask_0);
     Register Reg1 = TRI->getSubReg(Reg, X86::sub_mask_1);
 
-    auto MIBLo = BuildMI(MBB, MBBI, DL, TII->get(X86::KMOVWmk));
-    auto MIBHi = BuildMI(MBB, MBBI, DL, TII->get(X86::KMOVWmk));
+    auto MIBLo = BuildMI(MBB, MBBI, DL,
+                         TII->get(HasEGPR ? X86::KMOVWmk_EVEX : X86::KMOVWmk));
+    auto MIBHi = BuildMI(MBB, MBBI, DL,
+                         TII->get(HasEGPR ? X86::KMOVWmk_EVEX : X86::KMOVWmk));
 
     for (int i = 0; i < X86::AddrNumOperands; ++i) {
       MIBLo.add(MBBI->getOperand(i));
@@ -562,21 +569,27 @@ bool X86ExpandPseudo::ExpandMI(MachineBasicBlock &MBB,
     MI.setDesc(TII->get(Opc));
     return true;
   }
+  case X86::PTCMMIMFP16PSV:
+  case X86::PTCMMRLFP16PSV:
   case X86::PTDPBSSDV:
   case X86::PTDPBSUDV:
   case X86::PTDPBUSDV:
   case X86::PTDPBUUDV:
-  case X86::PTDPBF16PSV: {
+  case X86::PTDPBF16PSV:
+  case X86::PTDPFP16PSV: {
     MI.untieRegOperand(4);
     for (unsigned i = 3; i > 0; --i)
       MI.removeOperand(i);
     unsigned Opc;
     switch (Opcode) {
+    case X86::PTCMMIMFP16PSV:  Opc = X86::TCMMIMFP16PS; break;
+    case X86::PTCMMRLFP16PSV:  Opc = X86::TCMMRLFP16PS; break;
     case X86::PTDPBSSDV:   Opc = X86::TDPBSSD; break;
     case X86::PTDPBSUDV:   Opc = X86::TDPBSUD; break;
     case X86::PTDPBUSDV:   Opc = X86::TDPBUSD; break;
     case X86::PTDPBUUDV:   Opc = X86::TDPBUUD; break;
     case X86::PTDPBF16PSV: Opc = X86::TDPBF16PS; break;
+    case X86::PTDPFP16PSV: Opc = X86::TDPFP16PS; break;
     default: llvm_unreachable("Impossible Opcode!");
     }
     MI.setDesc(TII->get(Opc));
@@ -674,8 +687,7 @@ void X86ExpandPseudo::ExpandVastartSaveXmmRegs(
         NewMI.add(VAStartPseudoInstr->getOperand(i + 1));
     }
     NewMI.addReg(VAStartPseudoInstr->getOperand(OpndIdx).getReg());
-    assert(Register::isPhysicalRegister(
-        VAStartPseudoInstr->getOperand(OpndIdx).getReg()));
+    assert(VAStartPseudoInstr->getOperand(OpndIdx).getReg().isPhysical());
   }
 
   // The original block will now fall through to the GuardedRegsBlk.

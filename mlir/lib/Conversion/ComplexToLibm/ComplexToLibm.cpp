@@ -12,6 +12,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include <optional>
 
 namespace mlir {
 #define GEN_PASS_DEF_CONVERTCOMPLEXTOLIBM
@@ -24,10 +25,10 @@ namespace {
 // Functor to resolve the function name corresponding to the given complex
 // result type.
 struct ComplexTypeResolver {
-  llvm::Optional<bool> operator()(Type type) const {
-    auto complexType = type.cast<ComplexType>();
+  std::optional<bool> operator()(Type type) const {
+    auto complexType = cast<ComplexType>(type);
     auto elementType = complexType.getElementType();
-    if (!elementType.isa<Float32Type, Float64Type>())
+    if (!isa<Float32Type, Float64Type>(elementType))
       return {};
 
     return elementType.getIntOrFloatBitWidth() == 64;
@@ -37,9 +38,9 @@ struct ComplexTypeResolver {
 // Functor to resolve the function name corresponding to the given float result
 // type.
 struct FloatTypeResolver {
-  llvm::Optional<bool> operator()(Type type) const {
-    auto elementType = type.cast<FloatType>();
-    if (!elementType.isa<Float32Type, Float64Type>())
+  std::optional<bool> operator()(Type type) const {
+    auto elementType = cast<FloatType>(type);
+    if (!isa<Float32Type, Float64Type>(elementType))
       return {};
 
     return elementType.getIntOrFloatBitWidth() == 64;
@@ -54,10 +55,8 @@ template <typename Op, typename TypeResolver = ComplexTypeResolver>
 struct ScalarOpToLibmCall : public OpRewritePattern<Op> {
 public:
   using OpRewritePattern<Op>::OpRewritePattern;
-  ScalarOpToLibmCall<Op, TypeResolver>(MLIRContext *context,
-                                       StringRef floatFunc,
-                                       StringRef doubleFunc,
-                                       PatternBenefit benefit)
+  ScalarOpToLibmCall(MLIRContext *context, StringRef floatFunc,
+                     StringRef doubleFunc, PatternBenefit benefit)
       : OpRewritePattern<Op>(context, benefit), floatFunc(floatFunc),
         doubleFunc(doubleFunc){};
 
@@ -76,7 +75,7 @@ LogicalResult ScalarOpToLibmCall<Op, TypeResolver>::matchAndRewrite(
   if (!isDouble.has_value())
     return failure();
 
-  auto name = isDouble.value() ? doubleFunc : floatFunc;
+  auto name = *isDouble ? doubleFunc : floatFunc;
 
   auto opFunc = dyn_cast_or_null<SymbolOpInterface>(
       SymbolTable::lookupSymbolIn(module, name));

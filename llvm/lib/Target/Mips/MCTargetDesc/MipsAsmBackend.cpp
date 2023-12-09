@@ -281,7 +281,7 @@ void MipsAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   bool microMipsLEByteOrder = needsMMLEByteOrder((unsigned) Kind);
 
   for (unsigned i = 0; i != NumBytes; ++i) {
-    unsigned Idx = Endian == support::little
+    unsigned Idx = Endian == llvm::endianness::little
                        ? (microMipsLEByteOrder ? calculateMMLEIndex(i) : i)
                        : (FullSize - 1 - i);
     CurVal |= (uint64_t)((uint8_t)Data[Offset + Idx]) << (i*8);
@@ -293,14 +293,14 @@ void MipsAsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
 
   // Write out the fixed up bytes back to the code/data bits.
   for (unsigned i = 0; i != NumBytes; ++i) {
-    unsigned Idx = Endian == support::little
+    unsigned Idx = Endian == llvm::endianness::little
                        ? (microMipsLEByteOrder ? calculateMMLEIndex(i) : i)
                        : (FullSize - 1 - i);
     Data[Offset + Idx] = (uint8_t)((CurVal >> (i*8)) & 0xff);
   }
 }
 
-Optional<MCFixupKind> MipsAsmBackend::getFixupKind(StringRef Name) const {
+std::optional<MCFixupKind> MipsAsmBackend::getFixupKind(StringRef Name) const {
   unsigned Type = llvm::StringSwitch<unsigned>(Name)
                       .Case("BFD_RELOC_NONE", ELF::R_MIPS_NONE)
                       .Case("BFD_RELOC_16", ELF::R_MIPS_16)
@@ -310,7 +310,7 @@ Optional<MCFixupKind> MipsAsmBackend::getFixupKind(StringRef Name) const {
   if (Type != -1u)
     return static_cast<MCFixupKind>(FirstLiteralRelocationKind + Type);
 
-  return StringSwitch<Optional<MCFixupKind>>(Name)
+  return StringSwitch<std::optional<MCFixupKind>>(Name)
       .Case("R_MIPS_NONE", FK_NONE)
       .Case("R_MIPS_32", FK_Data_4)
       .Case("R_MIPS_CALL_HI16", (MCFixupKind)Mips::fixup_Mips_CALL_HI16)
@@ -519,7 +519,7 @@ getFixupKindInfo(MCFixupKind Kind) const {
   assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
           "Invalid kind!");
 
-  if (Endian == support::little)
+  if (Endian == llvm::endianness::little)
     return LittleEndianInfos[Kind - FirstTargetFixupKind];
   return BigEndianInfos[Kind - FirstTargetFixupKind];
 }

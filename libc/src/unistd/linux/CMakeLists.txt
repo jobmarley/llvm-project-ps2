@@ -97,11 +97,36 @@ add_entrypoint_object(
   HDRS
     ../fork.h
   DEPENDS
-    libc.include.errno
     libc.include.unistd
     libc.include.sys_syscall
+    libc.src.__support.threads.fork_callbacks
     libc.src.__support.OSUtil.osutil
     libc.src.__support.threads.thread
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
+  execv
+  SRCS
+    execv.cpp
+  HDRS
+    ../execv.h
+  DEPENDS
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
+    libc.src.errno.errno
+    libc.src.unistd.environ
+)
+
+add_entrypoint_object(
+  execve
+  SRCS
+    execve.cpp
+  HDRS
+    ../execve.h
+  DEPENDS
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
     libc.src.errno.errno
 )
 
@@ -125,6 +150,20 @@ add_entrypoint_object(
   HDRS
     ../ftruncate.h
   DEPENDS
+    libc.include.unistd
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
+  getcwd
+  SRCS
+    getcwd.cpp
+  HDRS
+    ../getcwd.h
+  DEPENDS
+    libc.include.stdlib
     libc.include.unistd
     libc.include.sys_syscall
     libc.src.__support.OSUtil.osutil
@@ -177,6 +216,19 @@ add_entrypoint_object(
     libc.include.unistd
     libc.include.sys_syscall
     libc.src.__support.OSUtil.osutil
+)
+
+add_entrypoint_object(
+  isatty
+  SRCS
+    isatty.cpp
+  HDRS
+    ../isatty.h
+  DEPENDS
+    libc.include.unistd
+    libc.include.sys_syscall
+    libc.src.__support.OSUtil.osutil
+    libc.src.errno.errno
 )
 
 add_entrypoint_object(
@@ -338,6 +390,17 @@ add_entrypoint_object(
   DEPENDS
     libc.include.unistd
     libc.src.__support.OSUtil.osutil
+    libc.src.errno.errno
+)
+
+add_entrypoint_object(
+  sysconf
+  SRCS
+    sysconf.cpp
+  HDRS
+    ../sysconf.h
+  DEPENDS
+    libc.include.unistd
     libc.src.errno.errno
 )
 

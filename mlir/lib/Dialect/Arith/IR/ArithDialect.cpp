@@ -7,13 +7,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace mlir::arith;
 
 #include "mlir/Dialect/Arith/IR/ArithOpsDialect.cpp.inc"
+#include "mlir/Dialect/Arith/IR/ArithOpsInterfaces.cpp.inc"
+#define GET_ATTRDEF_CLASSES
+#include "mlir/Dialect/Arith/IR/ArithOpsAttributes.cpp.inc"
 
 namespace {
 /// This class defines the interface for handling inlining for arithmetic
@@ -22,8 +28,7 @@ struct ArithInlinerInterface : public DialectInlinerInterface {
   using DialectInlinerInterface::DialectInlinerInterface;
 
   /// All arithmetic dialect ops can be inlined.
-  bool isLegalToInline(Operation *, Region *, bool,
-                       BlockAndValueMapping &) const final {
+  bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
     return true;
   }
 };
@@ -34,6 +39,10 @@ void arith::ArithDialect::initialize() {
 #define GET_OP_LIST
 #include "mlir/Dialect/Arith/IR/ArithOps.cpp.inc"
       >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "mlir/Dialect/Arith/IR/ArithOpsAttributes.cpp.inc"
+      >();
   addInterfaces<ArithInlinerInterface>();
 }
 
@@ -41,5 +50,8 @@ void arith::ArithDialect::initialize() {
 Operation *arith::ArithDialect::materializeConstant(OpBuilder &builder,
                                                     Attribute value, Type type,
                                                     Location loc) {
-  return builder.create<arith::ConstantOp>(loc, value, type);
+  if (auto poison = dyn_cast<ub::PoisonAttr>(value))
+    return builder.create<ub::PoisonOp>(loc, type, poison);
+
+  return ConstantOp::materialize(builder, value, type, loc);
 }

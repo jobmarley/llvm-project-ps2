@@ -16,9 +16,9 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -290,6 +290,26 @@ struct DoWhileLowering : public OpRewritePattern<WhileOp> {
   LogicalResult matchAndRewrite(WhileOp whileOp,
                                 PatternRewriter &rewriter) const override;
 };
+
+/// Lower an `scf.index_switch` operation to a `cf.switch` operation.
+struct IndexSwitchLowering : public OpRewritePattern<IndexSwitchOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(IndexSwitchOp op,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Lower an `scf.forall` operation to an `scf.parallel` op, assuming that it
+/// has no shared outputs. Ops with shared outputs should be bufferized first.
+/// Specialized lowerings for `scf.forall` (e.g., for GPUs) exist in other
+/// dialects/passes.
+struct ForallLowering : public OpRewritePattern<mlir::scf::ForallOp> {
+  using OpRewritePattern<mlir::scf::ForallOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(mlir::scf::ForallOp forallOp,
+                                PatternRewriter &rewriter) const override;
+};
+
 } // namespace
 
 LogicalResult ForLowering::matchAndRewrite(ForOp forOp,
@@ -341,8 +361,7 @@ LogicalResult ForLowering::matchAndRewrite(ForOp forOp,
   // of the loop operation.
   SmallVector<Value, 8> destOperands;
   destOperands.push_back(lowerBound);
-  auto iterOperands = forOp.getIterOperands();
-  destOperands.append(iterOperands.begin(), iterOperands.end());
+  llvm::append_range(destOperands, forOp.getInitArgs());
   rewriter.create<cf::BranchOp>(loc, conditionBlock, destOperands);
 
   // With the body block done, we can fill in the condition block.
@@ -498,7 +517,7 @@ ParallelLowering::matchAndRewrite(ParallelOp parallelOp,
     Value arg = iterArgs[yieldOperands.size()];
     yieldOperands.push_back(reduceBlock.getTerminator()->getOperand(0));
     rewriter.eraseOp(reduceBlock.getTerminator());
-    rewriter.mergeBlockBefore(&reduceBlock, &op, {arg, reduce.getOperand()});
+    rewriter.inlineBlockBefore(&reduceBlock, &op, {arg, reduce.getOperand()});
     rewriter.eraseOp(reduce);
   }
 
@@ -508,8 +527,8 @@ ParallelLowering::matchAndRewrite(ParallelOp parallelOp,
   if (newBody->empty())
     rewriter.mergeBlocks(parallelOp.getBody(), newBody, ivs);
   else
-    rewriter.mergeBlockBefore(parallelOp.getBody(), newBody->getTerminator(),
-                              ivs);
+    rewriter.inlineBlockBefore(parallelOp.getBody(), newBody->getTerminator(),
+                               ivs);
 
   // Finally, create the terminator if required (for loops with no results, it
   // has been already created in loop construction).
@@ -534,10 +553,8 @@ LogicalResult WhileLowering::matchAndRewrite(WhileOp whileOp,
       rewriter.splitBlock(currentBlock, rewriter.getInsertionPoint());
 
   // Inline both regions.
-  Block *after = &whileOp.getAfter().front();
-  Block *afterLast = &whileOp.getAfter().back();
-  Block *before = &whileOp.getBefore().front();
-  Block *beforeLast = &whileOp.getBefore().back();
+  Block *after = whileOp.getAfterBody();
+  Block *before = whileOp.getBeforeBody();
   rewriter.inlineRegionBefore(whileOp.getAfter(), continuation);
   rewriter.inlineRegionBefore(whileOp.getBefore(), after);
 
@@ -548,14 +565,14 @@ LogicalResult WhileLowering::matchAndRewrite(WhileOp whileOp,
   // Replace terminators with branches. Assuming bodies are SESE, which holds
   // given only the patterns from this file, we only need to look at the last
   // block. This should be reconsidered if we allow break/continue in SCF.
-  rewriter.setInsertionPointToEnd(beforeLast);
-  auto condOp = cast<ConditionOp>(beforeLast->getTerminator());
+  rewriter.setInsertionPointToEnd(before);
+  auto condOp = cast<ConditionOp>(before->getTerminator());
   rewriter.replaceOpWithNewOp<cf::CondBranchOp>(condOp, condOp.getCondition(),
                                                 after, condOp.getArgs(),
                                                 continuation, ValueRange());
 
-  rewriter.setInsertionPointToEnd(afterLast);
-  auto yieldOp = cast<scf::YieldOp>(afterLast->getTerminator());
+  rewriter.setInsertionPointToEnd(after);
+  auto yieldOp = cast<scf::YieldOp>(after->getTerminator());
   rewriter.replaceOpWithNewOp<cf::BranchOp>(yieldOp, before,
                                             yieldOp.getResults());
 
@@ -569,12 +586,7 @@ LogicalResult WhileLowering::matchAndRewrite(WhileOp whileOp,
 LogicalResult
 DoWhileLowering::matchAndRewrite(WhileOp whileOp,
                                  PatternRewriter &rewriter) const {
-  if (!llvm::hasSingleElement(whileOp.getAfter()))
-    return rewriter.notifyMatchFailure(whileOp,
-                                       "do-while simplification applicable to "
-                                       "single-block 'after' region only");
-
-  Block &afterBlock = whileOp.getAfter().front();
+  Block &afterBlock = *whileOp.getAfterBody();
   if (!llvm::hasSingleElement(afterBlock))
     return rewriter.notifyMatchFailure(whileOp,
                                        "do-while simplification applicable "
@@ -593,8 +605,7 @@ DoWhileLowering::matchAndRewrite(WhileOp whileOp,
       rewriter.splitBlock(currentBlock, rewriter.getInsertionPoint());
 
   // Only the "before" region should be inlined.
-  Block *before = &whileOp.getBefore().front();
-  Block *beforeLast = &whileOp.getBefore().back();
+  Block *before = whileOp.getBeforeBody();
   rewriter.inlineRegionBefore(whileOp.getBefore(), continuation);
 
   // Branch to the "before" region.
@@ -602,8 +613,8 @@ DoWhileLowering::matchAndRewrite(WhileOp whileOp,
   rewriter.create<cf::BranchOp>(whileOp.getLoc(), before, whileOp.getInits());
 
   // Loop around the "before" region based on condition.
-  rewriter.setInsertionPointToEnd(beforeLast);
-  auto condOp = cast<ConditionOp>(beforeLast->getTerminator());
+  rewriter.setInsertionPointToEnd(before);
+  auto condOp = cast<ConditionOp>(before->getTerminator());
   rewriter.replaceOpWithNewOp<cf::CondBranchOp>(condOp, condOp.getCondition(),
                                                 before, condOp.getArgs(),
                                                 continuation, ValueRange());
@@ -615,10 +626,104 @@ DoWhileLowering::matchAndRewrite(WhileOp whileOp,
   return success();
 }
 
+LogicalResult
+IndexSwitchLowering::matchAndRewrite(IndexSwitchOp op,
+                                     PatternRewriter &rewriter) const {
+  // Split the block at the op.
+  Block *condBlock = rewriter.getInsertionBlock();
+  Block *continueBlock = rewriter.splitBlock(condBlock, Block::iterator(op));
+
+  // Create the arguments on the continue block with which to replace the
+  // results of the op.
+  SmallVector<Value> results;
+  results.reserve(op.getNumResults());
+  for (Type resultType : op.getResultTypes())
+    results.push_back(continueBlock->addArgument(resultType, op.getLoc()));
+
+  // Handle the regions.
+  auto convertRegion = [&](Region &region) -> FailureOr<Block *> {
+    Block *block = &region.front();
+
+    // Convert the yield terminator to a branch to the continue block.
+    auto yield = cast<scf::YieldOp>(block->getTerminator());
+    rewriter.setInsertionPoint(yield);
+    rewriter.replaceOpWithNewOp<cf::BranchOp>(yield, continueBlock,
+                                              yield.getOperands());
+
+    // Inline the region.
+    rewriter.inlineRegionBefore(region, continueBlock);
+    return block;
+  };
+
+  // Convert the case regions.
+  SmallVector<Block *> caseSuccessors;
+  SmallVector<int32_t> caseValues;
+  caseSuccessors.reserve(op.getCases().size());
+  caseValues.reserve(op.getCases().size());
+  for (auto [region, value] : llvm::zip(op.getCaseRegions(), op.getCases())) {
+    FailureOr<Block *> block = convertRegion(region);
+    if (failed(block))
+      return failure();
+    caseSuccessors.push_back(*block);
+    caseValues.push_back(value);
+  }
+
+  // Convert the default region.
+  FailureOr<Block *> defaultBlock = convertRegion(op.getDefaultRegion());
+  if (failed(defaultBlock))
+    return failure();
+
+  // Create the switch.
+  rewriter.setInsertionPointToEnd(condBlock);
+  SmallVector<ValueRange> caseOperands(caseSuccessors.size(), {});
+
+  // Cast switch index to integer case value.
+  Value caseValue = rewriter.create<arith::IndexCastOp>(
+      op.getLoc(), rewriter.getI32Type(), op.getArg());
+
+  rewriter.create<cf::SwitchOp>(
+      op.getLoc(), caseValue, *defaultBlock, ValueRange(),
+      rewriter.getDenseI32ArrayAttr(caseValues), caseSuccessors, caseOperands);
+  rewriter.replaceOp(op, continueBlock->getArguments());
+  return success();
+}
+
+LogicalResult ForallLowering::matchAndRewrite(ForallOp forallOp,
+                                              PatternRewriter &rewriter) const {
+  Location loc = forallOp.getLoc();
+  if (!forallOp.getOutputs().empty())
+    return rewriter.notifyMatchFailure(
+        forallOp,
+        "only fully bufferized scf.forall ops can be lowered to scf.parallel");
+
+  // Convert mixed bounds and steps to SSA values.
+  SmallVector<Value> lbs = getValueOrCreateConstantIndexOp(
+      rewriter, loc, forallOp.getMixedLowerBound());
+  SmallVector<Value> ubs = getValueOrCreateConstantIndexOp(
+      rewriter, loc, forallOp.getMixedUpperBound());
+  SmallVector<Value> steps =
+      getValueOrCreateConstantIndexOp(rewriter, loc, forallOp.getMixedStep());
+
+  // Create empty scf.parallel op.
+  auto parallelOp = rewriter.create<ParallelOp>(loc, lbs, ubs, steps);
+  rewriter.eraseBlock(&parallelOp.getRegion().front());
+  rewriter.inlineRegionBefore(forallOp.getRegion(), parallelOp.getRegion(),
+                              parallelOp.getRegion().begin());
+  // Replace the terminator.
+  rewriter.setInsertionPointToEnd(&parallelOp.getRegion().front());
+  rewriter.replaceOpWithNewOp<scf::YieldOp>(
+      parallelOp.getRegion().front().getTerminator());
+
+  // Erase the scf.forall op.
+  rewriter.replaceOp(forallOp, parallelOp);
+  return success();
+}
+
 void mlir::populateSCFToControlFlowConversionPatterns(
     RewritePatternSet &patterns) {
-  patterns.add<ForLowering, IfLowering, ParallelLowering, WhileLowering,
-               ExecuteRegionLowering>(patterns.getContext());
+  patterns.add<ForallLowering, ForLowering, IfLowering, ParallelLowering,
+               WhileLowering, ExecuteRegionLowering, IndexSwitchLowering>(
+      patterns.getContext());
   patterns.add<DoWhileLowering>(patterns.getContext(), /*benefit=*/2);
 }
 
@@ -628,8 +733,8 @@ void SCFToControlFlowPass::runOnOperation() {
 
   // Configure conversion to lower out SCF operations.
   ConversionTarget target(getContext());
-  target.addIllegalOp<scf::ForOp, scf::IfOp, scf::ParallelOp, scf::WhileOp,
-                      scf::ExecuteRegionOp>();
+  target.addIllegalOp<scf::ForallOp, scf::ForOp, scf::IfOp, scf::IndexSwitchOp,
+                      scf::ParallelOp, scf::WhileOp, scf::ExecuteRegionOp>();
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))

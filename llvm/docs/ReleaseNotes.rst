@@ -47,25 +47,31 @@ Non-comprehensive list of changes in this release
 Update on required toolchains to build LLVM
 -------------------------------------------
 
-LLVM is now built with C++17 by default. This means C++17 can be used in
-the code base.
-
-The previous "soft" toolchain requirements have now been changed to "hard".
-This means that the the following versions are now required to build LLVM
-and there is no way to suppress this error.
-
-* GCC >= 7.1
-* Clang >= 5.0
-* Apple Clang >= 9.3
-* Visual Studio 2019 >= 16.7
-
 Changes to the LLVM IR
 ----------------------
 
-* The constant expression variants of the following instructions has been
+* The `llvm.stacksave` and `llvm.stackrestore` intrinsics now use
+  an overloaded pointer type to support non-0 address spaces.
+* The constant expression variants of the following instructions have been
   removed:
 
-  * ``fneg``
+  * ``and``
+  * ``or``
+  * ``lshr``
+  * ``ashr``
+  * ``zext``
+  * ``sext``
+  * ``fptrunc``
+  * ``fpext``
+  * ``fptoui``
+  * ``fptosi``
+  * ``uitofp``
+  * ``sitofp``
+
+* Added `llvm.exp10` intrinsic.
+
+Changes to LLVM infrastructure
+------------------------------
 
 Changes to building LLVM
 ------------------------
@@ -73,23 +79,36 @@ Changes to building LLVM
 Changes to TableGen
 -------------------
 
+* Added constructs for debugging TableGen files:
+
+  * `dump` keyword to dump messages to standard error, see
+     https://github.com/llvm/llvm-project/pull/68793.
+  * `!repr` bang operator to inspect the content of values, see
+     https://github.com/llvm/llvm-project/pull/68716.
+
+Changes to Interprocedural Optimizations
+----------------------------------------
+
 Changes to the AArch64 Backend
 ------------------------------
 
 Changes to the AMDGPU Backend
 -----------------------------
 
+* `llvm.sqrt.f32` is now lowered correctly. Use `llvm.amdgcn.sqrt.f32`
+  for raw instruction access.
+
+* Implemented `llvm.stacksave` and `llvm.stackrestore` intrinsics.
+
+* Implemented :ref:`llvm.get.rounding <int_get_rounding>`
+
+* Added support for Cortex-A520, Cortex-A720 and Cortex-X4 CPUs.
+
 Changes to the ARM Backend
 --------------------------
 
-* Support for targeting armv2, armv2A, armv3 and armv3M has been removed.
-  LLVM did not, and was not ever likely to generate correct code for those
-  architecture versions so their presence was misleading.
-
 Changes to the AVR Backend
 --------------------------
-
-* ...
 
 Changes to the DirectX Backend
 ------------------------------
@@ -97,90 +116,186 @@ Changes to the DirectX Backend
 Changes to the Hexagon Backend
 ------------------------------
 
-* ...
+Changes to the LoongArch Backend
+--------------------------------
 
 Changes to the MIPS Backend
 ---------------------------
 
-* ...
-
 Changes to the PowerPC Backend
 ------------------------------
-
-* ...
 
 Changes to the RISC-V Backend
 -----------------------------
 
-* Support for the unratified Zbe, Zbf, Zbm, Zbp, Zbr, and Zbt extensions have
-  been removed.
+* The Zfa extension version was upgraded to 1.0 and is no longer experimental.
+* Zihintntl extension version was upgraded to 1.0 and is no longer experimental.
+* Intrinsics were added for Zk*, Zbb, and Zbc. See https://github.com/riscv-non-isa/riscv-c-api-doc/blob/master/riscv-c-api.md#scalar-bit-manipulation-extension-intrinsics
 
 Changes to the WebAssembly Backend
 ----------------------------------
 
-* ...
-
 Changes to the Windows Target
 -----------------------------
 
-* For MinGW, generate embedded ``-exclude-symbols:`` directives for symbols
-  with hidden visibility, omitting them from automatic export of all symbols.
-  This roughly makes hidden visibility work like it does for other object
-  file formats.
+* The LLVM filesystem class ``UniqueID`` and function ``equivalent()``
+  no longer determine that distinct different path names for the same
+  hard linked file actually are equal. This is an intentional tradeoff in a
+  bug fix, where the bug used to cause distinct files to be considered
+  equivalent on some file systems. This change fixed the issues
+  https://github.com/llvm/llvm-project/issues/61401 and
+  https://github.com/llvm/llvm-project/issues/22079.
 
 Changes to the X86 Backend
 --------------------------
 
+* The ``i128`` type now matches GCC and clang's ``__int128`` type. This mainly
+  benefits external projects such as Rust which aim to be binary compatible
+  with C, but also fixes code generation where LLVM already assumed that the
+  type matched and called into libgcc helper functions.
+* Support ISA of ``USER_MSR``.
+* Support ISA of ``AVX10.1-256`` and ``AVX10.1-512``.
+* ``-mcpu=pantherlake`` and ``-mcpu=clearwaterforest`` are now supported.
+
 Changes to the OCaml bindings
 -----------------------------
+
+Changes to the Python bindings
+------------------------------
+
+* The python bindings have been removed.
 
 
 Changes to the C API
 --------------------
 
+* Added ``LLVMGetTailCallKind`` and ``LLVMSetTailCallKind`` to
+  allow getting and setting ``tail``, ``musttail``, and ``notail``
+  attributes on call instructions.
 * The following functions for creating constant expressions have been removed,
   because the underlying constant expressions are no longer supported. Instead,
   an instruction should be created using the ``LLVMBuildXYZ`` APIs, which will
   constant fold the operands if possible and create an instruction otherwise:
 
-  * ``LLVMConstFNeg``
+  * ``LLVMConstAnd``
+  * ``LLVMConstOr``
+  * ``LLVMConstLShr``
+  * ``LLVMConstAShr``
+  * ``LLVMConstZExt``
+  * ``LLVMConstSExt``
+  * ``LLVMConstZExtOrBitCast``
+  * ``LLVMConstSExtOrBitCast``
+  * ``LLVMConstIntCast``
+  * ``LLVMConstFPTrunc``
+  * ``LLVMConstFPExt``
+  * ``LLVMConstFPToUI``
+  * ``LLVMConstFPToSI``
+  * ``LLVMConstUIToFP``
+  * ``LLVMConstSIToFP``
+  * ``LLVMConstFPCast``
 
-Changes to the Go bindings
---------------------------
+* Added ``LLVMCreateTargetMachineWithOptions``, along with helper functions for
+  an opaque option structure, as an alternative to ``LLVMCreateTargetMachine``.
+  The option structure exposes an additional setting (i.e., the target ABI) and
+  provides default values for unspecified settings.
 
+* Added ``LLVMGetNNeg`` and ``LLVMSetNNeg`` for setting/getting the new nneg flag
+  on zext instructions
 
-Changes to the FastISel infrastructure
---------------------------------------
+Changes to the CodeGen infrastructure
+-------------------------------------
 
-* ...
+* A new debug type ``isel-dump`` is added to show only the SelectionDAG dumps
+  after each ISel phase (i.e. ``-debug-only=isel-dump``). This new debug type
+  can be filtered by function names using ``-filter-print-funcs=<function names>``,
+  the same flag used to filter IR dumps after each Pass. Note that the existing
+  ``-debug-only=isel`` will take precedence over the new behavior and
+  print SelectionDAG dumps of every single function regardless of
+  ``-filter-print-funcs``'s values.
 
-Changes to the DAG infrastructure
----------------------------------
+* ``PrologEpilogInserter`` no longer supports register scavenging
+  during forwards frame index elimination. Targets should use
+  backwards frame index elimination instead.
 
+* ``RegScavenger`` no longer supports forwards register
+  scavenging. Clients should use backwards register scavenging
+  instead, which is preferred because it does not depend on accurate
+  kill flags.
 
 Changes to the Metadata Info
 ---------------------------------
-
-* Add Module Flags Metadata ``stack-protector-guard-symbol`` which specify a
-  symbol for addressing the stack-protector guard.
+* Added a new loop metadata `!{!"llvm.loop.align", i32 64}`
 
 Changes to the Debug Info
 ---------------------------------
 
-During this release ...
-
 Changes to the LLVM tools
 ---------------------------------
+
+* llvm-symbolizer now treats invalid input as an address for which source
+  information is not found.
+* llvm-readelf now supports ``--extra-sym-info`` (``-X``) to display extra
+  information (section name) when showing symbols.
+
+* ``llvm-nm`` now supports the ``--line-numbers`` (``-l``) option to use
+  debugging information to print symbols' filenames and line numbers.
+
+* llvm-symbolizer and llvm-addr2line now support addresses specified as symbol names.
 
 Changes to LLDB
 ---------------------------------
 
+* ``SBWatchpoint::GetHardwareIndex`` is deprecated and now returns -1
+  to indicate the index is unavailable.
+* Methods in SBHostOS related to threads have had their implementations
+  removed. These methods will return a value indicating failure.
+* ``SBType::FindDirectNestedType`` function is added. It's useful
+  for formatters to quickly find directly nested type when it's known
+  where to search for it, avoiding more expensive global search via
+  ``SBTarget::FindFirstType``.
+* ``lldb-vscode`` was renamed to ``lldb-dap`` and and its installation
+  instructions have been updated to reflect this. The underlying functionality
+  remains unchanged.
+* The ``mte_ctrl`` register can now be read from AArch64 Linux core files.
+* LLDB on AArch64 Linux now supports debugging the Scalable Matrix Extension
+  (SME) and Scalable Matrix Extension 2 (SME2) for both live processes and core
+  files. For details refer to the
+  `AArch64 Linux documentation <https://lldb.llvm.org/use/aarch64-linux.html>`_.
+
+* When running on AArch64 Linux, ``lldb-server`` now provides register
+  field information for the following registers: ``cpsr``, ``fpcr``,
+  ``fpsr``, ``svcr`` and ``mte_ctrl``. ::
+
+    (lldb) register read cpsr
+          cpsr = 0x80001000
+               = (N = 1, Z = 0, C = 0, V = 0, SS = 0, IL = 0, <...>
+
+  This is only available when ``lldb`` is built with XML support.
+  Where possible the CPU's capabilities are used to decide which
+  fields are present, however this is not always possible or entirely
+  accurate. If in doubt, refer to the numerical value.
+
 Changes to Sanitizers
 ---------------------
-
+* HWASan now defaults to detecting use-after-scope bugs.
 
 Other Changes
 -------------
+
+* The ``Flags`` field of ``llvm::opt::Option`` has been split into ``Flags``
+  and ``Visibility`` to simplify option sharing between various drivers (such
+  as ``clang``, ``clang-cl``, or ``flang``) that rely on Clang's Options.td.
+  Overloads of ``llvm::opt::OptTable`` that use ``FlagsToInclude`` have been
+  deprecated. There is a script and instructions on how to resolve conflicts -
+  see https://reviews.llvm.org/D157150 and https://reviews.llvm.org/D157151 for
+  details.
+
+* On Linux, FreeBSD, and NetBSD, setting the environment variable
+  ``LLVM_ENABLE_SYMBOLIZER_MARKUP`` causes tools to print stacktraces using
+  :doc:`Symbolizer Markup <SymbolizerMarkupFormat>`.
+  This works even if the tools have no embedded symbol information (i.e. are
+  fully stripped); :doc:`llvm-symbolizer <CommandGuide/llvm-symbolizer>` can
+  symbolize the markup afterwards using ``debuginfod``.
 
 External Open Source Projects Using LLVM 15
 ===========================================

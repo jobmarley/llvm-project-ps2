@@ -13,15 +13,29 @@
 //===----------------------------------------------------------------------===//
 
 #include "mlir/Analysis/Presburger/IntegerRelation.h"
+#include "mlir/Analysis/Presburger/Fraction.h"
 #include "mlir/Analysis/Presburger/LinearTransform.h"
+#include "mlir/Analysis/Presburger/MPInt.h"
 #include "mlir/Analysis/Presburger/PWMAFunction.h"
 #include "mlir/Analysis/Presburger/PresburgerRelation.h"
+#include "mlir/Analysis/Presburger/PresburgerSpace.h"
 #include "mlir/Analysis/Presburger/Simplex.h"
 #include "mlir/Analysis/Presburger/Utils.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
-#include <numeric>
+#include "llvm/Support/raw_ostream.h"
+#include <algorithm>
+#include <cassert>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 #define DEBUG_TYPE "presburger"
 
@@ -77,6 +91,30 @@ IntegerRelation IntegerRelation::intersect(IntegerRelation other) const {
 bool IntegerRelation::isEqual(const IntegerRelation &other) const {
   assert(space.isCompatible(other.getSpace()) && "Spaces must be compatible.");
   return PresburgerRelation(*this).isEqual(PresburgerRelation(other));
+}
+
+bool IntegerRelation::isObviouslyEqual(const IntegerRelation &other) const {
+  if (!space.isEqual(other.getSpace()))
+    return false;
+  if (getNumEqualities() != other.getNumEqualities())
+    return false;
+  if (getNumInequalities() != other.getNumInequalities())
+    return false;
+
+  unsigned cols = getNumCols();
+  for (unsigned i = 0, eqs = getNumEqualities(); i < eqs; ++i) {
+    for (unsigned j = 0; j < cols; ++j) {
+      if (atEq(i, j) != other.atEq(i, j))
+        return false;
+    }
+  }
+  for (unsigned i = 0, ineqs = getNumInequalities(); i < ineqs; ++i) {
+    for (unsigned j = 0; j < cols; ++j) {
+      if (atIneq(i, j) != other.atIneq(i, j))
+        return false;
+    }
+  }
+  return true;
 }
 
 bool IntegerRelation::isSubsetOf(const IntegerRelation &other) const {
@@ -171,7 +209,7 @@ PresburgerRelation IntegerRelation::computeReprWithOnlyDivLocals() const {
     return PresburgerRelation(*this);
 
   // Move all the non-div locals to the end, as the current API to
-  // SymbolicLexMin requires these to form a contiguous range.
+  // SymbolicLexOpt requires these to form a contiguous range.
   //
   // Take a copy so we can perform mutations.
   IntegerRelation copy = *this;
@@ -210,13 +248,13 @@ PresburgerRelation IntegerRelation::computeReprWithOnlyDivLocals() const {
   // exists, which is the union of the domain of the returned lexmin function
   // and the returned set of assignments to the "symbols" that makes the lexmin
   // unbounded.
-  SymbolicLexMin lexminResult =
+  SymbolicLexOpt lexminResult =
       SymbolicLexSimplex(copy, /*symbolOffset*/ 0,
                          IntegerPolyhedron(PresburgerSpace::getSetSpace(
                              /*numDims=*/copy.getNumVars() - numNonDivLocals)))
           .computeSymbolicIntegerLexMin();
   PresburgerRelation result =
-      lexminResult.lexmin.getDomain().unionSet(lexminResult.unboundedDomain);
+      lexminResult.lexopt.getDomain().unionSet(lexminResult.unboundedDomain);
 
   // The result set might lie in the wrong space -- all its ids are dims.
   // Set it to the desired space and return.
@@ -226,7 +264,7 @@ PresburgerRelation IntegerRelation::computeReprWithOnlyDivLocals() const {
   return result;
 }
 
-SymbolicLexMin IntegerRelation::findSymbolicIntegerLexMin() const {
+SymbolicLexOpt IntegerRelation::findSymbolicIntegerLexMin() const {
   // Symbol and Domain vars will be used as symbols for symbolic lexmin.
   // In other words, for every value of the symbols and domain, return the
   // lexmin value of the (range, locals).
@@ -238,7 +276,7 @@ SymbolicLexMin IntegerRelation::findSymbolicIntegerLexMin() const {
   // Compute the symbolic lexmin of the dims and locals, with the symbols being
   // the actual symbols of this set.
   // The resultant space of lexmin is the space of the relation itself.
-  SymbolicLexMin result =
+  SymbolicLexOpt result =
       SymbolicLexSimplex(*this,
                          IntegerPolyhedron(PresburgerSpace::getSetSpace(
                              /*numDims=*/getNumDomainVars(),
@@ -248,9 +286,47 @@ SymbolicLexMin IntegerRelation::findSymbolicIntegerLexMin() const {
 
   // We want to return only the lexmin over the dims, so strip the locals from
   // the computed lexmin.
-  result.lexmin.removeOutputs(result.lexmin.getNumOutputs() - getNumLocalVars(),
-                              result.lexmin.getNumOutputs());
+  result.lexopt.removeOutputs(result.lexopt.getNumOutputs() - getNumLocalVars(),
+                              result.lexopt.getNumOutputs());
   return result;
+}
+
+/// findSymbolicIntegerLexMax is implemented using findSymbolicIntegerLexMin as
+/// follows:
+/// 1. A new relation is created which is `this` relation with the sign of
+/// each dimension variable in range flipped;
+/// 2. findSymbolicIntegerLexMin is called on the range negated relation to
+/// compute the negated lexmax of `this` relation;
+/// 3. The sign of the negated lexmax is flipped and returned.
+SymbolicLexOpt IntegerRelation::findSymbolicIntegerLexMax() const {
+  IntegerRelation flippedRel = *this;
+  // Flip range sign by flipping the sign of range variables in all constraints.
+  for (unsigned j = getNumDomainVars(),
+                b = getNumDomainVars() + getNumRangeVars();
+       j < b; j++) {
+    for (unsigned i = 0, a = getNumEqualities(); i < a; i++)
+      flippedRel.atEq(i, j) = -1 * atEq(i, j);
+    for (unsigned i = 0, a = getNumInequalities(); i < a; i++)
+      flippedRel.atIneq(i, j) = -1 * atIneq(i, j);
+  }
+  // Compute negated lexmax by computing lexmin.
+  SymbolicLexOpt flippedSymbolicIntegerLexMax =
+                     flippedRel.findSymbolicIntegerLexMin(),
+                 symbolicIntegerLexMax(
+                     flippedSymbolicIntegerLexMax.lexopt.getSpace());
+  // Get lexmax by flipping range sign in the PWMA constraints.
+  for (auto &flippedPiece :
+       flippedSymbolicIntegerLexMax.lexopt.getAllPieces()) {
+    IntMatrix mat = flippedPiece.output.getOutputMatrix();
+    for (unsigned i = 0, e = mat.getNumRows(); i < e; i++)
+      mat.negateRow(i);
+    MultiAffineFunction maf(flippedPiece.output.getSpace(), mat);
+    PWMAFunction::Piece piece = {flippedPiece.domain, maf};
+    symbolicIntegerLexMax.lexopt.addPiece(piece);
+  }
+  symbolicIntegerLexMax.unboundedDomain =
+      flippedSymbolicIntegerLexMax.unboundedDomain;
+  return symbolicIntegerLexMax;
 }
 
 PresburgerRelation
@@ -638,6 +714,12 @@ bool IntegerRelation::isEmpty() const {
   return false;
 }
 
+bool IntegerRelation::isObviouslyEmpty() const {
+  if (isEmptyByGCDTest() || hasInvalidConstraint())
+    return true;
+  return false;
+}
+
 // Runs the GCD test on all equality constraints. Returns 'true' if this test
 // fails on any equality. Returns 'false' otherwise.
 // This test can be used to disprove the existence of a solution. If it returns
@@ -675,7 +757,7 @@ bool IntegerRelation::isEmptyByGCDTest() const {
 //
 // It is sufficient to check the perpendiculars of the constraints, as the set
 // of perpendiculars which are bounded must span all bounded directions.
-Matrix IntegerRelation::getBoundedDirections() const {
+IntMatrix IntegerRelation::getBoundedDirections() const {
   // Note that it is necessary to add the equalities too (which the constructor
   // does) even though we don't need to check if they are bounded; whether an
   // inequality is bounded or not depends on what other constraints, including
@@ -696,7 +778,7 @@ Matrix IntegerRelation::getBoundedDirections() const {
   // The direction vector is given by the coefficients and does not include the
   // constant term, so the matrix has one fewer column.
   unsigned dirsNumCols = getNumCols() - 1;
-  Matrix dirs(boundedIneqs.size() + getNumEqualities(), dirsNumCols);
+  IntMatrix dirs(boundedIneqs.size() + getNumEqualities(), dirsNumCols);
 
   // Copy the bounded inequalities.
   unsigned row = 0;
@@ -763,7 +845,8 @@ bool IntegerRelation::isIntegerEmpty() const { return !findIntegerSample(); }
 ///
 /// Concatenating the samples from B and C gives a sample v in S*T, so the
 /// returned sample T*v is a sample in S.
-Optional<SmallVector<MPInt, 8>> IntegerRelation::findIntegerSample() const {
+std::optional<SmallVector<MPInt, 8>>
+IntegerRelation::findIntegerSample() const {
   // First, try the GCD test heuristic.
   if (isEmptyByGCDTest())
     return {};
@@ -781,13 +864,13 @@ Optional<SmallVector<MPInt, 8>> IntegerRelation::findIntegerSample() const {
   // m is a matrix containing, in each row, a vector in which S is
   // bounded, such that the linear span of all these dimensions contains all
   // bounded dimensions in S.
-  Matrix m = getBoundedDirections();
+  IntMatrix m = getBoundedDirections();
   // In column echelon form, each row of m occupies only the first rank(m)
   // columns and has zeros on the other columns. The transform T that brings S
   // to column echelon form is unimodular as well, so this is a suitable
   // transform to use in step 1 of the algorithm.
   std::pair<unsigned, LinearTransform> result =
-      LinearTransform::makeTransformToColumnEchelon(std::move(m));
+      LinearTransform::makeTransformToColumnEchelon(m);
   const LinearTransform &transform = result.second;
   // 1) Apply T to S to obtain S*T.
   IntegerRelation transformedSet = transform.applyTo(*this);
@@ -802,7 +885,7 @@ Optional<SmallVector<MPInt, 8>> IntegerRelation::findIntegerSample() const {
   boundedSet.removeVarRange(numBoundedDims, boundedSet.getNumVars());
 
   // 3) Try to obtain a sample from the bounded set.
-  Optional<SmallVector<MPInt, 8>> boundedSample =
+  std::optional<SmallVector<MPInt, 8>> boundedSample =
       Simplex(boundedSet).findIntegerSample();
   if (!boundedSample)
     return {};
@@ -901,7 +984,7 @@ bool IntegerRelation::containsPoint(ArrayRef<MPInt> point) const {
 /// compute the values of the locals that have division representations and
 /// only use the integer emptiness check for the locals that don't have this.
 /// Handling this correctly requires ordering the divs, though.
-Optional<SmallVector<MPInt, 8>>
+std::optional<SmallVector<MPInt, 8>>
 IntegerRelation::containsPointNoLocal(ArrayRef<MPInt> point) const {
   assert(point.size() == getNumVars() - getNumLocalVars() &&
          "Point should contain all vars except locals!");
@@ -1015,6 +1098,57 @@ unsigned IntegerRelation::gaussianEliminateVars(unsigned posStart,
   return posLimit - posStart;
 }
 
+bool IntegerRelation::gaussianEliminate() {
+  gcdTightenInequalities();
+  unsigned firstVar = 0, vars = getNumVars();
+  unsigned nowDone, eqs, pivotRow;
+  for (nowDone = 0, eqs = getNumEqualities(); nowDone < eqs; ++nowDone) {
+    // Finds the first non-empty column.
+    for (; firstVar < vars; ++firstVar) {
+      if (!findConstraintWithNonZeroAt(firstVar, true, &pivotRow))
+        continue;
+      break;
+    }
+    // The matrix has been normalized to row echelon form.
+    if (firstVar >= vars)
+      break;
+
+    // The first pivot row found is below where it should currently be placed.
+    if (pivotRow > nowDone) {
+      equalities.swapRows(pivotRow, nowDone);
+      pivotRow = nowDone;
+    }
+
+    // Normalize all lower equations and all inequalities.
+    for (unsigned i = nowDone + 1; i < eqs; ++i) {
+      eliminateFromConstraint(this, i, pivotRow, firstVar, 0, true);
+      equalities.normalizeRow(i);
+    }
+    for (unsigned i = 0, ineqs = getNumInequalities(); i < ineqs; ++i) {
+      eliminateFromConstraint(this, i, pivotRow, firstVar, 0, false);
+      inequalities.normalizeRow(i);
+    }
+    gcdTightenInequalities();
+  }
+
+  // No redundant rows.
+  if (nowDone == eqs)
+    return false;
+
+  // Check to see if the redundant rows constant is zero, a non-zero value means
+  // the set is empty.
+  for (unsigned i = nowDone; i < eqs; ++i) {
+    if (atEq(i, vars) == 0)
+      continue;
+
+    *this = getEmpty(getSpace());
+    return true;
+  }
+  // Eliminate rows that are confined to be all zeros.
+  removeEqualityRange(nowDone, eqs);
+  return true;
+}
+
 // A more complex check to eliminate redundant inequalities. Uses FourierMotzkin
 // to check if a constraint is redundant.
 void IntegerRelation::removeRedundantInequalities() {
@@ -1080,7 +1214,7 @@ void IntegerRelation::removeRedundantConstraints() {
   equalities.resizeVertically(pos);
 }
 
-Optional<MPInt> IntegerRelation::computeVolume() const {
+std::optional<MPInt> IntegerRelation::computeVolume() const {
   assert(getNumSymbolVars() == 0 && "Symbols are not yet supported!");
 
   Simplex simplex(*this);
@@ -1203,6 +1337,20 @@ void IntegerRelation::removeDuplicateDivs() {
     return true;
   };
   divs.removeDuplicateDivs(merge);
+}
+
+void IntegerRelation::simplify() {
+  bool changed = true;
+  // Repeat until we reach a fixed point.
+  while (changed) {
+    if (isObviouslyEmpty())
+      return;
+    changed = false;
+    normalizeConstraintsByGCD();
+    changed |= gaussianEliminate();
+    changed |= removeDuplicateConstraints();
+  }
+  // Current set is not empty.
 }
 
 /// Removes local variables using equalities. Each equality is checked if it
@@ -1378,19 +1526,19 @@ void IntegerRelation::constantFoldVarRange(unsigned pos, unsigned num) {
 
 /// Returns a non-negative constant bound on the extent (upper bound - lower
 /// bound) of the specified variable if it is found to be a constant; returns
-/// None if it's not a constant. This methods treats symbolic variables
+/// std::nullopt if it's not a constant. This methods treats symbolic variables
 /// specially, i.e., it looks for constant differences between affine
-/// expressions involving only the symbolic variables. See comments at
-/// function definition for example. 'lb', if provided, is set to the lower
-/// bound associated with the constant difference. Note that 'lb' is purely
-/// symbolic and thus will contain the coefficients of the symbolic variables
-/// and the constant coefficient.
+/// expressions involving only the symbolic variables. See comments at function
+/// definition for example. 'lb', if provided, is set to the lower bound
+/// associated with the constant difference. Note that 'lb' is purely symbolic
+/// and thus will contain the coefficients of the symbolic variables and the
+/// constant coefficient.
 //  Egs: 0 <= i <= 15, return 16.
 //       s0 + 2 <= i <= s0 + 17, returns 16. (s0 has to be a symbol)
 //       s0 + s1 + 16 <= d0 <= s0 + s1 + 31, returns 16.
 //       s0 - 7 <= 8*j <= s0 returns 1 with lb = s0, lbDivisor = 8 (since lb =
 //       ceil(s0 - 7 / 8) = floor(s0 / 8)).
-Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
+std::optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
     unsigned pos, SmallVectorImpl<MPInt> *lb, MPInt *boundFloorDivisor,
     SmallVectorImpl<MPInt> *ub, unsigned *minLbPos, unsigned *minUbPos) const {
   assert(pos < getNumDimVars() && "Invalid variable position");
@@ -1405,7 +1553,7 @@ Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
     // representation of the local vars.
     if (!std::all_of(eq.begin() + getNumDimAndSymbolVars(), eq.end() - 1,
                      [](const MPInt &coeff) { return coeff == 0; }))
-      return None;
+      return std::nullopt;
 
     // This variable can only take a single value.
     if (lb) {
@@ -1442,7 +1590,7 @@ Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
   }
   if (r == e)
     // If it doesn't, there isn't a bound on it.
-    return None;
+    return std::nullopt;
 
   // Positions of constraints that are lower/upper bounds on the variable.
   SmallVector<unsigned, 4> lbIndices, ubIndices;
@@ -1455,7 +1603,7 @@ Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
                                /*eqIndices=*/nullptr, /*offset=*/0,
                                /*num=*/getNumDimVars());
 
-  Optional<MPInt> minDiff;
+  std::optional<MPInt> minDiff;
   unsigned minLbPosition = 0, minUbPosition = 0;
   for (auto ubPos : ubIndices) {
     for (auto lbPos : lbIndices) {
@@ -1477,7 +1625,7 @@ Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
                            atIneq(lbPos, pos));
       // This bound is non-negative by definition.
       diff = std::max<MPInt>(diff, MPInt(0));
-      if (minDiff == None || diff < minDiff) {
+      if (minDiff == std::nullopt || diff < minDiff) {
         minDiff = diff;
         minLbPosition = lbPos;
         minUbPosition = ubPos;
@@ -1516,7 +1664,7 @@ Optional<MPInt> IntegerRelation::getConstantBoundOnDimSize(
 }
 
 template <bool isLower>
-Optional<MPInt>
+std::optional<MPInt>
 IntegerRelation::computeConstantLowerOrUpperBound(unsigned pos) {
   assert(pos < getNumVars() && "invalid position");
   // Project to 'pos'.
@@ -1536,9 +1684,9 @@ IntegerRelation::computeConstantLowerOrUpperBound(unsigned pos) {
   }
   if (r == e)
     // If it doesn't, there isn't a bound on it.
-    return None;
+    return std::nullopt;
 
-  Optional<MPInt> minOrMaxConst;
+  std::optional<MPInt> minOrMaxConst;
 
   // Take the max across all const lower bounds (or min across all constant
   // upper bounds).
@@ -1563,18 +1711,18 @@ IntegerRelation::computeConstantLowerOrUpperBound(unsigned pos) {
         isLower ? ceilDiv(-atIneq(r, getNumCols() - 1), atIneq(r, 0))
                 : floorDiv(atIneq(r, getNumCols() - 1), -atIneq(r, 0));
     if (isLower) {
-      if (minOrMaxConst == None || boundConst > minOrMaxConst)
+      if (minOrMaxConst == std::nullopt || boundConst > minOrMaxConst)
         minOrMaxConst = boundConst;
     } else {
-      if (minOrMaxConst == None || boundConst < minOrMaxConst)
+      if (minOrMaxConst == std::nullopt || boundConst < minOrMaxConst)
         minOrMaxConst = boundConst;
     }
   }
   return minOrMaxConst;
 }
 
-Optional<MPInt> IntegerRelation::getConstantBound(BoundType type,
-                                                  unsigned pos) const {
+std::optional<MPInt> IntegerRelation::getConstantBound(BoundType type,
+                                                       unsigned pos) const {
   if (type == BoundType::LB)
     return IntegerRelation(*this)
         .computeConstantLowerOrUpperBound</*isLower=*/true>(pos);
@@ -1583,13 +1731,13 @@ Optional<MPInt> IntegerRelation::getConstantBound(BoundType type,
         .computeConstantLowerOrUpperBound</*isLower=*/false>(pos);
 
   assert(type == BoundType::EQ && "expected EQ");
-  Optional<MPInt> lb =
+  std::optional<MPInt> lb =
       IntegerRelation(*this).computeConstantLowerOrUpperBound</*isLower=*/true>(
           pos);
-  Optional<MPInt> ub =
+  std::optional<MPInt> ub =
       IntegerRelation(*this)
           .computeConstantLowerOrUpperBound</*isLower=*/false>(pos);
-  return (lb && ub && *lb == *ub) ? Optional<MPInt>(*ub) : None;
+  return (lb && ub && *lb == *ub) ? std::optional<MPInt>(*ub) : std::nullopt;
 }
 
 // A simple (naive and conservative) check for hyper-rectangularity.
@@ -2030,7 +2178,7 @@ IntegerRelation::unionBoundingBox(const IntegerRelation &otherCst) {
       if (!constLb.has_value() || !constOtherLb.has_value())
         return failure();
       std::fill(minLb.begin(), minLb.end(), 0);
-      minLb.back() = std::min(constLb.value(), constOtherLb.value());
+      minLb.back() = std::min(*constLb, *constOtherLb);
     }
 
     // Do the same for ub's but max of upper bounds. Identify max.
@@ -2046,7 +2194,7 @@ IntegerRelation::unionBoundingBox(const IntegerRelation &otherCst) {
       if (!constUb.has_value() || !constOtherUb.has_value())
         return failure();
       std::fill(maxUb.begin(), maxUb.end(), 0);
-      maxUb.back() = std::max(constUb.value(), constOtherUb.value());
+      maxUb.back() = std::max(*constUb, *constOtherUb);
     }
 
     std::fill(newLb.begin(), newLb.end(), 0);
@@ -2152,6 +2300,68 @@ IntegerPolyhedron IntegerRelation::getDomainSet() const {
   return IntegerPolyhedron(std::move(copyRel));
 }
 
+bool IntegerRelation::removeDuplicateConstraints() {
+  bool changed = false;
+  SmallDenseMap<ArrayRef<MPInt>, unsigned> hashTable;
+  unsigned ineqs = getNumInequalities(), cols = getNumCols();
+
+  if (ineqs <= 1)
+    return changed;
+
+  // Check if the non-constant part of the constraint is the same.
+  ArrayRef<MPInt> row = getInequality(0).drop_back();
+  hashTable.insert({row, 0});
+  for (unsigned k = 1; k < ineqs; ++k) {
+    row = getInequality(k).drop_back();
+    if (!hashTable.contains(row)) {
+      hashTable.insert({row, k});
+      continue;
+    }
+
+    // For identical cases, keep only the smaller part of the constant term.
+    unsigned l = hashTable[row];
+    changed = true;
+    if (atIneq(k, cols - 1) <= atIneq(l, cols - 1))
+      inequalities.swapRows(k, l);
+    removeInequality(k);
+    --k;
+    --ineqs;
+  }
+
+  // Check the neg form of each inequality, need an extra vector to store it.
+  SmallVector<MPInt> negIneq(cols - 1);
+  for (unsigned k = 0; k < ineqs; ++k) {
+    row = getInequality(k).drop_back();
+    negIneq.assign(row.begin(), row.end());
+    for (MPInt &ele : negIneq)
+      ele = -ele;
+    if (!hashTable.contains(negIneq))
+      continue;
+
+    // For cases where the neg is the same as other inequalities, check that the
+    // sum of their constant terms is positive.
+    unsigned l = hashTable[row];
+    auto sum = atIneq(l, cols - 1) + atIneq(k, cols - 1);
+    if (sum > 0 || l == k)
+      continue;
+
+    // A sum of constant terms equal to zero combines two inequalities into one
+    // equation, less than zero means the set is empty.
+    changed = true;
+    if (k < l)
+      std::swap(l, k);
+    if (sum == 0) {
+      addEquality(getInequality(k));
+      removeInequality(k);
+      removeInequality(l);
+    } else
+      *this = getEmpty(getSpace());
+    break;
+  }
+
+  return changed;
+}
+
 IntegerPolyhedron IntegerRelation::getRangeSet() const {
   IntegerRelation copyRel = *this;
 
@@ -2244,14 +2454,16 @@ void IntegerRelation::print(raw_ostream &os) const {
   assert(hasConsistentState());
   printSpace(os);
   for (unsigned i = 0, e = getNumEqualities(); i < e; ++i) {
+    os << " ";
     for (unsigned j = 0, f = getNumCols(); j < f; ++j) {
-      os << atEq(i, j) << " ";
+      os << atEq(i, j) << "\t";
     }
     os << "= 0\n";
   }
   for (unsigned i = 0, e = getNumInequalities(); i < e; ++i) {
+    os << " ";
     for (unsigned j = 0, f = getNumCols(); j < f; ++j) {
-      os << atIneq(i, j) << " ";
+      os << atIneq(i, j) << "\t";
     }
     os << ">= 0\n";
   }

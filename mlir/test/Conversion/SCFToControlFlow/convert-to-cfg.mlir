@@ -473,7 +473,7 @@ func.func @while_values(%arg0: i32, %arg1: f32) {
     scf.condition(%0) %2, %3 : i64, f64
   } do {
   // CHECK:   ^[[AFTER]](%[[ARG4:.*]]: i64, %[[ARG5:.*]]: f64):
-  ^bb0(%arg2: i64, %arg3: f64):  
+  ^bb0(%arg2: i64, %arg3: f64):
     // CHECK:   cf.br ^[[BEFORE]](%{{.*}}, %{{.*}} : i32, f32)
     scf.yield %c0_i32, %cst : i32, f32
   }
@@ -620,3 +620,59 @@ func.func @func_execute_region_elim_multi_yield() {
 // CHECK:   ^[[bb3]](%[[z:.+]]: i64):
 // CHECK:     "test.bar"(%[[z]])
 // CHECK:     return
+
+// CHECK-LABEL: @index_switch
+func.func @index_switch(%i: index, %a: i32, %b: i32, %c: i32) -> i32 {
+  // CHECK: %[[CASE:.*]] = arith.index_cast %arg0 : index to i32
+  // CHECK: cf.switch %[[CASE]] : i32
+  // CHECK-NEXT: default: ^[[DEFAULT:.+]],
+  // CHECK-NEXT: 0: ^[[bb1:.+]],
+  // CHECK-NEXT: 1: ^[[bb2:.+]]
+  %0 = scf.index_switch %i -> i32
+  // CHECK: ^[[bb1]]:
+  case 0 {
+    // CHECK-NEXT: br ^[[bb4:.+]](%arg1 : i32)
+    scf.yield %a : i32
+  }
+  // CHECK: ^[[bb2]]:
+  case 1 {
+    // CHECK-NEXT: br ^[[bb4]](%arg2 : i32)
+    scf.yield %b : i32
+  }
+  // CHECK: ^[[DEFAULT]]:
+  default {
+    // CHECK-NEXT: br ^[[bb4]](%arg3 : i32)
+    scf.yield %c : i32
+  }
+  // CHECK: ^[[bb4]](%[[V:.*]]: i32
+  // CHECK-NEXT: return %[[V]]
+  return %0 : i32
+}
+
+// Note: scf.forall is lowered to scf.parallel, which is currently lowered to
+// scf.for and then to unstructured control flow. scf.parallel could lower more
+// efficiently to multi-threaded IR, at which point scf.forall would
+// automatically lower to multi-threaded IR.
+
+// CHECK-LABEL: func @forall(
+//  CHECK-SAME:     %[[num_threads:.*]]: index)
+//       CHECK:   %[[c0:.*]] = arith.constant 0 : index
+//       CHECK:   %[[c1:.*]] = arith.constant 1 : index
+//       CHECK:   cf.br ^[[bb1:.*]](%[[c0]] : index)
+//       CHECK: ^[[bb1]](%[[arg0:.*]]: index):
+//       CHECK:   %[[cmpi:.*]] = arith.cmpi slt, %[[arg0]], %[[num_threads]]
+//       CHECK:   cf.cond_br %[[cmpi]], ^[[bb2:.*]], ^[[bb3:.*]]
+//       CHECK: ^[[bb2]]:
+//       CHECK:   "test.foo"(%[[arg0]])
+//       CHECK:   %[[addi:.*]] = arith.addi %[[arg0]], %[[c1]]
+//       CHECK:   cf.br ^[[bb1]](%[[addi]] : index)
+//       CHECK: ^[[bb3]]:
+//       CHECK:   return
+func.func @forall(%num_threads: index) {
+  scf.forall (%thread_idx) in (%num_threads) {
+    "test.foo"(%thread_idx) : (index) -> ()
+    scf.forall.in_parallel {
+    }
+  }
+  return
+}

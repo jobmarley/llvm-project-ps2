@@ -57,14 +57,6 @@ memref.global "private" @memref3 : memref<2xf32>  = uninitialized
 // CHECK-LABEL: memref.global "private" constant @memref4 : memref<2xf32> = uninitialized
 memref.global "private" constant @memref4 : memref<2xf32>  = uninitialized
 
-// CHECK-LABEL: func @write_global_memref
-func.func @write_global_memref() {
-  %0 = memref.get_global @memref0 : memref<2xf32>
-  %1 = arith.constant dense<[1.0, 2.0]> : tensor<2xf32>
-  memref.tensor_store %1, %0 : memref<2xf32>
-  return
-}
-
 // CHECK-LABEL: func @read_global_memref
 func.func @read_global_memref() {
   %0 = memref.get_global @memref0 : memref<2xf32>
@@ -288,7 +280,7 @@ func.func @expand_collapse_shape_transposed_layout(
     memref<?x?xf32, strided<[1, 10], offset: 0>>
 
   %r1 = memref.expand_shape %m1 [[0, 1], [2], [3, 4]] :
-    memref<4x5x6xf32, strided<[1, ?, 1000], offset: 0>> into 
+    memref<4x5x6xf32, strided<[1, ?, 1000], offset: 0>> into
     memref<2x2x5x2x3xf32, strided<[2, 1, ?, 3000, 1000], offset: 0>>
   %rr1 = memref.collapse_shape %r1 [[0, 1], [2], [3, 4]] :
     memref<2x2x5x2x3xf32, strided<[2, 1, ?, 3000, 1000], offset: 0>> into
@@ -333,7 +325,7 @@ func.func @generic_atomic_rmw(%I: memref<1x2xf32>, %i : index, %j : index) {
 
 // -----
 
-func.func @extract_strided_metadata(%memref : memref<10x?xf32>) 
+func.func @extract_strided_metadata(%memref : memref<10x?xf32>)
   -> memref<?x?xf32, strided<[?, ?], offset: ?>> {
 
   %base, %offset, %sizes:2, %strides:2 = memref.extract_strided_metadata %memref
@@ -379,4 +371,10 @@ func.func @memref_realloc_dd(%src : memref<?xf32>, %d: index)
 func.func @memref_extract_aligned_pointer(%src : memref<?xf32>) -> index {
   %0 = memref.extract_aligned_pointer_as_index %src : memref<?xf32> -> index
   return %0 : index
+}
+
+// CHECK-LABEL: func @memref_memory_space_cast
+func.func @memref_memory_space_cast(%src : memref<?xf32>) -> memref<?xf32, 1> {
+  %dst = memref.memory_space_cast %src : memref<?xf32> to memref<?xf32, 1>
+  return %dst : memref<?xf32, 1>
 }

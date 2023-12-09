@@ -55,37 +55,44 @@
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(cpy)myInterfaceTypeProp",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(py)myInterfaceInstanceProp",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(cpy)myCategoryTypeProp",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(cs)Interface(py)myCategoryInstanceProp",
-      "target": "c:objc(cs)Interface"
+      "target": "c:objc(cs)Interface",
+      "targetFallback": "Interface"
     },
     {
       "kind": "conformsTo",
       "source": "c:objc(cs)Interface",
-      "target": "c:objc(pl)Protocol"
+      "target": "c:objc(pl)Protocol",
+      "targetFallback": "Protocol"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(pl)Protocol(cpy)myProtocolTypeProp",
-      "target": "c:objc(pl)Protocol"
+      "target": "c:objc(pl)Protocol",
+      "targetFallback": "Protocol"
     },
     {
       "kind": "memberOf",
       "source": "c:objc(pl)Protocol(py)myProtocolInstanceProp",
-      "target": "c:objc(pl)Protocol"
+      "target": "c:objc(pl)Protocol",
+      "targetFallback": "Protocol"
     }
   ],
   "symbols": [
@@ -115,8 +122,8 @@
       },
       "location": {
         "position": {
-          "character": 12,
-          "line": 6
+          "character": 11,
+          "line": 5
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -156,38 +163,6 @@
         },
         {
           "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
           "spelling": ") "
         },
         {
@@ -202,6 +177,10 @@
         {
           "kind": "identifier",
           "spelling": "myInterfaceTypeProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -214,8 +193,8 @@
       },
       "location": {
         "position": {
-          "character": 22,
-          "line": 7
+          "character": 21,
+          "line": 6
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -248,39 +227,7 @@
         },
         {
           "kind": "text",
-          "spelling": " ("
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
-          "spelling": ") "
+          "spelling": " "
         },
         {
           "kind": "typeIdentifier",
@@ -294,6 +241,10 @@
         {
           "kind": "identifier",
           "spelling": "myInterfaceInstanceProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -306,8 +257,8 @@
       },
       "location": {
         "position": {
-          "character": 15,
-          "line": 8
+          "character": 14,
+          "line": 7
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -348,38 +299,6 @@
         },
         {
           "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
           "spelling": ") "
         },
         {
@@ -394,6 +313,10 @@
         {
           "kind": "identifier",
           "spelling": "myCategoryTypeProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -406,8 +329,8 @@
       },
       "location": {
         "position": {
-          "character": 22,
-          "line": 12
+          "character": 21,
+          "line": 11
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -440,39 +363,7 @@
         },
         {
           "kind": "text",
-          "spelling": " ("
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
-          "spelling": ") "
+          "spelling": " "
         },
         {
           "kind": "typeIdentifier",
@@ -486,6 +377,10 @@
         {
           "kind": "identifier",
           "spelling": "myCategoryInstanceProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -498,8 +393,8 @@
       },
       "location": {
         "position": {
-          "character": 15,
-          "line": 13
+          "character": 14,
+          "line": 12
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -549,8 +444,8 @@
       },
       "location": {
         "position": {
-          "character": 11,
-          "line": 1
+          "character": 10,
+          "line": 0
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -590,38 +485,6 @@
         },
         {
           "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
           "spelling": ") "
         },
         {
@@ -636,6 +499,10 @@
         {
           "kind": "identifier",
           "spelling": "myProtocolTypeProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -648,8 +515,8 @@
       },
       "location": {
         "position": {
-          "character": 22,
-          "line": 2
+          "character": 21,
+          "line": 1
         },
         "uri": "file://INPUT_DIR/input.h"
       },
@@ -682,39 +549,7 @@
         },
         {
           "kind": "text",
-          "spelling": " ("
-        },
-        {
-          "kind": "keyword",
-          "spelling": "atomic"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "assign"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "unsafe_unretained"
-        },
-        {
-          "kind": "text",
-          "spelling": ", "
-        },
-        {
-          "kind": "keyword",
-          "spelling": "readwrite"
-        },
-        {
-          "kind": "text",
-          "spelling": ") "
+          "spelling": " "
         },
         {
           "kind": "typeIdentifier",
@@ -728,6 +563,10 @@
         {
           "kind": "identifier",
           "spelling": "myProtocolInstanceProp"
+        },
+        {
+          "kind": "text",
+          "spelling": ";"
         }
       ],
       "identifier": {
@@ -740,8 +579,8 @@
       },
       "location": {
         "position": {
-          "character": 15,
-          "line": 3
+          "character": 14,
+          "line": 2
         },
         "uri": "file://INPUT_DIR/input.h"
       },

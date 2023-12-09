@@ -1,4 +1,4 @@
-// RUN: llvm-mc -arch=amdgcn -show-encoding -mcpu=gfx1100 -mattr=+wavefrontsize32,-wavefrontsize64 %s | FileCheck --check-prefix=GFX11 %s
+// RUN: llvm-mc -triple=amdgcn -show-encoding -mcpu=gfx1100 -mattr=+wavefrontsize32,-wavefrontsize64 %s | FileCheck --check-prefix=GFX11 %s
 
 // Check opcode promotions and forced suffices.
 // 1. When a suffix is optional, check that it may be omitted.
@@ -10,11 +10,11 @@
 // VOP1.
 //===----------------------------------------------------------------------===//
 
-s_mov_b32 s0, s1
-// GFX11: encoding: [0x01,0x00,0x80,0xbe]
+v_mov_b32 v0, v1
+// GFX11: encoding: [0x01,0x03,0x00,0x7e]
 
-s_mov_b32_e32 s0, s1
-// GFX11: encoding: [0x01,0x00,0x80,0xbe]
+v_mov_b32_e32 v0, v1
+// GFX11: encoding: [0x01,0x03,0x00,0x7e]
 
 //===----------------------------------------------------------------------===//
 // VOP2.

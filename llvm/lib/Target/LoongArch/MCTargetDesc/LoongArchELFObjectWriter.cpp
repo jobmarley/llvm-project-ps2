@@ -20,26 +20,27 @@ using namespace llvm;
 namespace {
 class LoongArchELFObjectWriter : public MCELFObjectTargetWriter {
 public:
-  LoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit);
+  LoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit, bool EnableRelax);
 
   ~LoongArchELFObjectWriter() override;
 
-  // Return true if the given relocation must be with a symbol rather than
-  // section plus offset.
-  bool needsRelocateWithSymbol(const MCSymbol &Sym,
+  bool needsRelocateWithSymbol(const MCValue &Val, const MCSymbol &Sym,
                                unsigned Type) const override {
-    return true;
+    return EnableRelax;
   }
 
 protected:
   unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
                         const MCFixup &Fixup, bool IsPCRel) const override;
+  bool EnableRelax;
 };
 } // end namespace
 
-LoongArchELFObjectWriter::LoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit)
+LoongArchELFObjectWriter::LoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit,
+                                                   bool EnableRelax)
     : MCELFObjectTargetWriter(Is64Bit, OSABI, ELF::EM_LOONGARCH,
-                              /*HasRelocationAddend*/ true) {}
+                              /*HasRelocationAddend=*/true),
+      EnableRelax(EnableRelax) {}
 
 LoongArchELFObjectWriter::~LoongArchELFObjectWriter() {}
 
@@ -66,7 +67,7 @@ unsigned LoongArchELFObjectWriter::getRelocType(MCContext &Ctx,
   case FK_Data_4:
     return IsPCRel ? ELF::R_LARCH_32_PCREL : ELF::R_LARCH_32;
   case FK_Data_8:
-    return ELF::R_LARCH_64;
+    return IsPCRel ? ELF::R_LARCH_64_PCREL : ELF::R_LARCH_64;
   case LoongArch::fixup_loongarch_b16:
     return ELF::R_LARCH_B16;
   case LoongArch::fixup_loongarch_b21:
@@ -94,6 +95,6 @@ unsigned LoongArchELFObjectWriter::getRelocType(MCContext &Ctx,
 }
 
 std::unique_ptr<MCObjectTargetWriter>
-llvm::createLoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit) {
-  return std::make_unique<LoongArchELFObjectWriter>(OSABI, Is64Bit);
+llvm::createLoongArchELFObjectWriter(uint8_t OSABI, bool Is64Bit, bool Relax) {
+  return std::make_unique<LoongArchELFObjectWriter>(OSABI, Is64Bit, Relax);
 }

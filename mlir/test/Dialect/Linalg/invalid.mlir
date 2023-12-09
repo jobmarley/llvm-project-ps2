@@ -70,7 +70,7 @@ func.func @generic_no_region(%arg0: memref<f32>) {
 // -----
 
 func.func @generic_mismatched_num_returns(%arg0: memref<f32>) {
-  // expected-error @+6 {{op expected number of yield values (1) to match the number of operands of the enclosing LinalgOp (0)}}
+  // expected-error @+6 {{op expected number of yield values (0) to match the number of inits / outs operands of the enclosing LinalgOp (1)}}
   linalg.generic {
       indexing_maps =  [ affine_map<() -> ()> ],
       iterator_types = []}
@@ -96,7 +96,7 @@ func.func @generic_wrong_dim_in_map(%arg0: memref<1xi32>) {
 // -----
 
 func.func @generic_wrong_iterator(%arg0: memref<1xi32>) {
-  // expected-error @+1 {{op unexpected iterator_type (random)}}
+  // expected-error @+4 {{unexpected iterator_type (random)}}
   linalg.generic {
     indexing_maps =  [ affine_map<(i) -> (i)> ],
     iterator_types = ["random"]}
@@ -202,7 +202,7 @@ func.func @generic_empty_region(%arg0: memref<f32>) {
 // -----
 
 func.func @generic_mismatched_num_arguments(%arg0: memref<f32>) {
-  // expected-error @+6 {{'linalg.yield' op expected number of yield values (2) to match the number of operands of the enclosing LinalgOp (1)}}
+  // expected-error @+6 {{'linalg.yield' op expected number of yield values (1) to match the number of inits / outs operands of the enclosing LinalgOp (2)}}
   linalg.generic {
       indexing_maps =  [ affine_map<() -> ()>, affine_map<() -> ()> ],
       iterator_types = []}
@@ -270,7 +270,7 @@ func.func @generic_result_tensor_type(%arg0: memref<?xf32, affine_map<(i)[off]->
 // -----
 
 func.func @generic(%arg0: memref<?x?xf32>) {
-  // expected-error @+6 {{block with no terminator, has %0 = "arith.addf"(%arg1, %arg1) : (f32, f32) -> f32}}
+  // expected-error @+6 {{block with no terminator, has %0 = "arith.addf"(%arg1, %arg1) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32}}
   linalg.generic  {
     indexing_maps = [ affine_map<(i, j) -> (i, j)> ],
     iterator_types = ["parallel", "parallel"]}
@@ -326,7 +326,7 @@ func.func @matching_inits(%m: memref<?x?xf32>, %t: tensor<?x?xf32>) {
 func.func @illegal_fill_tensor_no_return(%arg0 : index, %arg1 : index, %arg2 : f32)
 {
   %0 = tensor.empty(%arg0, %arg1) : tensor<?x?xf32>
-  // expected-error @+1 {{expected the number of results (0) to be equal to the number of output tensors (1)}}
+  // expected-error @+1 {{expected the number of tensor results (0) to be equal to the number of output tensors (1)}}
   linalg.fill ins(%arg2 : f32) outs(%0 : tensor<?x?xf32>)
 }
 
@@ -335,7 +335,7 @@ func.func @illegal_fill_tensor_no_return(%arg0 : index, %arg1 : index, %arg2 : f
 func.func @illegal_fill_memref_with_tensor_return
   (%arg0 : memref<?x?xf32>, %arg1 : f32) -> tensor<?x?xf32>
 {
-  // expected-error @+1 {{expected the number of results (1) to be equal to the number of output tensors (0)}}
+  // expected-error @+1 {{expected the number of tensor results (1) to be equal to the number of output tensors (0)}}
   %0 = linalg.fill ins(%arg1 : f32) outs(%arg0 : memref<?x?xf32>) -> tensor<?x?xf32>
   return %0 : tensor<?x?xf32>
 }
@@ -345,7 +345,7 @@ func.func @illegal_fill_memref_with_tensor_return
 func.func @illegal_fill_tensor_with_memref_return
   (%arg0 : tensor<?x?xf32>, %arg1 : f32) -> memref<?x?xf32>
 {
-  // expected-error @+1 {{result #0 must be ranked tensor of any type values, but got 'memref<?x?xf32>'}}
+  // expected-error @+1 {{result #0 must be variadic of ranked tensor of any type values, but got 'memref<?x?xf32>'}}
   %0 = linalg.fill ins(%arg1 : f32) outs(%arg0 : tensor<?x?xf32>) -> memref<?x?xf32>
   return %0 : memref<?x?xf32>
 }
@@ -391,6 +391,70 @@ func.func @invalid_reverse(%A: memref<5xf32>, %B: memref<5xf32>) {
 
 // -----
 
+func.func @map_binary_wrong_yield_operands(
+    %lhs: tensor<64xf32>, %rhs: tensor<64xf32>, %init: tensor<64xf32>)
+    -> tensor<64xf32> {
+   %add = linalg.map
+          ins(%lhs, %rhs : tensor<64xf32>, tensor<64xf32>)
+          outs(%init:tensor<64xf32>)
+          (%lhs_elem: f32, %rhs_elem: f32) {
+            %0 = arith.addf %lhs_elem, %rhs_elem: f32
+            // expected-error @+1{{'linalg.yield' op expected number of yield values (2) to match the number of inits / outs operands of the enclosing LinalgOp (1)}}
+            linalg.yield %0, %0: f32, f32
+          }
+  func.return %add : tensor<64xf32>
+}
+
+// -----
+
+func.func @map_input_mapper_arity_mismatch(
+    %lhs: tensor<64xf32>, %rhs: tensor<64xf32>, %init: tensor<64xf32>)
+    -> tensor<64xf32> {
+  // expected-error@+1{{'linalg.map' op expects number of operands to match the arity of mapper, but got: 2 and 3}}
+  %add = linalg.map
+      ins(%lhs, %rhs : tensor<64xf32>, tensor<64xf32>)
+      outs(%init:tensor<64xf32>)
+      (%lhs_elem: f32, %rhs_elem: f32, %extra_elem: f32) {
+        %0 = arith.addf %lhs_elem, %rhs_elem: f32
+        linalg.yield %0: f32
+      }
+  func.return %add : tensor<64xf32>
+}
+
+// -----
+
+func.func @map_input_mapper_type_mismatch(
+    %lhs: tensor<64xf32>, %rhs: tensor<64xf32>, %init: tensor<64xf32>)
+    -> tensor<64xf32> {
+    // expected-error@+1{{'linalg.map' op expected element type of input 'f32' to match bbArg type 'f64'}}
+  %add = linalg.map
+      ins(%lhs, %rhs : tensor<64xf32>, tensor<64xf32>)
+      outs(%init:tensor<64xf32>)
+      (%lhs_elem: f64, %rhs_elem: f64) {
+        %0 = arith.addf %lhs_elem, %rhs_elem: f64
+        linalg.yield %0: f64
+      }
+  func.return %add : tensor<64xf32>
+}
+
+// -----
+
+func.func @map_input_output_shape_mismatch(
+    %lhs: tensor<64x64xf32>, %rhs: tensor<64x64xf32>, %init: tensor<32xf32>)
+    -> tensor<32xf32> {
+    // expected-error@+1{{'linalg.map' op expected shape of input (64, 64) to match shape of output (32)}}
+  %add = linalg.map
+      ins(%lhs, %rhs : tensor<64x64xf32>, tensor<64x64xf32>)
+      outs(%init:tensor<32xf32>)
+      (%lhs_elem: f32, %rhs_elem: f32) {
+        %0 = arith.addf %lhs_elem, %rhs_elem: f32
+        linalg.yield %0: f32
+      }
+  func.return %add : tensor<32xf32>
+}
+
+// -----
+
 func.func @reduce_input_vs_init_dimension_mismatch(
     %input: tensor<16x32x64xf32>,
     %init: tensor<16x64xf32>)  -> tensor<16x64xf32> {
@@ -426,7 +490,7 @@ func.func @reduce_dimensions_out_of_range(%input: tensor<16x32x64xf32>,
 
 func.func @reduce_duplicate_dimensions(%input: tensor<16x32x64xf32>,
     %init: tensor<16xf32>)  -> tensor<16xf32> {
-  // expected-error @+1 {{'linalg.reduce' op reduction dimensions are not in increasing order: 1, 1}}
+  // expected-error @+1 {{'linalg.reduce' op attribute 'dimensions' failed to satisfy constraint: i64 dense array attribute should be in increasing order}}
   %reduce = linalg.reduce
       ins(%input:tensor<16x32x64xf32>)
       outs(%init:tensor<16xf32>)
@@ -442,7 +506,7 @@ func.func @reduce_duplicate_dimensions(%input: tensor<16x32x64xf32>,
 
 func.func @reduce_non_increasing_dimensions(%input: tensor<16x32x64xf32>,
     %init: tensor<16xf32>)  -> tensor<16xf32> {
-  // expected-error @+1 {{'linalg.reduce' op reduction dimensions are not in increasing order: 2, 1}}
+  // expected-error @+1 {{'linalg.reduce' op attribute 'dimensions' failed to satisfy constraint: i64 dense array attribute should be in increasing order}}
   %reduce = linalg.reduce
       ins(%input:tensor<16x32x64xf32>)
       outs(%init:tensor<16xf32>)
@@ -559,4 +623,124 @@ func.func @reduce_different_output_shapes(%input1: tensor<16x32x64xf32>,
         linalg.yield %0, %1: f32, f32
       }
   func.return %reduce, %reduce2 : tensor<16x64xf32>, tensor<17x64xf32>
+}
+
+// -----
+
+func.func @transpose_invalid_permutation(%input: tensor<16x32x64xf32>,
+    %init: tensor<32x64x16xf32>) -> tensor<32x64x16xf32> {
+  // expected-error @+1 {{'linalg.transpose' op permutation is not valid}}
+  %transpose = linalg.transpose
+      ins(%input:tensor<16x32x64xf32>)
+      outs(%init:tensor<32x64x16xf32>)
+      permutation = [1, 1, 2]
+  func.return %transpose : tensor<32x64x16xf32>
+}
+
+// -----
+
+func.func @transpose_permutated_dims_mismatch(%input: tensor<16x32x64xf32>,
+    %init: tensor<32x64x16xf32>) -> tensor<32x64x16xf32> {
+  // expected-error @+1 {{'linalg.transpose' op dim(result, 0) = 32 doesn't match dim(input, permutation[0]) = 16}}
+  %transpose = linalg.transpose
+      ins(%input:tensor<16x32x64xf32>)
+      outs(%init:tensor<32x64x16xf32>)
+      permutation = [0, 1, 2]
+  func.return %transpose : tensor<32x64x16xf32>
+}
+
+// -----
+
+func.func @transpose_rank_permutation_size_mismatch(
+    %input: tensor<16x32x64xf32>,
+    %init: tensor<32x64x16xf32>) -> tensor<32x64x16xf32> {
+  // expected-error @+1 {{'linalg.transpose' op size of permutation 2 does not match the argument rank 3}}
+  %transpose = linalg.transpose
+      ins(%input:tensor<16x32x64xf32>)
+      outs(%init:tensor<32x64x16xf32>)
+      permutation = [1, 0]
+  func.return %transpose : tensor<32x64x16xf32>
+}
+
+// -----
+
+func.func @transpose_input_init_rank_mismatch(%input: tensor<16x32xf32>,
+    %init: tensor<32x64x16xf32>) -> tensor<32x64x16xf32> {
+  // expected-error @+1 {{'linalg.transpose' op input rank 2 does not match init rank 3}}
+  %transpose = linalg.transpose
+      ins(%input:tensor<16x32xf32>)
+      outs(%init:tensor<32x64x16xf32>)
+      permutation = [1, 0, 2]
+  func.return %transpose : tensor<32x64x16xf32>
+}
+
+// -----
+
+func.func @broadcast_input_dims_rank_mismatch(
+    %input: tensor<4x16xf32>, %init: tensor<4x8x16xf32>)
+    -> tensor<4x8x16xf32> {
+  // expected-error @+1 {{'linalg.broadcast' op input rank plus added dimensions does not match init rank. }}
+  %bcast = linalg.broadcast
+      ins(%input:tensor<4x16xf32>)
+      outs(%init:tensor<4x8x16xf32>)
+      dimensions = [1, 2]
+  func.return %bcast : tensor<4x8x16xf32>
+}
+
+// -----
+
+func.func @broadcast_unsorted_dims(
+    %input: tensor<4x16xf32>, %init: tensor<4x8x16xf32>)
+    -> tensor<4x8x16xf32> {
+  // expected-error @+1 {{'linalg.broadcast' op dimension 0 is out of range. expected range: [0, 2], got: 5}}
+  %bcast = linalg.broadcast
+      ins(%input:tensor<4x16xf32>)
+      outs(%init:tensor<4x8x16xf32>)
+      dimensions = [5]
+  func.return %bcast : tensor<4x8x16xf32>
+}
+
+// -----
+
+func.func @broadcast_mapped_dim_mismatch(
+    %input: tensor<4x16xf32>, %init: tensor<5x8x16xf32>)
+    -> tensor<5x8x16xf32> {
+  // expected-error @+1 {{'linalg.broadcast' op input dim 0 should match init dim 0. input: 4, init: 5}}
+  %bcast = linalg.broadcast
+      ins(%input:tensor<4x16xf32>)
+      outs(%init:tensor<5x8x16xf32>)
+      dimensions = [1]
+  func.return %bcast : tensor<5x8x16xf32>
+}
+
+// -----
+
+func.func @broadcast_size_1_extension_not_supported(
+    %input: tensor<1x16xf32>, %init: tensor<4x?x16xf32>)
+    -> tensor<4x?x16xf32> {
+  // expected-error @+1 {{'linalg.broadcast' op input dim 0 should match init dim 0. input: 1, init: 4}}
+  %bcast = linalg.broadcast
+      ins(%input:tensor<1x16xf32>)
+      outs(%init:tensor<4x?x16xf32>)
+      dimensions = [1]
+  func.return %bcast : tensor<4x?x16xf32>
+}
+
+// -----
+
+func.func @missing_iterator_types() {
+  // expected-error @below {{expected "iterator_types" array attribute}}
+  linalg.generic {} ins() outs()
+  return
+}
+
+// -----
+
+func.func @illegal_softmax_output_shape(%arg0: tensor<2x16x32xf32>) -> tensor<2x16xf32> {
+  %0 = tensor.empty() : tensor<2x16xf32>
+  // expected-error @+1 {{incompatible output shape}}
+  %1 = linalg.softmax dimension(2) ins(%arg0 : tensor<2x16x32xf32>)
+                                   outs(%0: tensor<2x16xf32>)
+    -> tensor<2x16xf32>
+  return %1 : tensor<2x16xf32>
 }

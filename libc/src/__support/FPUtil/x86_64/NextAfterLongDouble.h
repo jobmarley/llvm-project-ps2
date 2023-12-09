@@ -6,24 +6,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIBC_SRC_SUPPORT_FPUTIL_X86_64_NEXT_AFTER_LONG_DOUBLE_H
-#define LLVM_LIBC_SRC_SUPPORT_FPUTIL_X86_64_NEXT_AFTER_LONG_DOUBLE_H
+#ifndef LLVM_LIBC_SRC___SUPPORT_FPUTIL_X86_64_NEXTAFTERLONGDOUBLE_H
+#define LLVM_LIBC_SRC___SUPPORT_FPUTIL_X86_64_NEXTAFTERLONGDOUBLE_H
 
-#include "src/__support/architectures.h"
+#include "src/__support/macros/properties/architectures.h"
 
-#if !defined(LLVM_LIBC_ARCH_X86)
+#if !defined(LIBC_TARGET_ARCH_IS_X86)
 #error "Invalid include"
 #endif
 
 #include "src/__support/CPP/bit.h"
+#include "src/__support/FPUtil/FEnvImpl.h"
 #include "src/__support/FPUtil/FPBits.h"
 
 #include <stdint.h>
 
-namespace __llvm_libc {
+namespace LIBC_NAMESPACE {
 namespace fputil {
 
-static inline long double nextafter(long double from, long double to) {
+LIBC_INLINE long double nextafter(long double from, long double to) {
   using FPBits = FPBits<long double>;
   FPBits from_bits(from);
   if (from_bits.is_nan())
@@ -59,6 +60,8 @@ static inline long double nextafter(long double from, long double to) {
         // which is what is expected. Since NaNs are handling separately,
         // it will never overflow "beyond" infinity.
         from_bits.set_unbiased_exponent(from_bits.get_unbiased_exponent() + 1);
+        if (from_bits.is_inf())
+          raise_except_if_required(FE_OVERFLOW | FE_INEXACT);
         return from_bits;
       } else {
         ++int_val;
@@ -105,6 +108,8 @@ static inline long double nextafter(long double from, long double to) {
         // which is what is expected. Since NaNs are handling separately,
         // it will never overflow "beyond" infinity.
         from_bits.set_unbiased_exponent(from_bits.get_unbiased_exponent() + 1);
+        if (from_bits.is_inf())
+          raise_except_if_required(FE_OVERFLOW | FE_INEXACT);
         return from_bits;
       } else {
         ++int_val;
@@ -112,11 +117,15 @@ static inline long double nextafter(long double from, long double to) {
     }
   }
 
+  UIntType implicit_bit =
+      int_val & (UIntType(1) << MantissaWidth<long double>::VALUE);
+  if (implicit_bit == UIntType(0))
+    raise_except_if_required(FE_UNDERFLOW | FE_INEXACT);
+
   return cpp::bit_cast<long double>(int_val);
-  // TODO: Raise floating point exceptions as required by the standard.
 }
 
 } // namespace fputil
-} // namespace __llvm_libc
+} // namespace LIBC_NAMESPACE
 
-#endif // LLVM_LIBC_SRC_SUPPORT_FPUTIL_X86_64_NEXT_AFTER_LONG_DOUBLE_H
+#endif // LLVM_LIBC_SRC___SUPPORT_FPUTIL_X86_64_NEXTAFTERLONGDOUBLE_H

@@ -16,10 +16,13 @@ add_llvm_component_library(LLVMPasses
   LINK_COMPONENTS
   AggressiveInstCombine
   Analysis
+  CodeGen
   Core
   Coroutines
+  HipStdPar
   IPO
   InstCombine
+  IRPrinter
   ObjCARC
   Scalar
   Support

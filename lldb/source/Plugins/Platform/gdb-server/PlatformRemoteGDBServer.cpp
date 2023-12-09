@@ -15,7 +15,6 @@
 #include "lldb/Core/ModuleList.h"
 #include "lldb/Core/ModuleSpec.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/Core/StreamFile.h"
 #include "lldb/Host/ConnectionFileDescriptor.h"
 #include "lldb/Host/Host.h"
 #include "lldb/Host/HostInfo.h"
@@ -29,9 +28,13 @@
 #include "lldb/Utility/Status.h"
 #include "lldb/Utility/StreamString.h"
 #include "lldb/Utility/UriParser.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/Support/FormatAdapters.h"
 
 #include "Plugins/Process/Utility/GDBRemoteSignals.h"
 #include "Plugins/Process/gdb-remote/ProcessGDBRemote.h"
+#include <mutex>
+#include <optional>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -40,6 +43,11 @@ using namespace lldb_private::platform_gdb_server;
 LLDB_PLUGIN_DEFINE_ADV(PlatformRemoteGDBServer, PlatformGDB)
 
 static bool g_initialized = false;
+// UnixSignals does not store the signal names or descriptions itself.
+// It holds onto StringRefs. Becaue we may get signal information dynamically
+// from the remote, these strings need persistent storage client-side.
+static std::mutex g_signal_string_mutex;
+static llvm::StringSet<> g_signal_string_storage;
 
 void PlatformRemoteGDBServer::Initialize() {
   Platform::Initialize();
@@ -150,16 +158,16 @@ bool PlatformRemoteGDBServer::GetRemoteOSVersion() {
   return !m_os_version.empty();
 }
 
-llvm::Optional<std::string> PlatformRemoteGDBServer::GetRemoteOSBuildString() {
+std::optional<std::string> PlatformRemoteGDBServer::GetRemoteOSBuildString() {
   if (!m_gdb_client_up)
-    return llvm::None;
+    return std::nullopt;
   return m_gdb_client_up->GetOSBuildString();
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::GetRemoteOSKernelDescription() {
   if (!m_gdb_client_up)
-    return llvm::None;
+    return std::nullopt;
   return m_gdb_client_up->GetOSKernelDescription();
 }
 
@@ -225,7 +233,7 @@ Status PlatformRemoteGDBServer::ConnectRemote(Args &args) {
   if (!url)
     return Status("URL is null.");
 
-  llvm::Optional<URI> parsed_url = URI::Parse(url);
+  std::optional<URI> parsed_url = URI::Parse(url);
   if (!parsed_url)
     return Status("Invalid URL: %s", url);
 
@@ -282,20 +290,20 @@ const char *PlatformRemoteGDBServer::GetHostname() {
   return m_hostname.c_str();
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::DoGetUserName(UserIDResolver::id_t uid) {
   std::string name;
   if (m_gdb_client_up && m_gdb_client_up->GetUserName(uid, name))
     return std::move(name);
-  return llvm::None;
+  return std::nullopt;
 }
 
-llvm::Optional<std::string>
+std::optional<std::string>
 PlatformRemoteGDBServer::DoGetGroupName(UserIDResolver::id_t gid) {
   std::string name;
   if (m_gdb_client_up && m_gdb_client_up->GetGroupName(gid, name))
     return std::move(name);
-  return llvm::None;
+  return std::nullopt;
 }
 
 uint32_t PlatformRemoteGDBServer::FindProcesses(
@@ -361,39 +369,36 @@ Status PlatformRemoteGDBServer::LaunchProcess(ProcessLaunchInfo &launch_info) {
       "PlatformRemoteGDBServer::%s() set launch architecture triple to '%s'",
       __FUNCTION__, arch_triple ? arch_triple : "<NULL>");
 
-  int arg_packet_err;
   {
     // Scope for the scoped timeout object
     process_gdb_remote::GDBRemoteCommunication::ScopedTimeout timeout(
         *m_gdb_client_up, std::chrono::seconds(5));
-    arg_packet_err = m_gdb_client_up->SendArgumentsPacket(launch_info);
+    // Since we can't send argv0 separate from the executable path, we need to
+    // make sure to use the actual executable path found in the launch_info...
+    Args args = launch_info.GetArguments();
+    if (FileSpec exe_file = launch_info.GetExecutableFile())
+      args.ReplaceArgumentAtIndex(0, exe_file.GetPath(false));
+    if (llvm::Error err = m_gdb_client_up->LaunchProcess(args)) {
+      error.SetErrorStringWithFormatv("Cannot launch '{0}': {1}",
+                                      args.GetArgumentAtIndex(0),
+                                      llvm::fmt_consume(std::move(err)));
+      return error;
+    }
   }
 
-  if (arg_packet_err == 0) {
-    std::string error_str;
-    if (m_gdb_client_up->GetLaunchSuccess(error_str)) {
-      const auto pid = m_gdb_client_up->GetCurrentProcessID(false);
-      if (pid != LLDB_INVALID_PROCESS_ID) {
-        launch_info.SetProcessID(pid);
-        LLDB_LOGF(log,
-                  "PlatformRemoteGDBServer::%s() pid %" PRIu64
-                  " launched successfully",
-                  __FUNCTION__, pid);
-      } else {
-        LLDB_LOGF(log,
-                  "PlatformRemoteGDBServer::%s() launch succeeded but we "
-                  "didn't get a valid process id back!",
-                  __FUNCTION__);
-        error.SetErrorString("failed to get PID");
-      }
-    } else {
-      error.SetErrorString(error_str.c_str());
-      LLDB_LOGF(log, "PlatformRemoteGDBServer::%s() launch failed: %s",
-                __FUNCTION__, error.AsCString());
-    }
+  const auto pid = m_gdb_client_up->GetCurrentProcessID(false);
+  if (pid != LLDB_INVALID_PROCESS_ID) {
+    launch_info.SetProcessID(pid);
+    LLDB_LOGF(log,
+              "PlatformRemoteGDBServer::%s() pid %" PRIu64
+              " launched successfully",
+              __FUNCTION__, pid);
   } else {
-    error.SetErrorStringWithFormat("'A' packet returned an error: %i",
-                                   arg_packet_err);
+    LLDB_LOGF(log,
+              "PlatformRemoteGDBServer::%s() launch succeeded but we "
+              "didn't get a valid process id back!",
+              __FUNCTION__);
+    error.SetErrorString("failed to get PID");
   }
   return error;
 }
@@ -424,6 +429,7 @@ PlatformRemoteGDBServer::DebugProcess(ProcessLaunchInfo &launch_info,
 
         if (process_sp) {
           process_sp->HijackProcessEvents(launch_info.GetHijackListener());
+          process_sp->SetShadowListener(launch_info.GetShadowListener());
 
           error = process_sp->ConnectRemote(connect_url.c_str());
           // Retry the connect remote one time...
@@ -516,6 +522,7 @@ lldb::ProcessSP PlatformRemoteGDBServer::Attach(
               ListenerSP listener_sp = attach_info.GetHijackListener();
               if (listener_sp)
                 process_sp->HijackProcessEvents(listener_sp);
+              process_sp->SetShadowListener(attach_info.GetShadowListener());
               error = process_sp->Attach(attach_info);
             }
 
@@ -700,8 +707,7 @@ const UnixSignalsSP &PlatformRemoteGDBServer::GetRemoteUnixSignals() {
       response.GetResponseType() != response.eResponse)
     return m_remote_signals_sp;
 
-  auto object_sp =
-      StructuredData::ParseJSON(std::string(response.GetStringRef()));
+  auto object_sp = StructuredData::ParseJSON(response.GetStringRef());
   if (!object_sp || !object_sp->IsValid())
     return m_remote_signals_sp;
 
@@ -721,7 +727,7 @@ const UnixSignalsSP &PlatformRemoteGDBServer::GetRemoteUnixSignals() {
           return false;
 
         // Signal number and signal name are required.
-        int signo;
+        uint64_t signo;
         if (!dict->GetValueForKeyAsInteger("signo", signo))
           return false;
 
@@ -750,8 +756,18 @@ const UnixSignalsSP &PlatformRemoteGDBServer::GetRemoteUnixSignals() {
         if (object_sp && object_sp->IsValid())
           description = std::string(object_sp->GetStringValue());
 
-        remote_signals_sp->AddSignal(signo, name.str().c_str(), suppress, stop,
-                                     notify, description.c_str());
+        llvm::StringRef name_backed, description_backed;
+        {
+          std::lock_guard<std::mutex> guard(g_signal_string_mutex);
+          name_backed =
+              g_signal_string_storage.insert(name).first->getKeyData();
+          if (!description.empty())
+            description_backed =
+                g_signal_string_storage.insert(description).first->getKeyData();
+        }
+
+        remote_signals_sp->AddSignal(signo, name_backed, suppress, stop, notify,
+                                     description_backed);
         return true;
       });
 

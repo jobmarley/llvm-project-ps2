@@ -1,6 +1,6 @@
 # RUN: llvm-mc -triple bpfel -filetype=obj -o %t %s
-# RUN: llvm-objdump -d -r %t | FileCheck --check-prefixes CHECK,CHECK-64 %s
-# RUN: llvm-objdump --mattr=+alu32 -d -r %t | FileCheck --check-prefixes CHECK,CHECK-32 %s
+# RUN: llvm-objdump --no-print-imm-hex -d -r %t | FileCheck --check-prefixes CHECK,CHECK-64 %s
+# RUN: llvm-objdump --no-print-imm-hex --mattr=+alu32 -d -r %t | FileCheck --check-prefixes CHECK,CHECK-32 %s
 
 // ======== BPF_LD Class ========
 // Some extra whitespaces are deliberately added to test the parser.
@@ -62,6 +62,11 @@
 // CHECK: db a3 e2 ff 00 00 00 00 	lock *(u64 *)(r3 - 30) += r10
 
 // ======== BPF_JMP Class ========
+  if r1 & r2 goto Llabel0    // BPF_JSET  | BPF_X
+  if r1 & 0xffff goto Llabel0    // BPF_JSET  | BPF_K
+// CHECK: 4d 21 1d 00 00 00 00 00 	if r1 & r2 goto +29
+// CHECK: 45 01 1c 00 ff ff 00 00 	if r1 & 65535 goto +28
+
   goto Llabel0               // BPF_JA
   call 1                     // BPF_CALL
   exit                       // BPF_EXIT

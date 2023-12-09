@@ -63,6 +63,7 @@ public:
 
   static constexpr FragmentNum main() { return FragmentNum(0); }
   static constexpr FragmentNum cold() { return FragmentNum(1); }
+  static constexpr FragmentNum warm() { return FragmentNum(2); }
 };
 
 /// A freestanding subset of contiguous blocks of a function.
@@ -71,11 +72,8 @@ class FunctionFragment {
   using FragmentListType = SmallVector<unsigned, 0>;
 
 public:
-  using iterator = raw_pointer_iterator<BasicBlockListType::const_iterator,
-                                        BinaryBasicBlock>;
-  using const_iterator =
-      raw_pointer_iterator<BasicBlockListType::const_iterator,
-                           const BinaryBasicBlock>;
+  using iterator = BasicBlockListType::iterator;
+  using const_iterator = BasicBlockListType::const_iterator;
 
 private:
   FunctionLayout *Layout;
@@ -150,9 +148,7 @@ public:
       pointee_iterator<FragmentListType::const_iterator,
                        const FunctionFragment>;
   using block_iterator = BasicBlockListType::iterator;
-  using block_const_iterator =
-      raw_pointer_iterator<BasicBlockListType::const_iterator,
-                           const BinaryBasicBlock>;
+  using block_const_iterator = BasicBlockListType::const_iterator;
   using block_reverse_iterator = std::reverse_iterator<block_iterator>;
   using block_const_reverse_iterator =
       std::reverse_iterator<block_const_iterator>;
@@ -303,16 +299,18 @@ public:
     return {block_begin(), block_end()};
   }
   block_reverse_iterator block_rbegin() {
-    return block_reverse_iterator(block_end());
+    return block_reverse_iterator(Blocks.rbegin());
   }
   block_const_reverse_iterator block_rbegin() const {
-    return block_const_reverse_iterator(block_end());
+    return block_const_reverse_iterator(
+        std::make_reverse_iterator(block_end()));
   }
   block_reverse_iterator block_rend() {
-    return block_reverse_iterator(block_begin());
+    return block_reverse_iterator(Blocks.rend());
   }
   block_const_reverse_iterator block_rend() const {
-    return block_const_reverse_iterator(block_begin());
+    return block_const_reverse_iterator(
+        std::make_reverse_iterator(block_begin()));
   }
   iterator_range<block_const_reverse_iterator> rblocks() const {
     return {block_rbegin(), block_rend()};

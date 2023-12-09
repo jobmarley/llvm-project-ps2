@@ -73,17 +73,17 @@ public:
   StringRef getLineStrSection() const override { return lineStrSection; }
 
   bool isLittleEndian() const override {
-    return ELFT::TargetEndianness == llvm::support::little;
+    return ELFT::TargetEndianness == llvm::endianness::little;
   }
 
-  llvm::Optional<llvm::RelocAddrEntry> find(const llvm::DWARFSection &sec,
-                                            uint64_t pos) const override;
+  std::optional<llvm::RelocAddrEntry> find(const llvm::DWARFSection &sec,
+                                           uint64_t pos) const override;
 
 private:
   template <class RelTy>
-  llvm::Optional<llvm::RelocAddrEntry> findAux(const InputSectionBase &sec,
-                                               uint64_t pos,
-                                               ArrayRef<RelTy> rels) const;
+  std::optional<llvm::RelocAddrEntry> findAux(const InputSectionBase &sec,
+                                              uint64_t pos,
+                                              ArrayRef<RelTy> rels) const;
 
   LLDDWARFSection gnuPubnamesSection;
   LLDDWARFSection gnuPubtypesSection;

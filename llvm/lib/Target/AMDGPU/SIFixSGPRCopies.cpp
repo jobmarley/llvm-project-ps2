@@ -88,7 +88,7 @@ public:
   // VGPR to SGPR copy being processed
   MachineInstr *Copy;
   // All SALU instructions reachable from this copy in SSA graph
-  DenseSet<MachineInstr *> SChain;
+  SetVector<MachineInstr *> SChain;
   // Number of SGPR to VGPR copies that are used to put the SALU computation
   // results back to VALU.
   unsigned NumSVCopies;
@@ -125,7 +125,7 @@ class SIFixSGPRCopies : public MachineFunctionPass {
   SmallVector<MachineInstr*, 4> PHINodes;
   SmallVector<MachineInstr*, 4> S2VCopies;
   unsigned NextVGPRToSGPRCopyID;
-  DenseMap<unsigned, V2SCopyInfo> V2SCopies;
+  MapVector<unsigned, V2SCopyInfo> V2SCopies;
   DenseMap<MachineInstr *, SetVector<unsigned>> SiblingPenalty;
 
 public:
@@ -148,9 +148,16 @@ public:
   // 1. Physical register
   // 2. AGPR
   // 3. Defined by the instruction the merely moves the immediate
-  bool lowerSpecialCase(MachineInstr &MI);
+  bool lowerSpecialCase(MachineInstr &MI, MachineBasicBlock::iterator &I);
 
   void processPHINode(MachineInstr &MI);
+
+  // Check if MO is an immediate materialized into a VGPR, and if so replace it
+  // with an SGPR immediate. The VGPR immediate is also deleted if it does not
+  // have any other uses.
+  bool tryMoveVGPRConstToSGPR(MachineOperand &MO, Register NewDst,
+                              MachineBasicBlock *BlockToInsertTo,
+                              MachineBasicBlock::iterator PointToInsertTo);
 
   StringRef getPassName() const override { return "SI Fix SGPR copies"; }
 
@@ -187,16 +194,16 @@ getCopyRegClasses(const MachineInstr &Copy,
 
   const TargetRegisterClass *SrcRC = SrcReg.isVirtual()
                                          ? MRI.getRegClass(SrcReg)
-                                         : TRI.getPhysRegClass(SrcReg);
+                                         : TRI.getPhysRegBaseClass(SrcReg);
 
   // We don't really care about the subregister here.
   // SrcRC = TRI.getSubRegClass(SrcRC, Copy.getOperand(1).getSubReg());
 
   const TargetRegisterClass *DstRC = DstReg.isVirtual()
                                          ? MRI.getRegClass(DstReg)
-                                         : TRI.getPhysRegClass(DstReg);
+                                         : TRI.getPhysRegBaseClass(DstReg);
 
-  return std::make_pair(SrcRC, DstRC);
+  return std::pair(SrcRC, DstRC);
 }
 
 static bool isVGPRToSGPRCopy(const TargetRegisterClass *SrcRC,
@@ -231,7 +238,7 @@ static bool tryChangeVGPRtoSGPRinCopy(MachineInstr &MI,
         UseMI->getOpcode() <= TargetOpcode::GENERIC_OP_END)
       return false;
 
-    unsigned OpIdx = UseMI->getOperandNo(&MO);
+    unsigned OpIdx = MO.getOperandNo();
     if (OpIdx >= UseMI->getDesc().getNumOperands() ||
         !TII->isOperandLegal(*UseMI, OpIdx, &Src))
       return false;
@@ -350,7 +357,7 @@ static bool isSafeToFoldImmIntoCopy(const MachineInstr *Copy,
     return false;
 
   // FIXME: Handle copies with sub-regs.
-  if (Copy->getOperand(0).getSubReg())
+  if (Copy->getOperand(1).getSubReg())
     return false;
 
   switch (MoveImm->getOpcode()) {
@@ -360,7 +367,7 @@ static bool isSafeToFoldImmIntoCopy(const MachineInstr *Copy,
     SMovOp = AMDGPU::S_MOV_B32;
     break;
   case AMDGPU::V_MOV_B64_PSEUDO:
-    SMovOp = AMDGPU::S_MOV_B64;
+    SMovOp = AMDGPU::S_MOV_B64_IMM_PSEUDO;
     break;
   }
   Imm = ImmOp->getImm();
@@ -638,7 +645,7 @@ bool SIFixSGPRCopies::runOnMachineFunction(MachineFunction &MF) {
         }
         if (!isVGPRToSGPRCopy(SrcRC, DstRC, *TRI))
           continue;
-        if (lowerSpecialCase(MI))
+        if (lowerSpecialCase(MI, I))
           continue;
 
         analyzeVGPRToSGPRCopy(&MI);
@@ -658,17 +665,21 @@ bool SIFixSGPRCopies::runOnMachineFunction(MachineFunction &MF) {
                   TRI->getEquivalentSGPRClass(SrcRC);
               Register NewDst = MRI->createVirtualRegister(DestRC);
               MachineBasicBlock *BlockToInsertCopy =
-                  MI.isPHI() ? MI.getOperand(MI.getOperandNo(&MO) + 1).getMBB()
+                  MI.isPHI() ? MI.getOperand(MO.getOperandNo() + 1).getMBB()
                              : MBB;
               MachineBasicBlock::iterator PointToInsertCopy =
                   MI.isPHI() ? BlockToInsertCopy->getFirstInstrTerminator() : I;
-              MachineInstr *NewCopy =
-                  BuildMI(*BlockToInsertCopy, PointToInsertCopy,
-                          PointToInsertCopy->getDebugLoc(),
-                          TII->get(AMDGPU::COPY), NewDst)
-                      .addReg(MO.getReg());
-              MO.setReg(NewDst);
-              analyzeVGPRToSGPRCopy(NewCopy);
+
+              if (!tryMoveVGPRConstToSGPR(MO, NewDst, BlockToInsertCopy,
+                                          PointToInsertCopy)) {
+                MachineInstr *NewCopy =
+                    BuildMI(*BlockToInsertCopy, PointToInsertCopy,
+                            PointToInsertCopy->getDebugLoc(),
+                            TII->get(AMDGPU::COPY), NewDst)
+                        .addReg(MO.getReg());
+                MO.setReg(NewDst);
+                analyzeVGPRToSGPRCopy(NewCopy);
+              }
             }
           }
         }
@@ -765,7 +776,7 @@ bool SIFixSGPRCopies::runOnMachineFunction(MachineFunction &MF) {
   for (auto MI : PHINodes) {
     processPHINode(*MI);
   }
-  if (MF.getTarget().getOptLevel() > CodeGenOpt::None && EnableM0Merge)
+  if (MF.getTarget().getOptLevel() > CodeGenOptLevel::None && EnableM0Merge)
     hoistAndMergeSGPRInits(AMDGPU::M0, *MRI, TRI, *MDT, TII);
 
   SiblingPenalty.clear();
@@ -829,7 +840,34 @@ void SIFixSGPRCopies::processPHINode(MachineInstr &MI) {
   }
 }
 
-bool SIFixSGPRCopies::lowerSpecialCase(MachineInstr &MI) {
+bool SIFixSGPRCopies::tryMoveVGPRConstToSGPR(
+    MachineOperand &MaybeVGPRConstMO, Register DstReg,
+    MachineBasicBlock *BlockToInsertTo,
+    MachineBasicBlock::iterator PointToInsertTo) {
+
+  MachineInstr *DefMI = MRI->getVRegDef(MaybeVGPRConstMO.getReg());
+  if (!DefMI || !DefMI->isMoveImmediate())
+    return false;
+
+  MachineOperand *SrcConst = TII->getNamedOperand(*DefMI, AMDGPU::OpName::src0);
+  if (SrcConst->isReg())
+    return false;
+
+  const TargetRegisterClass *SrcRC =
+      MRI->getRegClass(MaybeVGPRConstMO.getReg());
+  unsigned MoveSize = TRI->getRegSizeInBits(*SrcRC);
+  unsigned MoveOp = MoveSize == 64 ? AMDGPU::S_MOV_B64 : AMDGPU::S_MOV_B32;
+  BuildMI(*BlockToInsertTo, PointToInsertTo, PointToInsertTo->getDebugLoc(),
+          TII->get(MoveOp), DstReg)
+      .add(*SrcConst);
+  if (MRI->hasOneUse(MaybeVGPRConstMO.getReg()))
+    DefMI->eraseFromParent();
+  MaybeVGPRConstMO.setReg(DstReg);
+  return true;
+}
+
+bool SIFixSGPRCopies::lowerSpecialCase(MachineInstr &MI,
+                                       MachineBasicBlock::iterator &I) {
   Register DstReg = MI.getOperand(0).getReg();
   Register SrcReg = MI.getOperand(1).getReg();
   if (!DstReg.isVirtual()) {
@@ -845,11 +883,17 @@ bool SIFixSGPRCopies::lowerSpecialCase(MachineInstr &MI) {
               TII->get(AMDGPU::V_READFIRSTLANE_B32), TmpReg)
           .add(MI.getOperand(1));
       MI.getOperand(1).setReg(TmpReg);
+    } else if (tryMoveVGPRConstToSGPR(MI.getOperand(1), DstReg, MI.getParent(),
+                                      MI)) {
+      I = std::next(I);
+      MI.eraseFromParent();
     }
     return true;
   }
   if (!SrcReg.isVirtual() || TRI->isAGPR(*MRI, SrcReg)) {
-    TII->moveToVALU(MI, MDT);
+    SIInstrWorklist worklist;
+    worklist.insert(&MI);
+    TII->moveToVALU(worklist, MDT);
     return true;
   }
 
@@ -944,13 +988,13 @@ bool SIFixSGPRCopies::needToBeConvertedToVALU(V2SCopyInfo *Info) {
   for (auto J : Info->Siblings) {
     auto InfoIt = V2SCopies.find(J);
     if (InfoIt != V2SCopies.end()) {
-      MachineInstr *SiblingCopy = InfoIt->getSecond().Copy;
+      MachineInstr *SiblingCopy = InfoIt->second.Copy;
       if (SiblingCopy->isImplicitDef())
         // the COPY has already been MoveToVALUed
         continue;
 
-      SrcRegs.insert(std::make_pair(SiblingCopy->getOperand(1).getReg(),
-                                    SiblingCopy->getOperand(1).getSubReg()));
+      SrcRegs.insert(std::pair(SiblingCopy->getOperand(1).getReg(),
+                               SiblingCopy->getOperand(1).getSubReg()));
     }
   }
   Info->SiblingPenalty = SrcRegs.size();
@@ -971,19 +1015,23 @@ void SIFixSGPRCopies::lowerVGPR2SGPRCopies(MachineFunction &MF) {
       LoweringWorklist.push_back(C.second.ID);
   }
 
+  // Store all the V2S copy instructions that need to be moved to VALU
+  // in the Copies worklist.
+  SIInstrWorklist Copies;
+
   while (!LoweringWorklist.empty()) {
     unsigned CurID = LoweringWorklist.pop_back_val();
     auto CurInfoIt = V2SCopies.find(CurID);
     if (CurInfoIt != V2SCopies.end()) {
-      V2SCopyInfo C = CurInfoIt->getSecond();
+      V2SCopyInfo C = CurInfoIt->second;
       LLVM_DEBUG(dbgs() << "Processing ...\n"; C.dump());
       for (auto S : C.Siblings) {
         auto SibInfoIt = V2SCopies.find(S);
         if (SibInfoIt != V2SCopies.end()) {
-          V2SCopyInfo &SI = SibInfoIt->getSecond();
+          V2SCopyInfo &SI = SibInfoIt->second;
           LLVM_DEBUG(dbgs() << "Sibling:\n"; SI.dump());
           if (!SI.NeedToBeConvertedToVALU) {
-            set_subtract(SI.SChain, C.SChain);
+            SI.SChain.set_subtract(C.SChain);
             if (needToBeConvertedToVALU(&SI))
               LoweringWorklist.push_back(SI.ID);
           }
@@ -992,10 +1040,15 @@ void SIFixSGPRCopies::lowerVGPR2SGPRCopies(MachineFunction &MF) {
       }
       LLVM_DEBUG(dbgs() << "V2S copy " << *C.Copy
                         << " is being turned to VALU\n");
+      // TODO: MapVector::erase is inefficient. Do bulk removal with remove_if
+      // instead.
       V2SCopies.erase(C.ID);
-      TII->moveToVALU(*C.Copy, MDT);
+      Copies.insert(C.Copy);
     }
   }
+
+  TII->moveToVALU(Copies, MDT);
+  Copies.clear();
 
   // Now do actual lowering
   for (auto C : V2SCopies) {
