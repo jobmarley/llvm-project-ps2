@@ -162,7 +162,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   //MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
 }
 
-void PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
+bool PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                             int SPAdj, unsigned FIOperandNum,
                                             RegScavenger *RS) const {
   assert(SPAdj == 0 && "Unexpected");
@@ -212,6 +212,8 @@ void PS2VPURegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   }*/
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
+  // replaceFI never removes II
+  return false;
 }
 
 Register PS2VPURegisterInfo::getFrameRegister(const MachineFunction &MF) const {

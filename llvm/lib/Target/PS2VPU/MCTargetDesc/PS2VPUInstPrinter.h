@@ -13,6 +13,7 @@
 #ifndef LLVM_LIB_TARGET_PS2VPU_MCTARGETDESC_PS2VPUINSTPRINTER_H
 #define LLVM_LIB_TARGET_PS2VPU_MCTARGETDESC_PS2VPUINSTPRINTER_H
 
+#include "PS2VPUMCTargetDesc.h"
 #include "llvm/MC/MCInstPrinter.h"
 
 namespace llvm {
@@ -23,7 +24,7 @@ public:
                    const MCRegisterInfo &MRI)
       : MCInstPrinter(MAI, MII, MRI) {}
 
-  void printRegName(raw_ostream &OS, unsigned RegNo) const override;
+  void printRegName(raw_ostream &OS, MCRegister Reg) const override;
   void printInst(const MCInst *MI, uint64_t Address, StringRef Annot,
                  const MCSubtargetInfo &STI, raw_ostream &O) override;
   bool printPS2VPUAliasInstr(const MCInst *MI, const MCSubtargetInfo &STI,
@@ -39,7 +40,8 @@ public:
   void printCustomAliasOperand(const MCInst *MI, uint64_t Address,
                                unsigned OpIdx, unsigned PrintMethodIdx,
                                const MCSubtargetInfo &STI, raw_ostream &O);
-  static const char *getRegisterName(unsigned RegNo);
+  static const char *getRegisterName(MCRegister Reg,
+                                     unsigned AltIdx = PS2VPUNS::NoRegAltName);
 
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);

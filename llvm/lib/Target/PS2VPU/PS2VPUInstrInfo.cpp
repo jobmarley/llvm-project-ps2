@@ -436,10 +436,11 @@ void PS2VPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
 }
 
 void PS2VPUInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
-                                         MachineBasicBlock::iterator I,
-                                         Register SrcReg, bool isKill, int FI,
-                                         const TargetRegisterClass *RC,
-                                         const TargetRegisterInfo *TRI) const {
+                                          MachineBasicBlock::iterator I,
+                                          Register SrcReg, bool isKill, int FI,
+                                          const TargetRegisterClass *RC,
+                                          const TargetRegisterInfo *TRI,
+                                          Register VReg) const {
   //DebugLoc DL;
   //if (I != MBB.end())
   //  DL = I->getDebugLoc();
@@ -494,10 +495,11 @@ void PS2VPUInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
 }
 
 void PS2VPUInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
-                                          MachineBasicBlock::iterator I,
-                                          Register DestReg, int FI,
-                                          const TargetRegisterClass *RC,
-                                          const TargetRegisterInfo *TRI) const {
+                                           MachineBasicBlock::iterator I,
+                                           Register DestReg, int FI,
+                                           const TargetRegisterClass *RC,
+                                           const TargetRegisterInfo *TRI,
+                                           Register VReg) const {
   //DebugLoc DL;
   //if (I != MBB.end())
   //  DL = I->getDebugLoc();

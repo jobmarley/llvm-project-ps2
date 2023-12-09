@@ -14,7 +14,7 @@
 #define LLVM_CLANG_LIB_BASIC_TARGETS_PS2VPU_H
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/Support/Compiler.h"
 namespace clang {
 namespace targets {
@@ -57,7 +57,6 @@ public:
     Int16Type = SignedInt;
     Char32Type = UnsignedLong;
     SigAtomicType = SignedChar;
-    ProgramAddrSpace = 1;
     resetDataLayout("e-m:e-p:16:16-f128:128-n16-S64");
   }
 
@@ -83,7 +82,7 @@ public:
 
   ArrayRef<Builtin::Info> getTargetBuiltins() const override {
     // FIXME: Implement!
-    return None;
+    return std::nullopt;
   }
   BuiltinVaListKind getBuiltinVaListKind() const override {
     return TargetInfo::VoidPtrBuiltinVaList;
@@ -110,7 +109,7 @@ public:
     //}
     return false;
   }
-  const char *getClobbers() const override {
+  std::string_view getClobbers() const override {
     // FIXME: Implement!
     return "";
   }

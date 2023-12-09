@@ -10,7 +10,7 @@
 #include "PS2VPUFrameLowering.h"
 #include "PS2VPUISelLowering.h"
 #include "PS2VPUInstrInfo.h"
-#include "llvm/ADT/Triple.h"
+#include "llvm/TargetParser/Triple.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"

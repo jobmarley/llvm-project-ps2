@@ -749,7 +749,7 @@ std::unique_ptr<TargetInfo> AllocateTarget(const llvm::Triple &Triple,
         return std::make_unique<LoongArch64TargetInfo>(Triple, Opts);
     }
   case llvm::Triple::ps2vpu:
-    return new PS2VPUTargetInfo(Triple, Opts);
+    return std::make_unique<PS2VPUTargetInfo>(Triple, Opts);
   }
 }
 } // namespace targets

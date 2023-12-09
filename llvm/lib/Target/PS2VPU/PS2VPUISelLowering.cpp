@@ -725,7 +725,8 @@ bool PS2VPUTargetLowering::IsEligibleForTailCallOptimization(
     return false;
 
   // Do not tail call opt if the stack is used to pass parameters.
-  if (CCInfo.getNextStackOffset() != 0)
+  unsigned StackSizeLimit = 0;
+  if (CCInfo.getStackSize() > StackSizeLimit)
     return false;
 
   // Do not tail call opt if either the callee or caller returns
@@ -767,7 +768,7 @@ PS2VPUTargetLowering::LowerCall_32(TargetLowering::CallLoweringInfo &CLI,
                                  CCInfo, CLI, DAG.getMachineFunction());
 
   // Get the size of the outgoing arguments stack space requirement.
-  unsigned ArgsSize = CCInfo.getNextStackOffset();
+  unsigned ArgsSize = CCInfo.getStackSize();
 
   // Keep stack frames 8-byte aligned.
   ArgsSize = (ArgsSize + 7) & ~7;

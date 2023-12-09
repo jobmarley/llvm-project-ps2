@@ -12,6 +12,7 @@
 
 #include "PS2VPUInstPrinter.h"
 #include "PS2VPUTargetStreamer.h"
+#include "llvm/MC/MCRegister.h"
 #include "llvm/Support/FormattedStream.h"
 
 using namespace llvm;

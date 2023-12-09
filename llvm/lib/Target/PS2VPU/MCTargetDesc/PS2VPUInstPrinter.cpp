@@ -34,8 +34,8 @@ using namespace PS2VPUNS;
 #define PRINT_ALIAS_INSTR
 #include "PS2VPUGenAsmWriter.inc"
 
-void PS2VPUInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
-  OS << '%' << StringRef(getRegisterName(RegNo)).lower();
+void PS2VPUInstPrinter::printRegName(raw_ostream &OS, MCRegister Reg) const {
+  OS << '%' << getRegisterName(Reg);
 }
 
 void PS2VPUInstPrinter::printInst(const MCInst *MI, uint64_t Address,

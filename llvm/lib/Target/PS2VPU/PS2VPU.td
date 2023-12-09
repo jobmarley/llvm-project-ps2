@@ -63,9 +63,7 @@ include "PS2VPUCallingConv.td"
 include "PS2VPUSchedule.td"
 include "PS2VPUInstrInfo.td"
 
-def PS2VPUInstrInfo : InstrInfo {
-  let useDeprecatedPositionallyEncodedOperands = 1;
-}
+def PS2VPUInstrInfo : InstrInfo;
 
 def PS2VPUAsmParser : AsmParser {
   bit ShouldEmitMatchRegisterName = 0;

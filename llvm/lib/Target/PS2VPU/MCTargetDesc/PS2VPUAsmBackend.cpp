@@ -133,15 +133,16 @@ protected:
 
 public:
   PS2VPUAsmBackend(const Target &T)
-      : MCAsmBackend(StringRef(T.getName()) == "PS2VPUel" ? support::little
-                                                         : support::big),
+      : MCAsmBackend(StringRef(T.getName()) == "PS2VPUel"
+                         ? llvm::endianness::little
+                         : llvm::endianness::big),
         TheTarget(T), Is64Bit(StringRef(TheTarget.getName()) == "PS2VPUv9") {}
 
   unsigned getNumFixupKinds() const override {
     return PS2VPU::NumTargetFixupKinds;
   }
 
-  Optional<MCFixupKind> getFixupKind(StringRef Name) const override {
+  std::optional<MCFixupKind> getFixupKind(StringRef Name) const override {
     unsigned Type;
     Type = llvm::StringSwitch<unsigned>(Name)
 #define ELF_RELOC(X, Y) .Case(#X, Y)
@@ -154,7 +155,7 @@ public:
                .Case("BFD_RELOC_64", ELF::R_PS2VPU_64)
                .Default(-1u);
     if (Type == -1u)
-      return None;
+      return std::nullopt;
     return static_cast<MCFixupKind>(FirstLiteralRelocationKind + Type);
   }
 
@@ -263,7 +264,7 @@ public:
 
     assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
            "Invalid kind!");
-    if (Endian == support::little)
+    if (Endian == llvm::endianness::little)
       return InfosLE[Kind - FirstTargetFixupKind];
 
     return InfosBE[Kind - FirstTargetFixupKind];
@@ -355,7 +356,8 @@ public:
     // from the fixup value. The Value has been "split up" into the
     // appropriate bitfields above.
     for (unsigned i = 0; i != NumBytes; ++i) {
-      unsigned Idx = Endian == support::little ? i : (NumBytes - 1) - i;
+      unsigned Idx =
+          Endian == llvm::endianness::little ? i : (NumBytes - 1) - i;
       Data[Offset + Idx] |= uint8_t((Value >> (i * 8)) & 0xff);
     }
   }

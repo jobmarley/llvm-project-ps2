@@ -506,10 +506,10 @@ let isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
   def IBGEZ : Lower7InstPS2VPU<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
                     "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)]>;
 }
-def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins MEMri:$addr),
+def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is1, $simm13):$addr),
                     "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))]>;
 
-def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, MEMri:$addr),
+def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is1, $simm13):$addr),
                     "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)]>;
 
 def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),

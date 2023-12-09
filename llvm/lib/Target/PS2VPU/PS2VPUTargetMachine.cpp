@@ -42,7 +42,7 @@ static std::string computeDataLayout(const Triple &T) {
   return Ret;
 }
 
-static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM) {
+static Reloc::Model getEffectiveRelocModel(std::optional<Reloc::Model> RM) {
   return RM.value_or(Reloc::Static);
 }
 
@@ -57,7 +57,7 @@ static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM) {
 //
 // All code models require that the text segment is smaller than 2GB.
 static CodeModel::Model
-getEffectivePS2VPUCodeModel(Optional<CodeModel::Model> CM, Reloc::Model RM,
+getEffectivePS2VPUCodeModel(std::optional<CodeModel::Model> CM, Reloc::Model RM,
                            bool Is64Bit, bool JIT) {
   if (CM) {
     if (*CM == CodeModel::Tiny)
@@ -75,10 +75,12 @@ getEffectivePS2VPUCodeModel(Optional<CodeModel::Model> CM, Reloc::Model RM,
 }
 
 /// Create an ILP32 architecture model
-PS2VPUTargetMachine::PS2VPUTargetMachine(
-    const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Optional<Reloc::Model> RM,
-    Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
+PS2VPUTargetMachine::PS2VPUTargetMachine(const Target &T, const Triple &TT,
+                                         StringRef CPU, StringRef FS,
+                                         const TargetOptions &Options,
+                                         std::optional<Reloc::Model> RM,
+                                         std::optional<CodeModel::Model> CM,
+                                         CodeGenOptLevel OL, bool JIT)
     : LLVMTargetMachine(T, computeDataLayout(TT), TT, CPU, FS, Options,
                         getEffectiveRelocModel(RM),
                         getEffectivePS2VPUCodeModel(

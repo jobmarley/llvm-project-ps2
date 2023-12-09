@@ -32,7 +32,7 @@ protected:
   unsigned getRelocType(MCContext &Ctx, const MCValue &Target,
                         const MCFixup &Fixup, bool IsPCRel) const override;
 
-  bool needsRelocateWithSymbol(const MCSymbol &Sym,
+  bool needsRelocateWithSymbol(const MCValue &Val, const MCSymbol &Sym,
                                unsigned Type) const override;
 };
 } // namespace
@@ -167,7 +167,8 @@ unsigned PS2VPUELFObjectWriter::getRelocType(MCContext &Ctx,
 return 0;
 }
 
-bool PS2VPUELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
+bool PS2VPUELFObjectWriter::needsRelocateWithSymbol(const MCValue &Val,
+                                                    const MCSymbol &Sym,
                                                    unsigned Type) const {
   //switch (Type) {
   //default:

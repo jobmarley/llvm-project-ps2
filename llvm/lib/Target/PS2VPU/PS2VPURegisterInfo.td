@@ -19,6 +19,10 @@ def sub_even64 : SubRegIndex<64>;
 def sub_odd64  : SubRegIndex<64, 64>;
 }
 
+let Namespace = "PS2VPUNS",
+    FallbackRegAltNameIndex = NoRegAltName in {
+  def RegNamesStateReg : RegAltNameIndex;
+}
 
 // Floating registers
 def VF00x : PS2VPU_FP32Reg<0, "VF00x">, DwarfRegNum<[0]>;

@@ -34,7 +34,11 @@ class PS2VPUDAGToDAGISel : public SelectionDAGISel {
   const PS2VPUSubtarget *Subtarget = nullptr;
 
 public:
-  explicit PS2VPUDAGToDAGISel(PS2VPUTargetMachine &tm) : SelectionDAGISel(tm) {}
+  static char ID;
+
+  PS2VPUDAGToDAGISel() = delete;
+
+  explicit PS2VPUDAGToDAGISel(PS2VPUTargetMachine &tm) : SelectionDAGISel(ID, tm) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override {
     Subtarget = &MF.getSubtarget<PS2VPUSubtarget>();
@@ -49,7 +53,8 @@ public:
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
-  bool SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
+  bool SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                    InlineAsm::ConstraintCode ConstraintID,
                                     std::vector<SDValue> &OutOps) override;
 
   StringRef getPassName() const override {
@@ -64,6 +69,8 @@ private:
   bool tryInlineAsm(SDNode *N);
 };
 } // end anonymous namespace
+
+char PS2VPUDAGToDAGISel::ID = 0;
 
 SDNode *PS2VPUDAGToDAGISel::getGlobalBaseReg() {
   /*Register GlobalBaseReg = Subtarget->getInstrInfo()->getGlobalBaseReg(MF);
@@ -378,13 +385,14 @@ void PS2VPUDAGToDAGISel::Select(SDNode *N) {
 /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
 /// inline asm expressions.
 bool PS2VPUDAGToDAGISel::SelectInlineAsmMemoryOperand(
-    const SDValue &Op, unsigned ConstraintID, std::vector<SDValue> &OutOps) {
+    const SDValue &Op, InlineAsm::ConstraintCode ConstraintID,
+    std::vector<SDValue> &OutOps) {
   SDValue Op0, Op1;
   switch (ConstraintID) {
   default:
     return true;
-  case InlineAsm::Constraint_o:
-  case InlineAsm::Constraint_m: // memory
+  case InlineAsm::ConstraintCode::o:
+  case InlineAsm::ConstraintCode::m: // memory
     if (!SelectADDRrr(Op, Op0, Op1))
       SelectADDRri(Op, Op0, Op1);
     break;

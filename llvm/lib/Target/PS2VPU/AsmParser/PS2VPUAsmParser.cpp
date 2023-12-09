@@ -12,7 +12,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -31,6 +30,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Triple.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -70,8 +70,8 @@ class PS2VPUAsmParser : public MCTargetAsmParser {
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
-  bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
-  OperandMatchResultTy tryParseRegister(unsigned &RegNo, SMLoc &StartLoc,
+  bool parseRegister(MCRegister &Reg, SMLoc &StartLoc, SMLoc &EndLoc) override;
+  ParseStatus tryParseRegister(MCRegister &Reg, SMLoc &StartLoc,
                                         SMLoc &EndLoc) override;
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
@@ -108,7 +108,7 @@ class PS2VPUAsmParser : public MCTargetAsmParser {
                                          const MCExpr *subExpr);
 
   // returns true if Tok is matched to a register and returns register in RegNo.
-  bool matchRegisterName(const AsmToken &Tok, unsigned &RegNo,
+  bool matchRegisterName(const AsmToken &Tok, MCRegister &RegNo,
                          unsigned &RegKind);
 
   bool matchPS2VPUAsmModifiers(const MCExpr *&EVal, SMLoc &EndLoc);
@@ -681,25 +681,25 @@ bool PS2VPUAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   llvm_unreachable("Implement any new match types added!");
 }
 
-bool PS2VPUAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
+bool PS2VPUAsmParser::parseRegister(MCRegister &Reg, SMLoc &StartLoc,
                                    SMLoc &EndLoc) {
-  if (tryParseRegister(RegNo, StartLoc, EndLoc) != MatchOperand_Success)
+  if (tryParseRegister(Reg, StartLoc, EndLoc) != MatchOperand_Success)
     return Error(StartLoc, "invalid register name");
   return false;
 }
 
-OperandMatchResultTy PS2VPUAsmParser::tryParseRegister(unsigned &RegNo,
+ParseStatus PS2VPUAsmParser::tryParseRegister(MCRegister &Reg,
                                                       SMLoc &StartLoc,
                                                       SMLoc &EndLoc) {
   const AsmToken &Tok = Parser.getTok();
   StartLoc = Tok.getLoc();
   EndLoc = Tok.getEndLoc();
-  RegNo = 0;
+  Reg = PS2VPU::NoRegister;
   if (getLexer().getKind() != AsmToken::Percent)
     return MatchOperand_NoMatch;
   Parser.Lex();
   unsigned regKind = PS2VPUOperand::rk_None;
-  if (matchRegisterName(Tok, RegNo, regKind)) {
+  if (matchRegisterName(Tok, Reg, regKind)) {
     Parser.Lex();
     return MatchOperand_Success;
   }
@@ -1087,14 +1087,15 @@ OperandMatchResultTy PS2VPUAsmParser::parseOperand(OperandVector &Operands,
         return MatchOperand_NoMatch;
       Parser.Lex(); // eat %
 
-      unsigned RegNo, RegKind;
-      if (!matchRegisterName(Parser.getTok(), RegNo, RegKind))
+      MCRegister Reg;
+      unsigned RegKind;
+      if (!matchRegisterName(Parser.getTok(), Reg, RegKind))
         return MatchOperand_NoMatch;
 
       Parser.Lex(); // Eat the identifier token.
       SMLoc E =
           SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-      Operands.push_back(PS2VPUOperand::CreateReg(RegNo, RegKind, S, E));
+      Operands.push_back(PS2VPUOperand::CreateReg(Reg, RegKind, S, E));
       ResTy = MatchOperand_Success;
     } else {
       ResTy = parseMEMOperand(Operands);
@@ -1145,48 +1146,48 @@ PS2VPUAsmParser::parsePS2VPUAsmOperand(std::unique_ptr<PS2VPUOperand> &Op,
   default:
     break;
 
-  case AsmToken::Percent:
+  case AsmToken::Percent: {
     Parser.Lex(); // Eat the '%'.
-    unsigned RegNo;
+    MCRegister Reg;
     unsigned RegKind;
-    if (matchRegisterName(Parser.getTok(), RegNo, RegKind)) {
+    if (matchRegisterName(Parser.getTok(), Reg, RegKind)) {
       StringRef name = Parser.getTok().getString();
       Parser.Lex(); // Eat the identifier token.
       E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-      switch (RegNo) {
+      switch (Reg) {
       default:
-        Op = PS2VPUOperand::CreateReg(RegNo, RegKind, S, E);
+        Op = PS2VPUOperand::CreateReg(Reg, RegKind, S, E);
         break;
-      /*case PS2VPU::PSR:
-        Op = PS2VPUOperand::CreateToken("%psr", S);
-        break;
-      case PS2VPU::FSR:
-        Op = PS2VPUOperand::CreateToken("%fsr", S);
-        break;
-      case PS2VPU::FQ:
-        Op = PS2VPUOperand::CreateToken("%fq", S);
-        break;
-      case PS2VPU::CPSR:
-        Op = PS2VPUOperand::CreateToken("%csr", S);
-        break;
-      case PS2VPU::CPQ:
-        Op = PS2VPUOperand::CreateToken("%cq", S);
-        break;
-      case PS2VPU::WIM:
-        Op = PS2VPUOperand::CreateToken("%wim", S);
-        break;
-      case PS2VPU::TBR:
-        Op = PS2VPUOperand::CreateToken("%tbr", S);
-        break;
-      case PS2VPU::PC:
-        Op = PS2VPUOperand::CreateToken("%pc", S);
-        break;
-      case PS2VPU::ICC:
-        if (name == "xcc")
-          Op = PS2VPUOperand::CreateToken("%xcc", S);
-        else
-          Op = PS2VPUOperand::CreateToken("%icc", S);
-        break;*/
+        /*case PS2VPU::PSR:
+          Op = PS2VPUOperand::CreateToken("%psr", S);
+          break;
+        case PS2VPU::FSR:
+          Op = PS2VPUOperand::CreateToken("%fsr", S);
+          break;
+        case PS2VPU::FQ:
+          Op = PS2VPUOperand::CreateToken("%fq", S);
+          break;
+        case PS2VPU::CPSR:
+          Op = PS2VPUOperand::CreateToken("%csr", S);
+          break;
+        case PS2VPU::CPQ:
+          Op = PS2VPUOperand::CreateToken("%cq", S);
+          break;
+        case PS2VPU::WIM:
+          Op = PS2VPUOperand::CreateToken("%wim", S);
+          break;
+        case PS2VPU::TBR:
+          Op = PS2VPUOperand::CreateToken("%tbr", S);
+          break;
+        case PS2VPU::PC:
+          Op = PS2VPUOperand::CreateToken("%pc", S);
+          break;
+        case PS2VPU::ICC:
+          if (name == "xcc")
+            Op = PS2VPUOperand::CreateToken("%xcc", S);
+          else
+            Op = PS2VPUOperand::CreateToken("%icc", S);
+          break;*/
       }
       break;
     }
@@ -1195,6 +1196,7 @@ PS2VPUAsmParser::parsePS2VPUAsmOperand(std::unique_ptr<PS2VPUOperand> &Op,
       Op = PS2VPUOperand::CreateImm(EVal, S, E);
     }
     break;
+  }
 
   case AsmToken::Plus:
   case AsmToken::Minus:
@@ -1242,7 +1244,7 @@ PS2VPUAsmParser::parseBranchModifiers(OperandVector &Operands) {
   return MatchOperand_Success;
 }
 
-bool PS2VPUAsmParser::matchRegisterName(const AsmToken &Tok, unsigned &RegNo,
+bool PS2VPUAsmParser::matchRegisterName(const AsmToken &Tok, MCRegister &RegNo,
                                        unsigned &RegKind) {
   int64_t intVal = 0;
   RegNo = 0;
