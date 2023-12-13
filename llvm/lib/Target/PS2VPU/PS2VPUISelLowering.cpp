@@ -507,7 +507,7 @@ SDValue PS2VPUTargetLowering::LowerFormalArguments_32(
     int FI = MF.getFrameInfo().CreateFixedObject(4, Offset, true);
     SDValue FIPtr = DAG.getFrameIndex(FI, PtrVT);
     SDValue Load;
-    if (VA.getValVT() == MVT::i16 /*|| VA.getValVT() == MVT::f32*/) {
+    if (VA.getValVT() == MVT::i16 || VA.getValVT() == MVT::f32) {
       Load = DAG.getLoad(VA.getValVT(), dl, Chain, FIPtr, MachinePointerInfo());
     /*} else if (VA.getValVT() == MVT::f128) {
       report_fatal_error("PS2VPUv8 does not handle f128 in calls; "
@@ -1192,6 +1192,8 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
 
   // Set up the register classes.
   addRegisterClass(MVT::i16, &PS2VPUNS::IntRegsRegClass);
+  addRegisterClass(MVT::v4f32, &PS2VPUNS::FloatRegsRegClass);
+  addRegisterClass(MVT::f32, &PS2VPUNS::FloatRegsRegClass);
   /*setOperationAction(ISD::FrameIndex, MVT::i32, Expand);*/
   //if (!Subtarget->useSoftFloat()) {
   //  addRegisterClass(MVT::f32, &SP::FPRegsRegClass);
@@ -1206,14 +1208,29 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
   //  addRegisterClass(MVT::v2i32, &SP::IntPairRegClass);
 
    for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
-      setOperationAction(Op, MVT::i32, Expand);
-    }
+    setOperationAction(Op, MVT::i32, Expand);
+  }
 
-  //  // ...but almost all operations must be expanded, so set that as
-  //  // the default.
-  //  for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
-  //    setOperationAction(Op, MVT::v2i32, Expand);
-  //  }
+  // ...but almost all operations must be expanded, so set that as
+  // the default.
+  for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
+    /*setOperationAction(Op, MVT::v2i32, Expand);*/
+    setOperationAction(Op, MVT::v2f32, LegalizeAction::Promote);
+    setOperationAction(Op, MVT::v1f32, LegalizeAction::Promote);
+    setOperationAction(Op, MVT::f32, LegalizeAction::Promote);
+    AddPromotedToType(Op, MVT::f32, MVT::v4f32);
+  }
+  for (MVT VT : {MVT::f32, MVT::v4f32}) {
+    setOperationAction(ISD::STORE, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::LOAD, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::FADD, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::FSUB, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::FMUL, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::FABS, VT, LegalizeAction::Legal);
+    setOperationAction(ISD::FMAD, VT, LegalizeAction::Legal);
+  }
+  setOperationAction(ISD::FDIV, MVT::f32, LegalizeAction::Legal);
+
   //  // Truncating/extending stores/loads are also not supported.
   //  for (MVT VT : MVT::integer_fixedlen_vector_valuetypes()) {
   //    setLoadExtAction(ISD::SEXTLOAD, VT, MVT::v2i32, Expand);

@@ -45,6 +45,7 @@ BitVector PS2VPURegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   const PS2VPUSubtarget &Subtarget = MF.getSubtarget<PS2VPUSubtarget>();
    // FIXME: G1 reserved for now for large imm generation by frame code.
+  Reserved.set(PS2VPUNS::VF0);
   Reserved.set(PS2VPUNS::VI0);
   Reserved.set(PS2VPUNS::VI6);
 

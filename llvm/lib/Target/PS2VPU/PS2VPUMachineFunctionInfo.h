@@ -36,7 +36,7 @@ public:
   PS2VPUMachineFunctionInfo()
       : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
-  explicit PS2VPUMachineFunctionInfo(MachineFunction &MF)
+  PS2VPUMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI)
       : GlobalBaseReg(0), VarArgsFrameOffset(0), SRetReturnReg(0),
         IsLeafProc(false) {}
 

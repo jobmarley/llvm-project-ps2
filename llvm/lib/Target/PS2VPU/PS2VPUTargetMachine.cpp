@@ -1,12 +1,15 @@
 
 //#include "PS2VPU.h"
 #include "PS2VPUTargetMachine.h"
+#include "PS2VPUMachineFunctionInfo.h"
 #include "PS2VPUTargetObjectFile.h"
 #include "TargetInfo/ps2vpuTargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "PS2VPUTargetTransformInfo.h"
 using namespace llvm;
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializePS2VPUTarget() {
@@ -124,6 +127,13 @@ PS2VPUTargetMachine::getSubtargetImpl(const Function &F) const {
   return I.get();
 }
 
+MachineFunctionInfo *PS2VPUTargetMachine::createMachineFunctionInfo(
+    BumpPtrAllocator &Allocator, const Function &F,
+    const TargetSubtargetInfo *STI) const {
+  return PS2VPUMachineFunctionInfo::create<PS2VPUMachineFunctionInfo>(Allocator,
+                                                                    F, STI);
+}
+
 namespace {
 /// PS2VPU Code Generator Pass Configuration Options.
 class PS2VPUPassConfig : public TargetPassConfig {
@@ -143,6 +153,12 @@ public:
 
 TargetPassConfig *PS2VPUTargetMachine::createPassConfig(PassManagerBase &PM) {
   return new PS2VPUPassConfig(*this, PM);
+}
+
+
+TargetTransformInfo
+PS2VPUTargetMachine::getTargetTransformInfo(const Function &F) const {
+  return TargetTransformInfo(PS2VPUTTIImpl(this, F));
 }
 
 void PS2VPUPassConfig::addIRPasses() {
@@ -169,3 +185,4 @@ void PS2VPUPassConfig::addPreEmitPass() {
   //  addPass(new FixAllFDIVSQRT());
   //}
 }
+

@@ -43,12 +43,13 @@ public:
     HalfAlign = 32;
     FloatWidth = 32;
     FloatAlign = 32;
-    DoubleWidth = 32;
-    DoubleAlign = 32;
-    DoubleFormat = &llvm::APFloat::IEEEsingle();
-    LongDoubleWidth = 32;
-    LongDoubleAlign = 8;
-    LongDoubleFormat = &llvm::APFloat::IEEEsingle();
+    FloatFormat = &llvm::APFloat::IEEEsingle();
+    DoubleWidth = 64;
+    DoubleAlign = 64;
+    DoubleFormat = &llvm::APFloat::IEEEdouble();
+    LongDoubleWidth = 64;
+    LongDoubleAlign = 64;
+    LongDoubleFormat = &llvm::APFloat::IEEEdouble();
     SizeType = UnsignedInt;
     PtrDiffType = SignedInt;
     IntPtrType = SignedInt;
@@ -57,6 +58,7 @@ public:
     Int16Type = SignedInt;
     Char32Type = UnsignedLong;
     SigAtomicType = SignedChar;
+    MaxVectorAlign = 128;
     resetDataLayout("e-m:e-p:16:16-f128:128-n16-S64");
   }
 

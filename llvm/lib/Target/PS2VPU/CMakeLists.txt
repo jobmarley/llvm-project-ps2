@@ -24,6 +24,7 @@ add_llvm_target(PS2VPUCodeGen
   PS2VPURegisterInfo.cpp
   PS2VPUSubtarget.cpp
   PS2VPUTargetMachine.cpp
+  PS2VPUTargetTransformInfo.cpp
 
   PS2VPUMCInstLower.cpp
   PS2VPUTargetObjectFile.cpp

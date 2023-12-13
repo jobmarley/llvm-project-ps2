@@ -506,10 +506,10 @@ let isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
   def IBGEZ : Lower7InstPS2VPU<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
                     "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)]>;
 }
-def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is1, $simm13):$addr),
+def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is, $simm13):$addr),
                     "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))]>;
 
-def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is1, $simm13):$addr),
+def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is, $simm13):$addr),
                     "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)]>;
 
 def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
@@ -551,6 +551,49 @@ let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTer
             //[(PS2VPUbrccz cond:$a, Any:$b, Any:$c, bb:$d)]>;
             [(PS2VPUbricc (i16 imm:$a), IntRegs:$b, imm:$c, bb:$d)]>;
 }
+
+//// upper instructions
+
+let isCodeGenOnly = 1 in  
+def ADD : Upper1InstPS2VPU<0b101000, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
+                    "ADD $fd, $fs, $ft", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, FloatRegs:$ft))]>;
+def ADDv4 : Upper1InstPS2VPU<0b101000, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
+                    "ADD $fd, $fs, $ft", [(set VFRegs:$fd, (fadd VFRegs:$fs, VFRegs:$ft))]>;
+let isCodeGenOnly = 1 in  
+def MUL : Upper1InstPS2VPU<0b101010, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
+                    "MUL $fd, $fs, $ft", [(set FloatRegs:$fd, (fmul FloatRegs:$fs, FloatRegs:$ft))]>;
+def MULv4 : Upper1InstPS2VPU<0b101010, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
+                    "MUL $fd, $fs, $ft", [(set VFRegs:$fd, (fmul VFRegs:$fs, VFRegs:$ft))]>;
+let isCodeGenOnly = 1 in  
+def SUB : Upper1InstPS2VPU<0b101100, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
+                    "SUB $fd, $fs, $ft", [(set FloatRegs:$fd, (fsub FloatRegs:$fs, FloatRegs:$ft))]>;
+def SUBv4 : Upper1InstPS2VPU<0b101100, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
+                    "SUB $fd, $fs, $ft", [(set VFRegs:$fd, (fsub VFRegs:$fs, VFRegs:$ft))]>;    
+let isCodeGenOnly = 1 in  
+def MADD : Upper1InstPS2VPU<0b101001, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft, FloatRegs:$acc),
+                    "MADD $fd, $fs, $ft, $acc", [(set FloatRegs:$fd, (fmad FloatRegs:$fs, FloatRegs:$ft, FloatRegs:$acc))]>;
+def MADDv4 : Upper1InstPS2VPU<0b101001, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft, VFRegs:$acc),
+                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, VFRegs:$acc))]>;
+
+
+let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
+def LQ : Lower7InstPS2VPU<0b0000000, (outs FloatRegs:$ft), (ins (MEMri $is, $simm11):$addr),
+                    "LQ $ft, $addr", [(set FloatRegs:$ft, (load ADDRri:$addr))]>;
+
+def LQv4 : Lower7InstPS2VPU<0b0000000, (outs VFRegs:$ft), (ins (MEMri $is, $simm11):$addr),
+                    "LQ $ft, $addr", [(set VFRegs:$ft, (load ADDRri:$addr))]>;
+
+let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
+def SQ : Lower7InstPS2VPU<0b0000001, (outs), (ins FloatRegs:$ft, (MEMri $is, $simm11):$addr),
+                    "SQ $ft, $addr", [(store FloatRegs:$ft, ADDRri:$addr)]>;
+                    
+def SQv4 : Lower7InstPS2VPU<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $simm11):$addr),
+                    "SQ $ft, $addr", [(store VFRegs:$ft, ADDRri:$addr)]>;
+
+let isCodeGenOnly = 1 in  
+def LOQI : Pseudo<(outs VFRegs:$fd), (ins f32imm:$a, f32imm:$b, f32imm:$c, f32imm:$d),
+            "; LOQI_PSEUDO PSEUDO!",
+            [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))]>;
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
@@ -1837,9 +1880,12 @@ let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTer
 //// Non-Instruction Patterns
 ////===----------------------------------------------------------------------===//
 
+def : Pat<(v4f32 immAllZerosV), // FIXME: that's wrong, VF0 is (0, 0, 0, 1)
+          (v4f32 VF0)>;
+
 // Zero immediate.
 def : Pat<(i16 0),
-          (IORrr (i16 VI0), (i16 VI0))>;
+          (i16 VI0)>;
 
 // Small immediates.
 def : Pat<(i16 simm5:$val),

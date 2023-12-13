@@ -21,6 +21,85 @@
 //  let Itinerary = itin;
 //}
 
+class UpperInst<dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Instruction {
+  field bits<32> Inst;
+
+  let Namespace = "PS2VPUNS";
+  let Size = 4;
+
+  dag OutOperandList = outs;
+  dag InOperandList = ins;
+  let AsmString   = asmstr;
+  let Pattern = pattern;
+
+  let DecoderNamespace = "PS2VPUNS";
+  field bits<32> SoftFail = 0;
+
+  let Itinerary = itin;
+}
+
+class Upper0InstPS2VPU<bits<4> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : UpperInst<outs, ins, asmstr, pattern, itin> {
+  bit I = 0;
+  bit E = 0;
+  bit M = 0;
+  bit D = 0;
+  bit T = 0;
+  bits<4> dest = 0;
+  bits<5> ft = 0;
+  bits<5> fs = 0;
+  bits<5> fd = 0;
+  bits<4> opcode = opval;
+  bits<2> bc = 0;
+
+  let Inst{31} = I;
+  let Inst{30} = E;
+  let Inst{29} = M;
+  let Inst{28} = D;
+  let Inst{27} = T;
+  let Inst{26} = 0;
+  let Inst{25} = 0;
+
+  let Inst{24-21} = dest;
+  let Inst{20-16} = ft;
+  let Inst{15-11} = fs;
+  let Inst{10-6} = fd;
+  let Inst{5-2} = opcode;
+  let Inst{1-0} = bc;
+}
+
+class Upper1InstPS2VPU<bits<6> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : UpperInst<outs, ins, asmstr, pattern, itin> {
+  bit I = 0;
+  bit E = 0;
+  bit M = 0;
+  bit D = 0;
+  bit T = 0;
+  bits<4> dest = 0;
+  bits<5> ft = 0;
+  bits<5> fs = 0;
+  bits<5> fd = 0;
+  bits<6> opcode = opval;
+
+  let Inst{31} = I;
+  let Inst{30} = E;
+  let Inst{29} = M;
+  let Inst{28} = D;
+  let Inst{27} = T;
+  let Inst{26} = 0;
+  let Inst{25} = 0;
+
+  let Inst{24-21} = dest;
+  let Inst{20-16} = ft;
+  let Inst{15-11} = fs;
+  let Inst{10-6} = fd;
+  let Inst{5-0} = opcode;
+}
+
 class InstSP<dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
    : Instruction {

@@ -22,6 +22,7 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/IR/Constants.h"
 
 using namespace llvm;
 
@@ -71,6 +72,8 @@ static MCOperand LowerOperand(const MachineInstr *MI, const MachineOperand &MO,
       break;
     return MCOperand::createReg(MO.getReg());
 
+  case MachineOperand::MO_FPImmediate:
+    return MCOperand::createSFPImm(MO.getFPImm()->getValue().bitcastToAPInt().getZExtValue());
   case MachineOperand::MO_Immediate:
     return MCOperand::createImm(MO.getImm());
 
