@@ -348,91 +348,26 @@ void PS2VPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator I,
                                  const DebugLoc &DL, MCRegister DestReg,
                                  MCRegister SrcReg, bool KillSrc) const {
-  //unsigned numSubRegs = 0;
-  //unsigned movOpc = 0;
-  //const unsigned *subRegIdx = nullptr;
-  //bool ExtraG0 = false;
-
-  //const unsigned DW_SubRegsIdx[] = {SP::sub_even, SP::sub_odd};
-  //const unsigned DFP_FP_SubRegsIdx[] = {SP::sub_even, SP::sub_odd};
-  //const unsigned QFP_DFP_SubRegsIdx[] = {SP::sub_even64, SP::sub_odd64};
-  //const unsigned QFP_FP_SubRegsIdx[] = {SP::sub_even, SP::sub_odd,
-  //                                      SP::sub_odd64_then_sub_even,
-  //                                      SP::sub_odd64_then_sub_odd};
-
-  //if (SP::IntRegsRegClass.contains(DestReg, SrcReg))
-  //  BuildMI(MBB, I, DL, get(SP::ORrr), DestReg)
-  //      .addReg(SP::G0)
-  //      .addReg(SrcReg, getKillRegState(KillSrc));
-  //else if (SP::IntPairRegClass.contains(DestReg, SrcReg)) {
-  //  subRegIdx = DW_SubRegsIdx;
-  //  numSubRegs = 2;
-  //  movOpc = SP::ORrr;
-  //  ExtraG0 = true;
-  //} else if (SP::FPRegsRegClass.contains(DestReg, SrcReg))
-  //  BuildMI(MBB, I, DL, get(SP::FMOVS), DestReg)
-  //      .addReg(SrcReg, getKillRegState(KillSrc));
-  //else if (SP::DFPRegsRegClass.contains(DestReg, SrcReg)) {
-  //  if (Subtarget.isV9()) {
-  //    BuildMI(MBB, I, DL, get(SP::FMOVD), DestReg)
-  //        .addReg(SrcReg, getKillRegState(KillSrc));
-  //  } else {
-  //    // Use two FMOVS instructions.
-  //    subRegIdx = DFP_FP_SubRegsIdx;
-  //    numSubRegs = 2;
-  //    movOpc = SP::FMOVS;
-  //  }
-  //} else if (SP::QFPRegsRegClass.contains(DestReg, SrcReg)) {
-  //  if (Subtarget.isV9()) {
-  //    if (Subtarget.hasHardQuad()) {
-  //      BuildMI(MBB, I, DL, get(SP::FMOVQ), DestReg)
-  //          .addReg(SrcReg, getKillRegState(KillSrc));
-  //    } else {
-  //      // Use two FMOVD instructions.
-  //      subRegIdx = QFP_DFP_SubRegsIdx;
-  //      numSubRegs = 2;
-  //      movOpc = SP::FMOVD;
-  //    }
-  //  } else {
-  //    // Use four FMOVS instructions.
-  //    subRegIdx = QFP_FP_SubRegsIdx;
-  //    numSubRegs = 4;
-  //    movOpc = SP::FMOVS;
-  //  }
-  //} else if (SP::ASRRegsRegClass.contains(DestReg) &&
-  //           SP::IntRegsRegClass.contains(SrcReg)) {
-  //  BuildMI(MBB, I, DL, get(SP::WRASRrr), DestReg)
-  //      .addReg(SP::G0)
-  //      .addReg(SrcReg, getKillRegState(KillSrc));
-  //} else if (SP::IntRegsRegClass.contains(DestReg) &&
-  //           SP::ASRRegsRegClass.contains(SrcReg)) {
-  //  BuildMI(MBB, I, DL, get(SP::RDASR), DestReg)
-  //      .addReg(SrcReg, getKillRegState(KillSrc));
-  //} else
-  //  llvm_unreachable("Impossible reg-to-reg copy");
-
-  //if (numSubRegs == 0 || subRegIdx == nullptr || movOpc == 0)
-  //  return;
-
-  //const TargetRegisterInfo *TRI = &getRegisterInfo();
-  //MachineInstr *MovMI = nullptr;
-
-  //for (unsigned i = 0; i != numSubRegs; ++i) {
-  //  Register Dst = TRI->getSubReg(DestReg, subRegIdx[i]);
-  //  Register Src = TRI->getSubReg(SrcReg, subRegIdx[i]);
-  //  assert(Dst && Src && "Bad sub-register");
-
-  //  MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(movOpc), Dst);
-  //  if (ExtraG0)
-  //    MIB.addReg(SP::G0);
-  //  MIB.addReg(Src);
-  //  MovMI = MIB.getInstr();
-  //}
-  //// Add implicit super-register defs and kills to the last MovMI.
-  //MovMI->addRegisterDefined(DestReg, TRI);
-  //if (KillSrc)
-  //  MovMI->addRegisterKilled(SrcReg, TRI);
-  return PS2VPUGenInstrInfo::copyPhysReg(MBB, I, DL, DestReg, SrcReg, KillSrc);
+  if (PS2VPUNS::IntRegsRegClass.contains(DestReg, SrcReg))
+    BuildMI(MBB, I, DL, get(PS2VPUNS::IORrr), DestReg)
+        .addReg(PS2VPUNS::VI0)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  else if (PS2VPUNS::VFRegsRegClass.contains(DestReg, SrcReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEv4), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  } else if (DestReg == PS2VPUNS::ACC &&
+             PS2VPUNS::VFRegsRegClass.contains(SrcReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAbcv4), DestReg)
+        .addReg(SrcReg, getKillRegState(KillSrc))
+        .addReg(PS2VPUNS::VF0x);
+  } else if (PS2VPUNS::VFRegsRegClass.contains(DestReg) &&
+             SrcReg == PS2VPUNS::I) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDiv4), DestReg)
+        .addReg(PS2VPUNS::VF0)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  }
+  else
+    llvm_unreachable("Impossible reg-to-reg copy");
 }
 
 void PS2VPUInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,

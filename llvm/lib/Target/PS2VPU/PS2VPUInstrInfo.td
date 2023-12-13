@@ -534,7 +534,7 @@ def IORrr : Lower1InstPS2VPU<0b110101, (outs IntRegs:$id), (ins IntRegs:$is, Int
 
 //// Pseudo instructions.
 class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
-   : InstSP<outs, ins, asmstr, pattern> {
+   : LowerInst<outs, ins, asmstr, pattern> {
   let isCodeGenOnly = 1;
   let isPseudo = 1;
 }
@@ -554,11 +554,20 @@ let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTer
 
 //// upper instructions
 
-let isCodeGenOnly = 1 in  
+let isCodeGenOnly = 1 in
 def ADD : Upper1InstPS2VPU<0b101000, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
                     "ADD $fd, $fs, $ft", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, FloatRegs:$ft))]>;
 def ADDv4 : Upper1InstPS2VPU<0b101000, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
                     "ADD $fd, $fs, $ft", [(set VFRegs:$fd, (fadd VFRegs:$fs, VFRegs:$ft))]>;
+def ADDAv4 : Upper3InstPS2VPU<0b01010111100, (outs ACCRegs:$acc), (ins VFRegs:$fs, VFRegs:$ft),
+                    "ADDA $acc, $fs, $ft", [(set ACCRegs:$acc, (fadd VFRegs:$fs, VFRegs:$ft))]>;
+let isCodeGenOnly = 1 in
+def ADDAbcv4 : Upper2InstPS2VPU<0b00000, (outs ACCRegs:$acc), (ins VFRegs:$fs, FloatRegs:$ft),
+                    "ADDAbc $acc, $fs, $ft", []>;//[(set ACCRegs:$acc, (fadd VFRegs:$fs, FloatRegs:$ft))]>;
+
+def ADDiv4 : Upper1InstPS2VPU<0b100010, (outs FloatRegs:$fd), (ins FloatRegs:$fs, IRegs:$i),
+                    "ADDi $fd, $fs, $i", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, IRegs:$i))]>;
+
 let isCodeGenOnly = 1 in  
 def MUL : Upper1InstPS2VPU<0b101010, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
                     "MUL $fd, $fs, $ft", [(set FloatRegs:$fd, (fmul FloatRegs:$fs, FloatRegs:$ft))]>;
@@ -569,11 +578,11 @@ def SUB : Upper1InstPS2VPU<0b101100, (outs FloatRegs:$fd), (ins FloatRegs:$fs, F
                     "SUB $fd, $fs, $ft", [(set FloatRegs:$fd, (fsub FloatRegs:$fs, FloatRegs:$ft))]>;
 def SUBv4 : Upper1InstPS2VPU<0b101100, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
                     "SUB $fd, $fs, $ft", [(set VFRegs:$fd, (fsub VFRegs:$fs, VFRegs:$ft))]>;    
-let isCodeGenOnly = 1 in  
-def MADD : Upper1InstPS2VPU<0b101001, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft, FloatRegs:$acc),
-                    "MADD $fd, $fs, $ft, $acc", [(set FloatRegs:$fd, (fmad FloatRegs:$fs, FloatRegs:$ft, FloatRegs:$acc))]>;
-def MADDv4 : Upper1InstPS2VPU<0b101001, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft, VFRegs:$acc),
-                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, VFRegs:$acc))]>;
+//let isCodeGenOnly = 1 in  
+//def MADD : Upper1InstPS2VPU<0b101001, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft, ACC),
+//                    "MADD $fd, $fs, $ft, ACC", [(set FloatRegs:$fd, (fmad FloatRegs:$fs, FloatRegs:$ft, ACC))]>;
+def MADDv4 : Upper1InstPS2VPU<0b101001, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc),
+                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc))]>;
 
 
 let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
@@ -591,9 +600,12 @@ def SQv4 : Lower7InstPS2VPU<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $sim
                     "SQ $ft, $addr", [(store VFRegs:$ft, ADDRri:$addr)]>;
 
 let isCodeGenOnly = 1 in  
-def LOQI : Pseudo<(outs VFRegs:$fd), (ins f32imm:$a, f32imm:$b, f32imm:$c, f32imm:$d),
-            "; LOQI_PSEUDO PSEUDO!",
+def LOI : Pseudo<(outs VFRegs:$fd), (ins f32imm:$a, f32imm:$b, f32imm:$c, f32imm:$d),
+            "; LOI PSEUDO! $fd, $a, $b, $c, $d",
             [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))]>;
+
+def MOVEv4 : Lower3InstPS2VPU<0b01100111100, (outs VFRegs:$ft), (ins VFRegs:$fs),
+                    "MOVE $ft, $fs", [(set VFRegs:$ft, VFRegs:$fs)]>;
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>

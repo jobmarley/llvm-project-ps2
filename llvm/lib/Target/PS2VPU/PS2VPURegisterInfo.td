@@ -161,66 +161,68 @@ def VF31y : FP32Reg<125, "VF31y">, DwarfRegNum<[125]>;
 def VF31z : FP32Reg<126, "VF31z">, DwarfRegNum<[126]>;
 def VF31w : FP32Reg<127, "VF31w">, DwarfRegNum<[127]>;
 
-def VF0 : VFReg<0, "VF0", [VF0x, VF0y, VF0z, VF0w]>, DwarfRegNum<[128]>;
-def VF1 : VFReg<1, "VF1", [VF1x, VF1y, VF1z, VF1w]>, DwarfRegNum<[129]>;
-def VF2 : VFReg<2, "VF2", [VF2x, VF2y, VF2z, VF2w]>, DwarfRegNum<[130]>;
-def VF3 : VFReg<3, "VF3", [VF3x, VF3y, VF3z, VF3w]>, DwarfRegNum<[131]>;
-def VF4 : VFReg<4, "VF4", [VF4x, VF4y, VF4z, VF4w]>, DwarfRegNum<[132]>;
-def VF5 : VFReg<5, "VF5", [VF5x, VF5y, VF5z, VF5w]>, DwarfRegNum<[133]>;
-def VF6 : VFReg<6, "VF6", [VF6x, VF6y, VF6z, VF6w]>, DwarfRegNum<[134]>;
-def VF7 : VFReg<7, "VF7", [VF7x, VF7y, VF7z, VF7w]>, DwarfRegNum<[135]>;
-def VF8 : VFReg<8, "VF8", [VF8x, VF8y, VF8z, VF8w]>, DwarfRegNum<[136]>;
-def VF9 : VFReg<9, "VF9", [VF9x, VF9y, VF9z, VF9w]>, DwarfRegNum<[137]>;
-def VF10 : VFReg<10, "VF10", [VF10x, VF10y, VF10z, VF10w]>, DwarfRegNum<[138]>;
-def VF11 : VFReg<11, "VF11", [VF11x, VF11y, VF11z, VF11w]>, DwarfRegNum<[139]>;
-def VF12 : VFReg<12, "VF12", [VF12x, VF12y, VF12z, VF12w]>, DwarfRegNum<[140]>;
-def VF13 : VFReg<13, "VF13", [VF13x, VF13y, VF13z, VF13w]>, DwarfRegNum<[141]>;
-def VF14 : VFReg<14, "VF14", [VF14x, VF14y, VF14z, VF14w]>, DwarfRegNum<[142]>;
-def VF15 : VFReg<15, "VF15", [VF15x, VF15y, VF15z, VF15w]>, DwarfRegNum<[143]>;
-def VF16 : VFReg<16, "VF16", [VF16x, VF16y, VF16z, VF16w]>, DwarfRegNum<[144]>;
-def VF17 : VFReg<17, "VF17", [VF17x, VF17y, VF17z, VF17w]>, DwarfRegNum<[145]>;
-def VF18 : VFReg<18, "VF18", [VF18x, VF18y, VF18z, VF18w]>, DwarfRegNum<[146]>;
-def VF19 : VFReg<19, "VF19", [VF19x, VF19y, VF19z, VF19w]>, DwarfRegNum<[147]>;
-def VF20 : VFReg<20, "VF20", [VF20x, VF20y, VF20z, VF20w]>, DwarfRegNum<[148]>;
-def VF21 : VFReg<21, "VF21", [VF21x, VF21y, VF21z, VF21w]>, DwarfRegNum<[149]>;
-def VF22 : VFReg<22, "VF22", [VF22x, VF22y, VF22z, VF22w]>, DwarfRegNum<[150]>;
-def VF23 : VFReg<23, "VF23", [VF23x, VF23y, VF23z, VF23w]>, DwarfRegNum<[151]>;
-def VF24 : VFReg<24, "VF24", [VF24x, VF24y, VF24z, VF24w]>, DwarfRegNum<[152]>;
-def VF25 : VFReg<25, "VF25", [VF25x, VF25y, VF25z, VF25w]>, DwarfRegNum<[153]>;
-def VF26 : VFReg<26, "VF26", [VF26x, VF26y, VF26z, VF26w]>, DwarfRegNum<[154]>;
-def VF27 : VFReg<27, "VF27", [VF27x, VF27y, VF27z, VF27w]>, DwarfRegNum<[155]>;
-def VF28 : VFReg<28, "VF28", [VF28x, VF28y, VF28z, VF28w]>, DwarfRegNum<[156]>;
-def VF29 : VFReg<29, "VF29", [VF29x, VF29y, VF29z, VF29w]>, DwarfRegNum<[157]>;
-def VF30 : VFReg<30, "VF30", [VF30x, VF30y, VF30z, VF30w]>, DwarfRegNum<[158]>;
-def VF31 : VFReg<31, "VF31", [VF31x, VF31y, VF31z, VF31w]>, DwarfRegNum<[159]>;
+// other registers
+def ACCx : FP32Reg<128, "ACCx">, DwarfRegNum<[128]>;
+def ACCy : FP32Reg<129, "ACCy">, DwarfRegNum<[129]>;
+def ACCz : FP32Reg<130, "ACCz">, DwarfRegNum<[130]>;
+def ACCw : FP32Reg<131, "ACCw">, DwarfRegNum<[131]>;
+def I : FP32Reg<132, "I">, DwarfRegNum<[132]>;
+def Q : FP32Reg<133, "Q">, DwarfRegNum<[133]>;
+def R : FP32Reg<134, "R">, DwarfRegNum<[134]>;
+def P : FP32Reg<135, "P">, DwarfRegNum<[135]>;
+
+def VF0 : VFReg<0, "VF0", [VF0x, VF0y, VF0z, VF0w]>, DwarfRegNum<[136]>;
+def VF1 : VFReg<1, "VF1", [VF1x, VF1y, VF1z, VF1w]>, DwarfRegNum<[137]>;
+def VF2 : VFReg<2, "VF2", [VF2x, VF2y, VF2z, VF2w]>, DwarfRegNum<[138]>;
+def VF3 : VFReg<3, "VF3", [VF3x, VF3y, VF3z, VF3w]>, DwarfRegNum<[139]>;
+def VF4 : VFReg<4, "VF4", [VF4x, VF4y, VF4z, VF4w]>, DwarfRegNum<[140]>;
+def VF5 : VFReg<5, "VF5", [VF5x, VF5y, VF5z, VF5w]>, DwarfRegNum<[141]>;
+def VF6 : VFReg<6, "VF6", [VF6x, VF6y, VF6z, VF6w]>, DwarfRegNum<[142]>;
+def VF7 : VFReg<7, "VF7", [VF7x, VF7y, VF7z, VF7w]>, DwarfRegNum<[143]>;
+def VF8 : VFReg<8, "VF8", [VF8x, VF8y, VF8z, VF8w]>, DwarfRegNum<[144]>;
+def VF9 : VFReg<9, "VF9", [VF9x, VF9y, VF9z, VF9w]>, DwarfRegNum<[145]>;
+def VF10 : VFReg<10, "VF10", [VF10x, VF10y, VF10z, VF10w]>, DwarfRegNum<[146]>;
+def VF11 : VFReg<11, "VF11", [VF11x, VF11y, VF11z, VF11w]>, DwarfRegNum<[147]>;
+def VF12 : VFReg<12, "VF12", [VF12x, VF12y, VF12z, VF12w]>, DwarfRegNum<[148]>;
+def VF13 : VFReg<13, "VF13", [VF13x, VF13y, VF13z, VF13w]>, DwarfRegNum<[149]>;
+def VF14 : VFReg<14, "VF14", [VF14x, VF14y, VF14z, VF14w]>, DwarfRegNum<[150]>;
+def VF15 : VFReg<15, "VF15", [VF15x, VF15y, VF15z, VF15w]>, DwarfRegNum<[151]>;
+def VF16 : VFReg<16, "VF16", [VF16x, VF16y, VF16z, VF16w]>, DwarfRegNum<[152]>;
+def VF17 : VFReg<17, "VF17", [VF17x, VF17y, VF17z, VF17w]>, DwarfRegNum<[153]>;
+def VF18 : VFReg<18, "VF18", [VF18x, VF18y, VF18z, VF18w]>, DwarfRegNum<[154]>;
+def VF19 : VFReg<19, "VF19", [VF19x, VF19y, VF19z, VF19w]>, DwarfRegNum<[155]>;
+def VF20 : VFReg<20, "VF20", [VF20x, VF20y, VF20z, VF20w]>, DwarfRegNum<[156]>;
+def VF21 : VFReg<21, "VF21", [VF21x, VF21y, VF21z, VF21w]>, DwarfRegNum<[157]>;
+def VF22 : VFReg<22, "VF22", [VF22x, VF22y, VF22z, VF22w]>, DwarfRegNum<[158]>;
+def VF23 : VFReg<23, "VF23", [VF23x, VF23y, VF23z, VF23w]>, DwarfRegNum<[159]>;
+def VF24 : VFReg<24, "VF24", [VF24x, VF24y, VF24z, VF24w]>, DwarfRegNum<[160]>;
+def VF25 : VFReg<25, "VF25", [VF25x, VF25y, VF25z, VF25w]>, DwarfRegNum<[161]>;
+def VF26 : VFReg<26, "VF26", [VF26x, VF26y, VF26z, VF26w]>, DwarfRegNum<[162]>;
+def VF27 : VFReg<27, "VF27", [VF27x, VF27y, VF27z, VF27w]>, DwarfRegNum<[163]>;
+def VF28 : VFReg<28, "VF28", [VF28x, VF28y, VF28z, VF28w]>, DwarfRegNum<[164]>;
+def VF29 : VFReg<29, "VF29", [VF29x, VF29y, VF29z, VF29w]>, DwarfRegNum<[165]>;
+def VF30 : VFReg<30, "VF30", [VF30x, VF30y, VF30z, VF30w]>, DwarfRegNum<[166]>;
+def VF31 : VFReg<31, "VF31", [VF31x, VF31y, VF31z, VF31w]>, DwarfRegNum<[167]>;
+def ACC : VFReg<32, "ACC", [ACCx, ACCy, ACCz, ACCw]>, DwarfRegNum<[168]>;
 
 // Integer registers
-def VI0 : Integer16Reg<0, "VI0">, DwarfRegNum<[160]>;
-def VI1 : Integer16Reg<1, "VI1">, DwarfRegNum<[161]>;
-def VI2 : Integer16Reg<2, "VI2">, DwarfRegNum<[162]>;
-def VI3 : Integer16Reg<3, "VI3">, DwarfRegNum<[163]>;
-def VI4 : Integer16Reg<4, "VI4">, DwarfRegNum<[164]>;
-def VI5 : Integer16Reg<5, "VI5">, DwarfRegNum<[165]>;
-def VI6 : Integer16Reg<6, "VI6">, DwarfRegNum<[166]>;
-def VI7 : Integer16Reg<7, "VI7">, DwarfRegNum<[167]>;
-def VI8 : Integer16Reg<8, "VI8">, DwarfRegNum<[168]>;
-def VI9 : Integer16Reg<9, "VI9">, DwarfRegNum<[169]>;
-def VI10 : Integer16Reg<10, "VI10">, DwarfRegNum<[170]>;
-def VI11 : Integer16Reg<11, "VI11">, DwarfRegNum<[171]>;
-def VI12 : Integer16Reg<12, "VI12">, DwarfRegNum<[172]>;
-def VI13 : Integer16Reg<13, "VI13">, DwarfRegNum<[173]>;
-def VI14 : Integer16Reg<14, "VI14">, DwarfRegNum<[174]>;
-def VI15 : Integer16Reg<15, "VI15">, DwarfRegNum<[175]>;
+def VI0 : Integer16Reg<0, "VI0">, DwarfRegNum<[169]>;
+def VI1 : Integer16Reg<1, "VI1">, DwarfRegNum<[170]>;
+def VI2 : Integer16Reg<2, "VI2">, DwarfRegNum<[171]>;
+def VI3 : Integer16Reg<3, "VI3">, DwarfRegNum<[172]>;
+def VI4 : Integer16Reg<4, "VI4">, DwarfRegNum<[173]>;
+def VI5 : Integer16Reg<5, "VI5">, DwarfRegNum<[174]>;
+def VI6 : Integer16Reg<6, "VI6">, DwarfRegNum<[175]>;
+def VI7 : Integer16Reg<7, "VI7">, DwarfRegNum<[176]>;
+def VI8 : Integer16Reg<8, "VI8">, DwarfRegNum<[177]>;
+def VI9 : Integer16Reg<9, "VI9">, DwarfRegNum<[178]>;
+def VI10 : Integer16Reg<10, "VI10">, DwarfRegNum<[179]>;
+def VI11 : Integer16Reg<11, "VI11">, DwarfRegNum<[180]>;
+def VI12 : Integer16Reg<12, "VI12">, DwarfRegNum<[181]>;
+def VI13 : Integer16Reg<13, "VI13">, DwarfRegNum<[182]>;
+def VI14 : Integer16Reg<14, "VI14">, DwarfRegNum<[183]>;
+def VI15 : Integer16Reg<15, "VI15">, DwarfRegNum<[184]>;
 
-// other registers
-def ACCx : FP32Reg<128, "ACCx">, DwarfRegNum<[176]>;
-def ACCy : FP32Reg<129, "ACCy">, DwarfRegNum<[177]>;
-def ACCz : FP32Reg<130, "ACCz">, DwarfRegNum<[178]>;
-def ACCw : FP32Reg<131, "ACCw">, DwarfRegNum<[179]>;
-def I : FP32Reg<132, "I">, DwarfRegNum<[180]>;
-def Q : FP32Reg<133, "Q">, DwarfRegNum<[181]>;
-def R : FP32Reg<134, "R">, DwarfRegNum<[182]>;
-def P : FP32Reg<135, "P">, DwarfRegNum<[183]>;
 
 
 // Registers are identified with 5-bit ID numbers.
@@ -557,9 +559,15 @@ def FloatRegs : RegisterClass<"PS2VPUNS", [f32], 32,
          VF29x, VF29y, VF29z, VF29w,
          VF30x, VF30y, VF30z, VF30w,
          VF31x, VF31y, VF31z, VF31w)>;
-
+         
 def VFRegs : RegisterClass<"PS2VPUNS", [v4f32], 128,
                             (add (sequence "VF%u", 0, 31))>;
+
+def IRegs : RegisterClass<"PS2VPUNS", [f32], 32,
+                            (add I)>;
+
+def ACCRegs : RegisterClass<"PS2VPUNS", [v4f32], 128,
+                            (add ACC)>;
 
 // Should be in the same order as IntRegs.
 //def IntPair : RegisterClass<"SP", [v2i32], 64,

@@ -133,7 +133,11 @@ void PS2VPUInstPrinter::printOperand(const MCInst *MI, int opNum,
     printRegName(O, MO.getReg());
     return;
   }
-
+  if (MO.isSFPImm())
+  {
+    O << APInt(32, static_cast<uint64_t>(MO.getSFPImm())).bitsToFloat();
+    return;
+  }
   if (MO.isImm()) {
     switch (MI->getOpcode()) {
     default:
