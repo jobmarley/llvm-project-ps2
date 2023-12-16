@@ -36,8 +36,8 @@ PS2VPUSubtarget::PS2VPUSubtarget(const Triple &TT, const std::string &CPU,
                                const std::string &FS, const TargetMachine &TM,
                                bool is64Bit)
     : PS2VPUGenSubtargetInfo(TT, CPU, /*TuneCPU*/ CPU, FS), TargetTriple(TT),
-      InstrInfo(initializeSubtargetDependencies(CPU, FS)),
-      TLInfo(TM, *this), FrameLowering(*this) {}
+      InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this),
+      FrameLowering(*this), InstrItins(getInstrItineraryForCPU("generic")) {}
 
 int PS2VPUSubtarget::getAdjustedFrameSize(int frameSize) const {
 

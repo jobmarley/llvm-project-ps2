@@ -26,6 +26,8 @@
 using namespace llvm;
 
 #define GET_INSTRINFO_CTOR_DTOR
+//#include "PS2VPUDepTimingClasses.h"
+#include "PS2VPUGenDFAPacketizer.inc"
 #include "PS2VPUGenInstrInfo.inc"
 
 // Pin the vtable to this file.
@@ -518,4 +520,9 @@ bool PS2VPUInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   //}
   //}
   return false;
+}
+DFAPacketizer *PS2VPUInstrInfo::CreateTargetScheduleState(
+    const TargetSubtargetInfo &STI) const {
+  const InstrItineraryData *II = STI.getInstrItineraryData();
+  return static_cast<const PS2VPUSubtarget &>(STI).createDFAPacketizer(II);
 }

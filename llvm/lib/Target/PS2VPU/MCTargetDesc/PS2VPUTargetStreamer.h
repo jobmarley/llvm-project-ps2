@@ -35,6 +35,9 @@ public:
   PS2VPUTargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
   void emitPS2VPURegisterIgnore(unsigned reg) override;
   void emitPS2VPURegisterScratch(unsigned reg) override;
+  void prettyPrintAsm(MCInstPrinter &InstPrinter, uint64_t Address,
+                              const MCInst &Inst, const MCSubtargetInfo &STI,
+                              raw_ostream &OS) override;
 };
 
 // This part is for ELF object output

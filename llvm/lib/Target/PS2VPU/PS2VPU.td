@@ -73,10 +73,14 @@ def PS2VPUAsmParser : AsmParser {
 // SPARC processors supported.
 //===----------------------------------------------------------------------===//
 
-class Proc<string Name, list<SubtargetFeature> Features>
- : Processor<Name, NoItineraries, Features>;
+//class Proc<string Name, list<SubtargetFeature> Features>
+// : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"generic",         []>;
+include "PS2VPUSchedEE.td"
+
+def : ProcessorModel<"generic", PS2VPUEEModel, [], []>; 
+//def : Processor<"generic", EEVU_Itineraries, []>; 
+
 //def : Proc<"v7",              [FeatureSoftMulDiv, FeatureNoFSMULD]>;
 //def : Proc<"v8",              []>;
 //def : Proc<"supersparc",      []>;

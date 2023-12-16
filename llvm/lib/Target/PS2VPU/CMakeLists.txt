@@ -6,6 +6,7 @@ tablegen(LLVM PS2VPUGenAsmMatcher.inc -gen-asm-matcher)
 tablegen(LLVM PS2VPUGenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM PS2VPUGenCallingConv.inc -gen-callingconv)
 tablegen(LLVM PS2VPUGenDAGISel.inc -gen-dag-isel)
+tablegen(LLVM PS2VPUGenDFAPacketizer.inc -gen-dfa-packetizer)
 tablegen(LLVM PS2VPUGenDisassemblerTables.inc -gen-disassembler)
 tablegen(LLVM PS2VPUGenInstrInfo.inc -gen-instr-info)
 tablegen(LLVM PS2VPUGenMCCodeEmitter.inc -gen-emitter)
@@ -25,6 +26,8 @@ add_llvm_target(PS2VPUCodeGen
   PS2VPUSubtarget.cpp
   PS2VPUTargetMachine.cpp
   PS2VPUTargetTransformInfo.cpp
+  PS2VPUConvergingVLIWScheduler.cpp
+  PS2VPUVLIWPacketizer.cpp
 
   PS2VPUMCInstLower.cpp
   PS2VPUTargetObjectFile.cpp

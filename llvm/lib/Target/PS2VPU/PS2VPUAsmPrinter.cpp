@@ -14,6 +14,7 @@
 #include "MCTargetDesc/PS2VPUInstPrinter.h"
 #include "MCTargetDesc/PS2VPUMCExpr.h"
 #include "MCTargetDesc/PS2VPUTargetStreamer.h"
+#include "MCTargetDesc/PS2VPUMCInstrInfo.h"
 #include "PS2VPU.h"
 #include "PS2VPUInstrInfo.h"
 #include "PS2VPUTargetMachine.h"
@@ -41,11 +42,23 @@ class PS2VPUAsmPrinter : public AsmPrinter {
     return static_cast<PS2VPUTargetStreamer &>(
         *OutStreamer->getTargetStreamer());
   }
+  const PS2VPUSubtarget *Subtarget = nullptr;
+
+
 
 public:
   explicit PS2VPUAsmPrinter(TargetMachine &TM,
                            std::unique_ptr<MCStreamer> Streamer)
       : AsmPrinter(TM, std::move(Streamer)) {}
+
+  bool runOnMachineFunction(MachineFunction &Fn) override {
+    Subtarget = &Fn.getSubtarget<PS2VPUSubtarget>();
+    const bool Modified = AsmPrinter::runOnMachineFunction(Fn);
+    // Emit the XRay table for this function.
+    emitXRayTable();
+
+    return Modified;
+  }
 
   StringRef getPassName() const override { return "PS2VPU Assembly Printer"; }
 
@@ -222,27 +235,115 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
 //  EmitADD(*OutStreamer, MCRegOP, RegO7, MCRegOP, STI);
 //}
 
+// Create an MCInst from a MachineInstr
+void PS2VPULowerToMC(const MCInstrInfo &MCII, const MachineInstr *MI,
+                            MCInst &MCB, PS2VPUAsmPrinter &AP) {
+  MCInst *MCI = AP.OutContext.createMCInst();
+  MCI->setOpcode(MI->getOpcode());
+  assert(MCI->getOpcode() == static_cast<unsigned>(MI->getOpcode()) &&
+         "MCI opcode should have been set on construction");
+
+  for (const MachineOperand &MO : MI->operands()) {
+    MCOperand MCO;
+
+    switch (MO.getType()) {
+    default:
+      MI->print(errs());
+      llvm_unreachable("unknown operand type");
+    case MachineOperand::MO_RegisterMask:
+      continue;
+    case MachineOperand::MO_Register:
+      // Ignore all implicit register operands.
+      if (MO.isImplicit())
+        continue;
+      MCO = MCOperand::createReg(MO.getReg());
+      break;
+    case MachineOperand::MO_FPImmediate: {
+      APFloat Val = MO.getFPImm()->getValueAPF();
+      // FP immediates are used only when setting GPRs, so they may be dealt
+      // with like regular immediates from this point on.
+     /* auto Expr = PS2VPUMCExpr::create(
+          PS2VPUMCExpr::VariantKind::VK_PS2VPU_None,
+          MCConstantExpr::create(*Val.bitcastToAPInt().getRawData(),
+                                 AP.OutContext),
+          AP.OutContext);
+      MCO = MCOperand::createExpr(Expr);*/
+      MCO = MCOperand::createSFPImm(*Val.bitcastToAPInt().getRawData());
+      break;
+    }
+    case MachineOperand::MO_Immediate: {
+      /*auto Expr = PS2VPUMCExpr::create(
+          PS2VPUMCExpr::VariantKind::VK_PS2VPU_None,
+          MCConstantExpr::create(MO.getImm(), AP.OutContext), AP.OutContext);
+      MCO = MCOperand::createExpr(Expr);*/
+      MCO = MCOperand::createImm(MO.getImm());
+      break;
+    }
+    case MachineOperand::MO_MachineBasicBlock: {
+      MCExpr const *Expr =
+          MCSymbolRefExpr::create(MO.getMBB()->getSymbol(), AP.OutContext);
+      Expr = PS2VPUMCExpr::create(PS2VPUMCExpr::VariantKind::VK_PS2VPU_None,
+                                  Expr, AP.OutContext);
+      MCO = MCOperand::createExpr(Expr);
+      break;
+    }
+    /*case MachineOperand::MO_GlobalAddress:
+      MCO = GetSymbolRef(MO, AP.getSymbol(MO.getGlobal()), AP, MustExtend);
+      break;
+    case MachineOperand::MO_ExternalSymbol:
+      MCO = GetSymbolRef(MO, AP.GetExternalSymbolSymbol(MO.getSymbolName()), AP,
+                         MustExtend);
+      break;
+    case MachineOperand::MO_JumpTableIndex:
+      MCO = GetSymbolRef(MO, AP.GetJTISymbol(MO.getIndex()), AP, MustExtend);
+      break;
+    case MachineOperand::MO_ConstantPoolIndex:
+      MCO = GetSymbolRef(MO, AP.GetCPISymbol(MO.getIndex()), AP, MustExtend);
+      break;
+    case MachineOperand::MO_BlockAddress:
+      MCO = GetSymbolRef(MO, AP.GetBlockAddressSymbol(MO.getBlockAddress()), AP,
+                         MustExtend);
+      break;*/
+    }
+
+    MCI->addOperand(MCO);
+  }
+  /*AP.HexagonProcessInstruction(*MCI, *MI);*/
+  MCB.addOperand(MCOperand::createInst(MCI));
+}
+
 void PS2VPUAsmPrinter::emitInstruction(const MachineInstr *MI) {
   PS2VPU_MC::verifyInstructionPredicates(MI->getOpcode(),
                                         getSubtargetInfo().getFeatureBits());
+  MCInst MCB;
+  MCB.setOpcode(PS2VPUNS::BUNDLE);
+  MCB.addOperand(MCOperand::createImm(0));
+  const MCInstrInfo &MCII = *Subtarget->getInstrInfo();
 
-  switch (MI->getOpcode()) {
-  default:
-    break;
-  case TargetOpcode::DBG_VALUE:
-    // FIXME: Debug Value.
-    return;
-  /*case SP::GETPCX:
-    LowerGETPCXAndEmitMCInsts(MI, getSubtargetInfo());
-    return;*/
+  if (MI->isBundle()) {
+    const MachineBasicBlock *MBB = MI->getParent();
+    MachineBasicBlock::const_instr_iterator MII = MI->getIterator();
+
+    for (++MII; MII != MBB->instr_end() && MII->isInsideBundle(); ++MII)
+      if (!MII->isDebugInstr() && !MII->isImplicitDef())
+        PS2VPULowerToMC(MCII, &*MII, MCB, *this);
+  } else {
+    PS2VPULowerToMC(MCII, MI, MCB, *this);
   }
-  MachineBasicBlock::const_instr_iterator I = MI->getIterator();
-  MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
-  do {
-    MCInst TmpInst;
-    LowerPS2VPUMachineInstrToMCInst(&*I, TmpInst, *this);
-    EmitToStreamer(*OutStreamer, TmpInst);
-  } while ((++I != E) && I->isInsideBundle()); // Delay slot check.
+
+  const MachineFunction &MF = *MI->getParent()->getParent();
+  const auto &HII = *MF.getSubtarget<PS2VPUSubtarget>().getInstrInfo();
+  //if (MI->isBundle() && HII.getBundleNoShuf(*MI))
+  //  PS2VPUMCInstrInfo::setMemReorderDisabled(MCB);
+
+  MCContext &Ctx = OutStreamer->getContext();
+  /*bool Ok = PS2VPUMCInstrInfo::canonicalizePacket(MCII, *Subtarget, Ctx, MCB,
+                                                   nullptr);
+  assert(Ok);
+  (void)Ok;*/
+  if (PS2VPUMCInstrInfo::bundleSize(MCB) == 0)
+    return;
+  OutStreamer->emitInstruction(MCB, getSubtargetInfo());
 }
 
 void PS2VPUAsmPrinter::emitFunctionBodyStart() {

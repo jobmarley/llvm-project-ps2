@@ -18,6 +18,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/raw_ostream.h"
+#include "PS2VPUMCInstrInfo.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -41,10 +42,13 @@ void PS2VPUInstPrinter::printRegName(raw_ostream &OS, MCRegister Reg) const {
 void PS2VPUInstPrinter::printInst(const MCInst *MI, uint64_t Address,
                                  StringRef Annot, const MCSubtargetInfo &STI,
                                  raw_ostream &O) {
-  if (!printAliasInstr(MI, Address, STI, O) &&
-      !printPS2VPUAliasInstr(MI, STI, O))
-    printInstruction(MI, Address, STI, O);
-  printAnnotation(O, Annot);
+  assert(PS2VPUMCInstrInfo::isBundle(*MI));
+  assert(PS2VPUMCInstrInfo::bundleSize(*MI) > 0);
+  for (auto const &I : PS2VPUMCInstrInfo::bundleInstructions(*MI)) {
+    MCInst const &MCI = *I.getInst();
+    printInstruction(&MCI, Address, STI, O);
+    O << "\n";
+  }
 }
 
 bool PS2VPUInstPrinter::printPS2VPUAliasInstr(const MCInst *MI,

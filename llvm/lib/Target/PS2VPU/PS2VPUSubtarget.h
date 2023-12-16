@@ -30,6 +30,7 @@ class PS2VPUSubtarget : public PS2VPUGenSubtargetInfo {
   PS2VPUTargetLowering TLInfo;
   SelectionDAGTargetInfo TSInfo;
   PS2VPUFrameLowering FrameLowering;
+  InstrItineraryData InstrItins;
 
 public:
   PS2VPUSubtarget(const Triple &TT, const std::string &CPU,
@@ -66,6 +67,12 @@ public:
   int getAdjustedFrameSize(int stackSize) const;
 
   bool isTargetLinux() const { return TargetTriple.isOSLinux(); }
+
+  /// getInstrItins - Return the instruction itineraries based on subtarget
+  /// selection.
+  const InstrItineraryData *getInstrItineraryData() const override {
+    return &InstrItins;
+  }
 };
 
 } // end namespace llvm

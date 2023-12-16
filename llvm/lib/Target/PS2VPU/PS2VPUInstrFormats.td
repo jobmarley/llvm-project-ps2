@@ -38,11 +38,15 @@ class UpperInst<dag outs, dag ins, string asmstr, list<dag> pattern,
   field bits<32> SoftFail = 0;
 
   let Itinerary = itin;
+  
+  let TSFlags{63} = 1;
 }
 
 class Upper0InstPS2VPU<bits<4> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : UpperInst<outs, ins, asmstr, pattern, itin> {
+   : UpperInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteFPReg]>
+{
   bit I = 0;
   bit E = 0;
   bit M = 0;
@@ -73,7 +77,9 @@ class Upper0InstPS2VPU<bits<4> opval, dag outs, dag ins, string asmstr, list<dag
 
 class Upper1InstPS2VPU<bits<6> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : UpperInst<outs, ins, asmstr, pattern, itin> {
+   : UpperInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteFPReg]>
+{
   bit I = 0;
   bit E = 0;
   bit M = 0;
@@ -102,7 +108,9 @@ class Upper1InstPS2VPU<bits<6> opval, dag outs, dag ins, string asmstr, list<dag
 
 class Upper2InstPS2VPU<bits<5> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : UpperInst<outs, ins, asmstr, pattern, itin> {
+   : UpperInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteFPReg]>
+{
   bit I = 0;
   bit E = 0;
   bit M = 0;
@@ -132,7 +140,9 @@ class Upper2InstPS2VPU<bits<5> opval, dag outs, dag ins, string asmstr, list<dag
 
 class Upper3InstPS2VPU<bits<11> opval, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : UpperInst<outs, ins, asmstr, pattern, itin> {
+   : UpperInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteFPReg]>
+{
   bit I = 0;
   bit E = 0;
   bit M = 0;
@@ -181,7 +191,9 @@ class LowerInst<dag outs, dag ins, string asmstr, list<dag> pattern,
 
 class Lower1InstPS2VPU<bits<6> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : LowerInst<outs, ins, asmstr, pattern, itin> {
+   : LowerInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteIReg]>
+{
   bits<6> op2 = op2Val;
   bits<4> dest = 0;
   bits<5> it = 0;
@@ -208,9 +220,46 @@ class Lower3InstPS2VPU<bits<11> op2Val, dag outs, dag ins, string asmstr, list<d
   let Inst{10-6} = op2{10-6};
 }
 
+// load/store register or increment
+class LoadStore3<bits<11> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower3InstPS2VPU<op2Val, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteLS]>
+{
+}
+// Move between registers (FP or IR or Q etc)
+class MoveInstr<bits<11> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower3InstPS2VPU<op2Val, outs, ins, asmstr, pattern, itin>
+   //,Sched<[]>
+{
+}
+// Does stuff with random numbers
+class RandInstr<bits<11> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower3InstPS2VPU<op2Val, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteRand]>
+{
+}
+// special case for waitP, latency of 0 but wait until P is written
+class WaitPInstr<bits<11> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower3InstPS2VPU<op2Val, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteWaitP]>
+{
+}
+// special case for waitQ, latency of 0 but wait until Q is written
+class WaitQInstr<bits<11> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower3InstPS2VPU<op2Val, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteWaitQ]>
+{
+}
 class Lower5InstPS2VPU<bits<6> op2Val, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
-   : LowerInst<outs, ins, asmstr, pattern, itin> {
+   : LowerInst<outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteIReg]>
+{
   bits<5> it = 0;
   bits<5> is = 0;
   let lowerOP = 0b1000000;
@@ -236,7 +285,18 @@ class Lower7InstPS2VPU<bits<7> lowerOpVal, dag outs, dag ins, string asmstr, lis
   let Inst{15-11} = is;
   let Inst{10-0} = imm11;
 }
-
+class LoadStore7<bits<7> lowerOpVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower7InstPS2VPU<lowerOpVal, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteLS]> 
+{
+}
+class BranchInstr<bits<7> lowerOpVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+             InstrItinClass itin = NoItinerary>
+   : Lower7InstPS2VPU<lowerOpVal, outs, ins, asmstr, pattern, itin>
+   //,Sched<[WriteBR]>
+{
+}
 class Lower8InstPS2VPU<bits<6> lowerOpVal, dag outs, dag ins, string asmstr, list<dag> pattern,
              InstrItinClass itin = NoItinerary>
    : LowerInst<outs, ins, asmstr, pattern, itin> {

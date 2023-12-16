@@ -7,6 +7,7 @@ add_llvm_component_library(LLVMPS2VPUDesc
   PS2VPUMCTargetDesc.cpp
   PS2VPUMCExpr.cpp
   PS2VPUTargetStreamer.cpp
+  PS2VPUMCInstrInfo.cpp
 
   LINK_COMPONENTS
   MC

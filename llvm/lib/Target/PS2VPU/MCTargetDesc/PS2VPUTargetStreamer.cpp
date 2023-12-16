@@ -37,6 +37,29 @@ void PS2VPUTargetAsmStreamer::emitPS2VPURegisterScratch(unsigned reg) {
      << "%" << StringRef(PS2VPUInstPrinter::getRegisterName(reg)).lower()
      << ", #scratch\n";
 }
+void PS2VPUTargetAsmStreamer::prettyPrintAsm(MCInstPrinter &InstPrinter,
+                                           uint64_t Address,
+    const MCInst& Inst, const MCSubtargetInfo& STI,
+    raw_ostream& OS)
+{
+  std::string Buffer;
+  {
+    raw_string_ostream TempStream(Buffer);
+    InstPrinter.printInst(&Inst, Address, "", STI, TempStream);
+  }
+  StringRef Contents(Buffer);
+  auto PacketBundle = Contents.rsplit('\n');
+  auto HeadTail = PacketBundle.first.split('\n');
+  StringRef Separator = "\n";
+  StringRef Indent = "\t";
+  OS << "\t{\n";
+  while (!HeadTail.first.empty()) {
+    OS << Indent << HeadTail.first << Separator;
+    HeadTail = HeadTail.second.split('\n');
+  }
+
+    OS << "\t}" << PacketBundle.second;
+}
 
 PS2VPUTargetELFStreamer::PS2VPUTargetELFStreamer(MCStreamer &S)
     : PS2VPUTargetStreamer(S) {}

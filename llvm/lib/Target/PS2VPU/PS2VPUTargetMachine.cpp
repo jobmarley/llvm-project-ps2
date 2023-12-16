@@ -6,15 +6,26 @@
 #include "TargetInfo/ps2vpuTargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/VLIWMachineScheduler.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "PS2VPUTargetTransformInfo.h"
+#include "PS2VPUConvergingVLIWScheduler.h"
 using namespace llvm;
+
+namespace llvm
+{
+void initializePS2VPUPacketizerPass(PassRegistry &);
+FunctionPass *createPS2VPUPacketizer(bool Minimal);
+}
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializePS2VPUTarget() {
   // Register the target.
   RegisterTargetMachine<PS2VPUTargetMachine> X(getThePS2VPUTarget());
+
+  PassRegistry &PR = *PassRegistry::getPassRegistry();
+  initializePS2VPUPacketizerPass(PR);
 }
 
 static std::string computeDataLayout(const Triple &T) {
@@ -148,6 +159,18 @@ public:
   void addIRPasses() override;
   bool addInstSelector() override;
   void addPreEmitPass() override;
+
+   ScheduleDAGInstrs *
+  createMachineScheduler(MachineSchedContext *C) const override {
+    ScheduleDAGMILive *DAG = new VLIWMachineScheduler(
+        C, std::make_unique<PS2VPUConvergingVLIWScheduler>());
+    /*DAG->addMutation(std::make_unique<HexagonSubtarget::UsrOverflowMutation>());
+    DAG->addMutation(
+        std::make_unique<HexagonSubtarget::HVXMemLatencyMutation>());
+    DAG->addMutation(std::make_unique<HexagonSubtarget::CallMutation>());
+    DAG->addMutation(createCopyConstrainDAGMutation(DAG->TII, DAG->TRI));*/
+    return DAG;
+  }
 };
 } // namespace
 
@@ -173,6 +196,7 @@ bool PS2VPUPassConfig::addInstSelector() {
 }
 
 void PS2VPUPassConfig::addPreEmitPass() {
+  bool NoOpt = (getOptLevel() == CodeGenOptLevel::None);
   //addPass(createPS2VPUDelaySlotFillerPass());
 
   //if (this->getPS2VPUTargetMachine().getSubtargetImpl()->insertNOPLoad()) {
@@ -184,5 +208,8 @@ void PS2VPUPassConfig::addPreEmitPass() {
   //if (this->getPS2VPUTargetMachine().getSubtargetImpl()->fixAllFDIVSQRT()) {
   //  addPass(new FixAllFDIVSQRT());
   //}
+  // 
+  // Packetization is mandatory: it handles gather/scatter at all opt levels.
+  addPass(createPS2VPUPacketizer(NoOpt));
 }
 

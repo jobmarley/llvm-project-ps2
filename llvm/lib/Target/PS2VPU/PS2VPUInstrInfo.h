@@ -91,6 +91,9 @@ public:
 
   //// Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
+
+  DFAPacketizer *
+  CreateTargetScheduleState(const TargetSubtargetInfo &STI) const override;
 };
 
 } // namespace llvm

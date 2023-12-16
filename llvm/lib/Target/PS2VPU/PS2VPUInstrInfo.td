@@ -478,63 +478,63 @@ def CPCC_012 : CPCC_VAL<47>;  // 0 or 1 or 2
 
 
 let isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in {
-  def Jr : Lower7InstPS2VPU<0b0100100, (outs), (ins IntRegs:$r),
-                    "JR $r", [(retflag i16:$r)]>;
+  def Jr : BranchInstr<0b0100100, (outs), (ins IntRegs:$r),
+                    "JR $r", [(retflag i16:$r)], IIC_branch_instr>;
 }
 
 
 let isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
 {
-  def Bi : Lower7InstPS2VPU<0b0100000, (outs), (ins brtarget:$imm11),
-                      "B $imm11", [(br bb:$imm11)]>;
+  def Bi : BranchInstr<0b0100000, (outs), (ins brtarget:$imm11),
+                      "B $imm11", [(br bb:$imm11)], IIC_branch_instr>;
                       
-  def IBEQ : Lower7InstPS2VPU<0b0101000, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
-                    "IBEQ $it, $is, $imm11", [(brcc SETEQ, IntRegs:$it, IntRegs:$is, bb:$imm11)]>;
+  def IBEQ : BranchInstr<0b0101000, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
+                    "IBEQ $it, $is, $imm11", [(brcc SETEQ, IntRegs:$it, IntRegs:$is, bb:$imm11)], IIC_branch_instr>;
 
-  def IBNE : Lower7InstPS2VPU<0b0101001, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
-                    "IBNE $it, $is, $imm11", [(brcc SETNE, IntRegs:$it, IntRegs:$is, bb:$imm11)]>;
+  def IBNE : BranchInstr<0b0101001, (outs), (ins IntRegs:$it, IntRegs:$is, brtarget:$imm11),
+                    "IBNE $it, $is, $imm11", [(brcc SETNE, IntRegs:$it, IntRegs:$is, bb:$imm11)], IIC_branch_instr>;
                     
-  def IBLTZ : Lower7InstPS2VPU<0b0101100, (outs), (ins IntRegs:$it, brtarget:$imm11),
-                    "IBLTZ $it, $imm11", [(brcc SETLT, IntRegs:$it, 0, bb:$imm11)]>;
+  def IBLTZ : BranchInstr<0b0101100, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBLTZ $it, $imm11", [(brcc SETLT, IntRegs:$it, 0, bb:$imm11)], IIC_branch_instr>;
 
-  def IBLEZ : Lower7InstPS2VPU<0b0101110, (outs), (ins IntRegs:$it, brtarget:$imm11),
-                    "IBLEZ $it, $imm11", [(brcc SETLE, IntRegs:$it, 0, bb:$imm11)]>;
+  def IBLEZ : BranchInstr<0b0101110, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBLEZ $it, $imm11", [(brcc SETLE, IntRegs:$it, 0, bb:$imm11)], IIC_branch_instr>;
                     
-  def IBGTZ : Lower7InstPS2VPU<0b0101101, (outs), (ins IntRegs:$it, brtarget:$imm11),
-                    "IBGTZ $it, $imm11", [(brcc SETGT, IntRegs:$it, 0, bb:$imm11)]>;
+  def IBGTZ : BranchInstr<0b0101101, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBGTZ $it, $imm11", [(brcc SETGT, IntRegs:$it, 0, bb:$imm11)], IIC_branch_instr>;
 
-  def IBGEZ : Lower7InstPS2VPU<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
-                    "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)]>;
+  def IBGEZ : BranchInstr<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
+                    "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)], IIC_branch_instr>;
 }
-def ILW : Lower7InstPS2VPU<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is, $simm13):$addr),
-                    "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))]>;
+def ILW : LoadStore7<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                    "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))], IIC_ldst_instr>;
 
-def ISW : Lower7InstPS2VPU<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is, $simm13):$addr),
-                    "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)]>;
+def ISW : LoadStore7<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is, $simm13):$addr),
+                    "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)], IIC_ldst_instr>;
 
 def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
-                    "IADD $id, $is, $it", [(set IntRegs:$id, (add IntRegs:$is, IntRegs:$it))]>;
+                    "IADD $id, $is, $it", [(set IntRegs:$id, (add IntRegs:$is, IntRegs:$it))], IIC_ialu_instr>;
 
 def IADDri : Lower5InstPS2VPU<0b110010, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm5),
-                    "IADDI $it, $is, $imm5", [(set IntRegs:$it, (add IntRegs:$is, (i16 simm5:$imm5)))]>;
+                    "IADDI $it, $is, $imm5", [(set IntRegs:$it, (add IntRegs:$is, (i16 simm5:$imm5)))], IIC_ialu_instr>;
 
 def IADDUri : Lower8InstPS2VPU<0b001000, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
-                    "IADDIU $it, $is, $imm15", [(set IntRegs:$it, (add IntRegs:$is, imm:$imm15))]>;
+                    "IADDIU $it, $is, $imm15", [(set IntRegs:$it, (add IntRegs:$is, imm:$imm15))], IIC_ialu_instr>;
 
 
 def ISUBrr : Lower1InstPS2VPU<0b110001, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
-                    "ISUB $id, $is, $it", [(set IntRegs:$id, (sub IntRegs:$is, IntRegs:$it))]>;
+                    "ISUB $id, $is, $it", [(set IntRegs:$id, (sub IntRegs:$is, IntRegs:$it))], IIC_ialu_instr>;
                     
 def ISUBUri : Lower8InstPS2VPU<0b001001, (outs IntRegs:$it), (ins IntRegs:$is, i16imm:$imm15),
-                    "ISUBIU $it, $is, $imm15", [(set IntRegs:$it, (sub IntRegs:$is, imm:$imm15))]>;
+                    "ISUBIU $it, $is, $imm15", [(set IntRegs:$it, (sub IntRegs:$is, imm:$imm15))], IIC_ialu_instr>;
 
                     
 def IORrr : Lower1InstPS2VPU<0b110101, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
-                    "IOR $id, $is, $it", [(set IntRegs:$id, (or IntRegs:$is, IntRegs:$it))]>;
+                    "IOR $id, $is, $it", [(set IntRegs:$id, (or IntRegs:$is, IntRegs:$it))], IIC_ialu_instr>;
 
 //// Pseudo instructions.
-class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
-   : LowerInst<outs, ins, asmstr, pattern> {
+class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass itin = NoItinerary>
+   : LowerInst<outs, ins, asmstr, pattern, itin> {
   let isCodeGenOnly = 1;
   let isPseudo = 1;
 }
@@ -556,56 +556,56 @@ let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTer
 
 let isCodeGenOnly = 1 in
 def ADD : Upper1InstPS2VPU<0b101000, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
-                    "ADD $fd, $fs, $ft", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, FloatRegs:$ft))]>;
+                    "ADD $fd, $fs, $ft", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, FloatRegs:$ft))], IIC_fmac_instr>;
 def ADDv4 : Upper1InstPS2VPU<0b101000, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
-                    "ADD $fd, $fs, $ft", [(set VFRegs:$fd, (fadd VFRegs:$fs, VFRegs:$ft))]>;
+                    "ADD $fd, $fs, $ft", [(set VFRegs:$fd, (fadd VFRegs:$fs, VFRegs:$ft))], IIC_fmac_instr>;
 def ADDAv4 : Upper3InstPS2VPU<0b01010111100, (outs ACCRegs:$acc), (ins VFRegs:$fs, VFRegs:$ft),
-                    "ADDA $acc, $fs, $ft", [(set ACCRegs:$acc, (fadd VFRegs:$fs, VFRegs:$ft))]>;
+                    "ADDA $acc, $fs, $ft", [(set ACCRegs:$acc, (fadd VFRegs:$fs, VFRegs:$ft))], IIC_fmac_instr>;
 let isCodeGenOnly = 1 in
 def ADDAbcv4 : Upper2InstPS2VPU<0b00000, (outs ACCRegs:$acc), (ins VFRegs:$fs, FloatRegs:$ft),
-                    "ADDAbc $acc, $fs, $ft", []>;//[(set ACCRegs:$acc, (fadd VFRegs:$fs, FloatRegs:$ft))]>;
+                    "ADDAbc $acc, $fs, $ft", [], IIC_fmac_instr>;//[(set ACCRegs:$acc, (fadd VFRegs:$fs, FloatRegs:$ft))]>;
 
 def ADDiv4 : Upper1InstPS2VPU<0b100010, (outs FloatRegs:$fd), (ins FloatRegs:$fs, IRegs:$i),
-                    "ADDi $fd, $fs, $i", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, IRegs:$i))]>;
+                    "ADDi $fd, $fs, $i", [(set FloatRegs:$fd, (fadd FloatRegs:$fs, IRegs:$i))], IIC_fmac_instr>;
 
 let isCodeGenOnly = 1 in  
 def MUL : Upper1InstPS2VPU<0b101010, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
-                    "MUL $fd, $fs, $ft", [(set FloatRegs:$fd, (fmul FloatRegs:$fs, FloatRegs:$ft))]>;
+                    "MUL $fd, $fs, $ft", [(set FloatRegs:$fd, (fmul FloatRegs:$fs, FloatRegs:$ft))], IIC_fmac_instr>;
 def MULv4 : Upper1InstPS2VPU<0b101010, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
-                    "MUL $fd, $fs, $ft", [(set VFRegs:$fd, (fmul VFRegs:$fs, VFRegs:$ft))]>;
+                    "MUL $fd, $fs, $ft", [(set VFRegs:$fd, (fmul VFRegs:$fs, VFRegs:$ft))], IIC_fmac_instr>;
 let isCodeGenOnly = 1 in  
 def SUB : Upper1InstPS2VPU<0b101100, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft),
-                    "SUB $fd, $fs, $ft", [(set FloatRegs:$fd, (fsub FloatRegs:$fs, FloatRegs:$ft))]>;
+                    "SUB $fd, $fs, $ft", [(set FloatRegs:$fd, (fsub FloatRegs:$fs, FloatRegs:$ft))], IIC_fmac_instr>;
 def SUBv4 : Upper1InstPS2VPU<0b101100, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft),
-                    "SUB $fd, $fs, $ft", [(set VFRegs:$fd, (fsub VFRegs:$fs, VFRegs:$ft))]>;    
+                    "SUB $fd, $fs, $ft", [(set VFRegs:$fd, (fsub VFRegs:$fs, VFRegs:$ft))], IIC_fmac_instr>;    
 //let isCodeGenOnly = 1 in  
 //def MADD : Upper1InstPS2VPU<0b101001, (outs FloatRegs:$fd), (ins FloatRegs:$fs, FloatRegs:$ft, ACC),
 //                    "MADD $fd, $fs, $ft, ACC", [(set FloatRegs:$fd, (fmad FloatRegs:$fs, FloatRegs:$ft, ACC))]>;
 def MADDv4 : Upper1InstPS2VPU<0b101001, (outs VFRegs:$fd), (ins VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc),
-                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc))]>;
+                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc))], IIC_fmac_instr>;
 
 
 let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
-def LQ : Lower7InstPS2VPU<0b0000000, (outs FloatRegs:$ft), (ins (MEMri $is, $simm11):$addr),
-                    "LQ $ft, $addr", [(set FloatRegs:$ft, (load ADDRri:$addr))]>;
+def LQ : LoadStore7<0b0000000, (outs FloatRegs:$ft), (ins (MEMri $is, $simm11):$addr),
+                    "LQ $ft, $addr", [(set FloatRegs:$ft, (load ADDRri:$addr))], IIC_ldst_instr>;
 
-def LQv4 : Lower7InstPS2VPU<0b0000000, (outs VFRegs:$ft), (ins (MEMri $is, $simm11):$addr),
-                    "LQ $ft, $addr", [(set VFRegs:$ft, (load ADDRri:$addr))]>;
+def LQv4 : LoadStore7<0b0000000, (outs VFRegs:$ft), (ins (MEMri $is, $simm11):$addr),
+                    "LQ $ft, $addr", [(set VFRegs:$ft, (load ADDRri:$addr))], IIC_ldst_instr>;
 
 let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
-def SQ : Lower7InstPS2VPU<0b0000001, (outs), (ins FloatRegs:$ft, (MEMri $is, $simm11):$addr),
-                    "SQ $ft, $addr", [(store FloatRegs:$ft, ADDRri:$addr)]>;
+def SQ : LoadStore7<0b0000001, (outs), (ins FloatRegs:$ft, (MEMri $is, $simm11):$addr),
+                    "SQ $ft, $addr", [(store FloatRegs:$ft, ADDRri:$addr)], IIC_ldst_instr>;
                     
-def SQv4 : Lower7InstPS2VPU<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $simm11):$addr),
-                    "SQ $ft, $addr", [(store VFRegs:$ft, ADDRri:$addr)]>;
+def SQv4 : LoadStore7<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $simm11):$addr),
+                    "SQ $ft, $addr", [(store VFRegs:$ft, ADDRri:$addr)], IIC_ldst_instr>;
 
 let isCodeGenOnly = 1 in  
 def LOI : Pseudo<(outs VFRegs:$fd), (ins f32imm:$a, f32imm:$b, f32imm:$c, f32imm:$d),
             "; LOI PSEUDO! $fd, $a, $b, $c, $d",
-            [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))]>;
+            [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))], IIC_loi_instr>;
 
-def MOVEv4 : Lower3InstPS2VPU<0b01100111100, (outs VFRegs:$ft), (ins VFRegs:$fs),
-                    "MOVE $ft, $fs", [(set VFRegs:$ft, VFRegs:$fs)]>;
+def MOVEv4 : MoveInstr<0b01100111100, (outs VFRegs:$ft), (ins VFRegs:$fs),
+                    "MOVE $ft, $fs", [(set VFRegs:$ft, VFRegs:$fs)], IIC_fmac_instr>;
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
