@@ -25,56 +25,14 @@ class MachineLoopInfo;
 class TargetRegisterClass;
 
 class PS2VPUPacketizerList : public VLIWPacketizerList {
-  // Vector of instructions assigned to the packet that has just been created.
-  std::vector<MachineInstr *> OldPacketMIs;
-
-  // Has the instruction been promoted to a dot-new instruction.
-  bool PromotedToDotNew;
-
-  // Has the instruction been glued to allocframe.
-  bool GlueAllocframeStore;
-
-  // Has the feeder instruction been glued to new value jump.
-  bool GlueToNewValueJump;
-
-  // This holds the offset value, when pruning the dependences.
-  int64_t ChangedOffset;
-
-  // Check if there is a dependence between some instruction already in this
-  // packet and this instruction.
-  bool Dependence;
-
-  // Only check for dependence if there are resources available to
-  // schedule this instruction.
-  bool FoundSequentialDependence;
-
-  bool MemShufDisabled = false;
-
-  // Track MIs with ignored dependence.
-  std::vector<MachineInstr *> IgnoreDepMIs;
-
-  // Set to true if the packet contains an instruction that stalls with an
-  // instruction from the previous packet.
-  bool PacketStalls = false;
-  // Set to the number of cycles of stall a given instruction will incur
-  // because of dependence on instruction in previous packet.
-  unsigned int PacketStallCycles = 0;
-
-  // Set to true if the packet has a duplex pair of sub-instructions.
-  bool PacketHasDuplex = false;
-
-  // Set to true if the packet has a instruction that can only be executed
-  // in SLOT0.
-  bool PacketHasSLOT0OnlyInsn = false;
-
 protected:
   /// A handle to the branch probability pass.
   const MachineBranchProbabilityInfo *MBPI;
   const MachineLoopInfo *MLI;
 
 private:
-  const PS2VPUInstrInfo *HII;
-  const PS2VPURegisterInfo *HRI;
+  const PS2VPUInstrInfo *TII;
+  const PS2VPURegisterInfo *TRI;
   const bool Minimal;
 
 public:

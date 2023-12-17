@@ -1,6 +1,6 @@
 add_llvm_component_library(LLVMPS2VPUDesc
   PS2VPUAsmBackend.cpp
-  PS2VPUELFObjectWriter.cpp
+  PS2VPUElfObjectWriter.cpp
   PS2VPUInstPrinter.cpp
   PS2VPUMCAsmInfo.cpp
   PS2VPUMCCodeEmitter.cpp

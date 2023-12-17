@@ -134,8 +134,8 @@ PS2VPUPacketizerList::PS2VPUPacketizerList(
     MachineFunction &MF, MachineLoopInfo &MLI, AAResults *AA,
     const MachineBranchProbabilityInfo *MBPI, bool Minimal)
     : VLIWPacketizerList(MF, MLI, AA), MBPI(MBPI), MLI(&MLI), Minimal(Minimal) {
-  HII = MF.getSubtarget<PS2VPUSubtarget>().getInstrInfo();
-  HRI = MF.getSubtarget<PS2VPUSubtarget>().getRegisterInfo();
+  TII = MF.getSubtarget<PS2VPUSubtarget>().getInstrInfo();
+  TRI = MF.getSubtarget<PS2VPUSubtarget>().getRegisterInfo();
 
   //addMutation(std::make_unique<PS2VPUSubtarget::UsrOverflowMutation>());
   //addMutation(std::make_unique<PS2VPUSubtarget::HVXMemLatencyMutation>());
@@ -277,12 +277,6 @@ bool PS2VPUPacketizer::runOnMachineFunction(MachineFunction &MF) {
 
 // Initialize packetizer flags.
 void PS2VPUPacketizerList::initPacketizerState() {
-  Dependence = false;
-  PromotedToDotNew = false;
-  GlueToNewValueJump = false;
-  GlueAllocframeStore = false;
-  FoundSequentialDependence = false;
-  ChangedOffset = INT64_MAX;
 }
 
 // Ignore bundling of pseudo instructions.
@@ -411,49 +405,51 @@ PS2VPUPacketizerList::addToPacket(MachineInstr &MI) {
 
 void PS2VPUPacketizerList::endPacket(MachineBasicBlock *MBB,
                                       MachineBasicBlock::iterator EndMI) {
-  VLIWPacketizerList::endPacket(MBB, EndMI);
-  //// Replace VLIWPacketizerList::endPacket(MBB, EndMI).
-  //LLVM_DEBUG({
-  //  if (!CurrentPacketMIs.empty()) {
-  //    dbgs() << "Finalizing packet:\n";
-  //    unsigned Idx = 0;
-  //    for (MachineInstr *MI : CurrentPacketMIs) {
-  //      unsigned R = ResourceTracker->getUsedResources(Idx++);
-  //      dbgs() << " * [res:0x" << utohexstr(R) << "] " << *MI;
-  //    }
-  //  }
-  //});
 
-  //bool memShufDisabled = getmemShufDisabled();
-  //if (memShufDisabled && !foundLSInPacket()) {
-  //  setmemShufDisabled(false);
-  //  LLVM_DEBUG(dbgs() << "  Not added to NoShufPacket\n");
-  //}
-  //memShufDisabled = getmemShufDisabled();
+    LLVM_DEBUG({
+    if (!CurrentPacketMIs.empty()) {
+      dbgs() << "Finalizing packet:\n";
+      unsigned Idx = 0;
+      for (MachineInstr *MI : CurrentPacketMIs) {
+        unsigned R = ResourceTracker->getUsedResources(Idx++);
+        dbgs() << " * [res:0x" << utohexstr(R) << "] " << *MI;
+      }
+    }
+  });
 
-  //OldPacketMIs.clear();
-  //for (MachineInstr *MI : CurrentPacketMIs) {
-  //  MachineBasicBlock::instr_iterator NextMI = std::next(MI->getIterator());
-  //  /*for (auto &I : make_range(HII->expandVGatherPseudo(*MI), NextMI))
-  //    OldPacketMIs.push_back(&I);*/
-  //}
-  //CurrentPacketMIs.clear();
+  // Add NOP instructions if bundle is incomplete
+  if (CurrentPacketMIs.size() == 1) {
+    llvm::MachineInstr &MI1 = *CurrentPacketMIs[0];
+    const llvm::DebugLoc &dl = CurrentPacketMIs[0]->getDebugLoc();
+    if (isLowerInstruction(MI1)) {
+      auto MI2 = BuildMI(*MBB, MI1.getIterator(), dl, TII->get(PS2VPUNS::NOP));
+      CurrentPacketMIs.insert(CurrentPacketMIs.begin(), MI2);
+    } else {
+      auto MI2 =
+          BuildMI(*MBB, EndMI, dl, TII->get(PS2VPUNS::MOVEv4), PS2VPUNS::VF0)
+              .addReg(PS2VPUNS::VF0);
+      CurrentPacketMIs.push_back(MI2);
+    }
+  }
 
-  //if (OldPacketMIs.size() > 1) {
-  //  MachineBasicBlock::instr_iterator FirstMI(OldPacketMIs.front());
-  //  MachineBasicBlock::instr_iterator LastMI(EndMI.getInstrIterator());
-  //  finalizeBundle(*MBB, FirstMI, LastMI);
-  //  auto BundleMII = std::prev(FirstMI);
-  //  /*if (memShufDisabled)
-  //    HII->setBundleNoShuf(BundleMII);*/
+  // Reorder if in wrong order
+  if (CurrentPacketMIs.size() == 2) {
+    if (isLowerInstruction(*CurrentPacketMIs[0])) {
+      MBB->splice(CurrentPacketMIs[0]->getIterator(), MBB,
+                  CurrentPacketMIs[1]->getIterator());
+      std::swap(CurrentPacketMIs[0], CurrentPacketMIs[1]);
+    }
+  }
 
-  //  setmemShufDisabled(false);
-  //}
+  if (CurrentPacketMIs.size() > 1) {
+    MachineBasicBlock::instr_iterator FirstMI(CurrentPacketMIs.front());
+    MachineBasicBlock::instr_iterator LastMI(EndMI.getInstrIterator());
+    finalizeBundle(*MBB, FirstMI, LastMI);
+  }
 
-  //PacketHasDuplex = false;
-  //PacketHasSLOT0OnlyInsn = false;
-  //ResourceTracker->clearResources();
-  //LLVM_DEBUG(dbgs() << "End packet\n");
+  CurrentPacketMIs.clear();
+  ResourceTracker->clearResources();
+  LLVM_DEBUG(dbgs() << "End packet\n");
 }
 
 bool PS2VPUPacketizerList::shouldAddToPacket(const MachineInstr &MI) {

@@ -35,7 +35,7 @@ def IIC_fmac_instr : InstrItinClass;
 def IIC_ialu_instr : InstrItinClass;
 def IIC_ldst_instr : InstrItinClass;
 def IIC_branch_instr : InstrItinClass;
-def IIC_loi_instr : InstrItinClass;
+def IIC_nop_4cycle_instr : InstrItinClass;
 
 
 def VU_FMAC : FuncUnit;
@@ -53,6 +53,6 @@ def EEVU_Itineraries : ProcessorItineraries<
   InstrItinData<IIC_ialu_instr, [InstrStage<1, [VU_IALU]>], [1, 1]>,
   InstrItinData<IIC_ldst_instr, [InstrStage<1, [VU_LSU]>], [4, 1]>,
   InstrItinData<IIC_branch_instr, [InstrStage<1, [VU_BRU]>], [2, 1]>,
-  InstrItinData<IIC_loi_instr, [InstrStage<1, [VU_NOP]>], [1, 1]>,
+  InstrItinData<IIC_nop_4cycle_instr, [InstrStage<1, [VU_NOP]>], [4, 1]>,
 
 ]>;

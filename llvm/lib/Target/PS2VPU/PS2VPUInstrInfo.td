@@ -601,11 +601,15 @@ def SQv4 : LoadStore7<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $simm11):$
 
 let isCodeGenOnly = 1 in  
 def LOI : Pseudo<(outs VFRegs:$fd), (ins f32imm:$a, f32imm:$b, f32imm:$c, f32imm:$d),
-            "; LOI PSEUDO! $fd, $a, $b, $c, $d",
-            [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))], IIC_loi_instr>;
+            "LOI $fd, $a, $b, $c, $d",
+            [(set VFRegs:$fd, (build_vector (f32 fpimm:$a), (f32 fpimm:$b), (f32 fpimm:$c), (f32 fpimm:$d)))], IIC_ialu_instr>;
 
 def MOVEv4 : MoveInstr<0b01100111100, (outs VFRegs:$ft), (ins VFRegs:$fs),
-                    "MOVE $ft, $fs", [(set VFRegs:$ft, VFRegs:$fs)], IIC_fmac_instr>;
+                    "MOVE $ft, $fs", [(set VFRegs:$ft, VFRegs:$fs)], IIC_nop_4cycle_instr>;
+
+let isCodeGenOnly = 1 in
+def NOP  : Upper3InstPS2VPU<0b01011111111, (outs), (ins),
+                    "NOP", [], IIC_fmac_instr>;
 
 //// Pseudo instructions.
 //class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>

@@ -260,22 +260,10 @@ void PS2VPULowerToMC(const MCInstrInfo &MCII, const MachineInstr *MI,
       break;
     case MachineOperand::MO_FPImmediate: {
       APFloat Val = MO.getFPImm()->getValueAPF();
-      // FP immediates are used only when setting GPRs, so they may be dealt
-      // with like regular immediates from this point on.
-     /* auto Expr = PS2VPUMCExpr::create(
-          PS2VPUMCExpr::VariantKind::VK_PS2VPU_None,
-          MCConstantExpr::create(*Val.bitcastToAPInt().getRawData(),
-                                 AP.OutContext),
-          AP.OutContext);
-      MCO = MCOperand::createExpr(Expr);*/
       MCO = MCOperand::createSFPImm(*Val.bitcastToAPInt().getRawData());
       break;
     }
     case MachineOperand::MO_Immediate: {
-      /*auto Expr = PS2VPUMCExpr::create(
-          PS2VPUMCExpr::VariantKind::VK_PS2VPU_None,
-          MCConstantExpr::create(MO.getImm(), AP.OutContext), AP.OutContext);
-      MCO = MCOperand::createExpr(Expr);*/
       MCO = MCOperand::createImm(MO.getImm());
       break;
     }
