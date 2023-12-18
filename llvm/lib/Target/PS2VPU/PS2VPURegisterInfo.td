@@ -560,11 +560,29 @@ def FloatRegs : RegisterClass<"PS2VPUNS", [f32], 32,
          VF30x, VF30y, VF30z, VF30w,
          VF31x, VF31y, VF31z, VF31w)>;
          
+def FloatXRegs : RegisterClass<"PS2VPUNS", [f32], 128,
+    (add (sequence "VF%u"#"x", 0, 31))>;
+def FloatYRegs : RegisterClass<"PS2VPUNS", [f32], 32,
+    (add (sequence "VF%u"#"y", 0, 31))>;
+def FloatZRegs : RegisterClass<"PS2VPUNS", [f32], 64,
+    (add (sequence "VF%u"#"z", 0, 31))>;
+def FloatWRegs : RegisterClass<"PS2VPUNS", [f32], 96,
+    (add (sequence "VF%u"#"w", 0, 31))>;
+
 def VFRegs : RegisterClass<"PS2VPUNS", [v4f32], 128,
                             (add (sequence "VF%u", 0, 31))>;
 
 def IRegs : RegisterClass<"PS2VPUNS", [f32], 32,
                             (add I)>;
+                            
+def ACCxRegs : RegisterClass<"PS2VPUNS", [f32], 128,
+                            (add ACCx)>;
+def ACCyRegs : RegisterClass<"PS2VPUNS", [f32], 32,
+                            (add ACCy)>;
+def ACCzRegs : RegisterClass<"PS2VPUNS", [f32], 64,
+                            (add ACCz)>;
+def ACCwRegs : RegisterClass<"PS2VPUNS", [f32], 96,
+                            (add ACCw)>;
 
 def ACCRegs : RegisterClass<"PS2VPUNS", [v4f32], 128,
                             (add ACC)>;

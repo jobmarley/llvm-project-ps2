@@ -17,7 +17,7 @@
 #include <string>
 
 #define GET_SUBTARGETINFO_HEADER
-#include "ps2vpuGenSubtargetInfo.inc"
+#include "PS2VPUGenSubtargetInfo.inc"
 
 namespace llvm {
 class StringRef;

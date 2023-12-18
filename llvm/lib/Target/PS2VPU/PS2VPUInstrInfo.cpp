@@ -350,24 +350,79 @@ void PS2VPUInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                  MachineBasicBlock::iterator I,
                                  const DebugLoc &DL, MCRegister DestReg,
                                  MCRegister SrcReg, bool KillSrc) const {
-  if (PS2VPUNS::IntRegsRegClass.contains(DestReg, SrcReg))
+  // INT16 <= INT16 
+    if (PS2VPUNS::IntRegsRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(PS2VPUNS::IORrr), DestReg)
         .addReg(PS2VPUNS::VI0)
         .addReg(SrcReg, getKillRegState(KillSrc));
+  // FP32.xyzw <= FP32.xyzw 
   else if (PS2VPUNS::VFRegsRegClass.contains(DestReg, SrcReg)) {
     BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEv4), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc));
+    // ACC.xyzw <= FP32.xyzw 
   } else if (DestReg == PS2VPUNS::ACC &&
              PS2VPUNS::VFRegsRegClass.contains(SrcReg)) {
     BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAbcv4), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(PS2VPUNS::VF0x);
+    // FP32.xyzw <= I
   } else if (PS2VPUNS::VFRegsRegClass.contains(DestReg) &&
              SrcReg == PS2VPUNS::I) {
     BuildMI(MBB, I, DL, get(PS2VPUNS::ADDiv4), DestReg)
         .addReg(PS2VPUNS::VF0)
         .addReg(SrcReg, getKillRegState(KillSrc));
+
+  // FP32.x/y/z/w <= FP32.x/y/z/w
+  } else if (PS2VPUNS::FloatRegsRegClass.contains(DestReg, SrcReg)) {
+    if (PS2VPUNS::FloatXRegsRegClass.contains(DestReg, SrcReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEx), DestReg)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatYRegsRegClass.contains(DestReg, SrcReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEy), DestReg)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatZRegsRegClass.contains(DestReg, SrcReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEz), DestReg)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatWRegsRegClass.contains(DestReg, SrcReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::MOVEw), DestReg)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatXRegsRegClass.contains(DestReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::ADDbcx), DestReg)
+          .addReg(PS2VPUNS::VF0x)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatYRegsRegClass.contains(DestReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::ADDbcy), DestReg)
+          .addReg(PS2VPUNS::VF0y)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } else if (PS2VPUNS::FloatZRegsRegClass.contains(DestReg)) {
+      BuildMI(MBB, I, DL, get(PS2VPUNS::ADDbcz), DestReg)
+          .addReg(PS2VPUNS::VF0z)
+          .addReg(SrcReg, getKillRegState(KillSrc));
+    } //
+    // FIXME: dont have FP32.w <= FP32.x/y/z because its difficult.
+    // we cannot use ADDbc with VF0 because VF0.w is 1.0.
+    // MR32 only works for z
   }
+  // ACC.x/y/z/w <= FP32.x/y/z/w
+  else if (PS2VPUNS::ACCxRegsRegClass.contains(DestReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAbcx), DestReg)
+        .addReg(PS2VPUNS::VF0x)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  } else if (PS2VPUNS::ACCyRegsRegClass.contains(DestReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAbcy), DestReg)
+        .addReg(PS2VPUNS::VF0y)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  } else if (PS2VPUNS::ACCzRegsRegClass.contains(DestReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAbcz), DestReg)
+        .addReg(PS2VPUNS::VF0z)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  } /*else if (PS2VPUNS::ACCwRegsRegClass.contains(DestReg)) {
+    BuildMI(MBB, I, DL, get(PS2VPUNS::ADDAwbc), DestReg)
+        .addReg(PS2VPUNS::VF0w)
+        .addReg(SrcReg, getKillRegState(KillSrc));
+  }*/
+  // FIXME: cannot do ACC.w <= FPR32.x/y/z, need to do reg A.w <= 0, ACC.w <=
+  // ADDbc(A.w, SrcReg.x/y/z)
   else
     llvm_unreachable("Impossible reg-to-reg copy");
 }

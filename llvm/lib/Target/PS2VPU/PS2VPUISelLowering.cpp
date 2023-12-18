@@ -1192,7 +1192,7 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
 
   // Set up the register classes.
   addRegisterClass(MVT::i16, &PS2VPUNS::IntRegsRegClass);
-  addRegisterClass(MVT::v4f32, &PS2VPUNS::FloatRegsRegClass);
+  addRegisterClass(MVT::v4f32, &PS2VPUNS::VFRegsRegClass);
   addRegisterClass(MVT::f32, &PS2VPUNS::FloatRegsRegClass);
   /*setOperationAction(ISD::FrameIndex, MVT::i32, Expand);*/
   //if (!Subtarget->useSoftFloat()) {
@@ -1210,7 +1210,7 @@ PS2VPUTargetLowering::PS2VPUTargetLowering(const TargetMachine &TM,
    for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
     setOperationAction(Op, MVT::i32, Expand);
   }
-
+  
   // ...but almost all operations must be expanded, so set that as
   // the default.
   for (unsigned Op = 0; Op < ISD::BUILTIN_OP_END; ++Op) {
