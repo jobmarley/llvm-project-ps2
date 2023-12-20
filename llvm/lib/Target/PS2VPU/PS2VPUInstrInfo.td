@@ -117,6 +117,10 @@ def SETHIimm_not : PatLeaf<(i32 imm), [{
 // Addressing modes.
 def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
 def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
+def ADDRrix : ComplexPattern<iPTR, 2, "SelectADDRrix", [], []>;
+def ADDRriy : ComplexPattern<iPTR, 2, "SelectADDRriy", [], []>;
+def ADDRriz : ComplexPattern<iPTR, 2, "SelectADDRriz", [], []>;
+def ADDRriw : ComplexPattern<iPTR, 2, "SelectADDRriw", [], []>;
 
 // Constrained operands for the shift operations.
 class ShiftAmtImmAsmOperand<int Bits> : AsmOperandClass {
@@ -373,7 +377,104 @@ def CPCC_012 : CPCC_VAL<47>;  // 0 or 1 or 2
 // Instructions
 //===----------------------------------------------------------------------===//
 
-
+multiclass VecLoad7<string OpcStr, bits<7> OpVal, RegisterClass RC, InstrItinClass itin> {
+    def x : LoadStore7<OpVal, (outs RC:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".x $dst, $addr"),
+                [(set IntRegs:$dst, (load ADDRrix:$addr))],
+                0b1000,
+                itin>;
+    def y : LoadStore7<OpVal, (outs RC:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".y $dst, $addr"),
+                [(set IntRegs:$dst, (load ADDRriy:$addr))],
+                0b0100,
+                itin>;
+    def z : LoadStore7<OpVal, (outs RC:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".z $dst, $addr"),
+                [(set IntRegs:$dst, (load ADDRriz:$addr))],
+                0b0010,
+                itin>;
+    def w : LoadStore7<OpVal, (outs RC:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".w $dst, $addr"),
+                [(set IntRegs:$dst, (load ADDRriw:$addr))],
+                0b0001,
+                itin>;
+}
+multiclass VecStore7<string OpcStr, bits<7> OpVal, RegisterClass RC, InstrItinClass itin> {
+    def x : LoadStore7<OpVal, (outs), (ins RC:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".x $src, $addr"),
+                [(store RC:$src, ADDRrix:$addr)],
+                0b1000,
+                itin>;
+    def y : LoadStore7<OpVal, (outs), (ins RC:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".y $src, $addr"),
+                [(store RC:$src, ADDRriy:$addr)], 
+                0b0100,
+                itin>;
+    def z : LoadStore7<OpVal, (outs), (ins RC:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".z $src, $addr"),
+                [(store RC:$src, ADDRriz:$addr)],
+                0b0010,
+                itin>;
+    def w : LoadStore7<OpVal, (outs), (ins RC:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".w $src, $addr"),
+                [(store RC:$src, ADDRriw:$addr)],
+                0b0001,
+                itin>;
+}
+multiclass VecLoadFloat7<string OpcStr, bits<7> OpVal, InstrItinClass itin> {
+    def x : LoadStore7<OpVal, (outs FloatXRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".x $dst, $addr"),
+                [(set FloatXRegs:$dst, (load ADDRrix:$addr))],
+                0b1000,
+                itin>;
+    def y : LoadStore7<OpVal, (outs FloatYRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".y $dst, $addr"),
+                [(set FloatYRegs:$dst, (load ADDRriy:$addr))],
+                0b0100,
+                itin>;
+    def z : LoadStore7<OpVal, (outs FloatZRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".z $dst, $addr"),
+                [(set FloatZRegs:$dst, (load ADDRriz:$addr))],
+                0b0010,
+                itin>;
+    def w : LoadStore7<OpVal, (outs FloatWRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".w $dst, $addr"),
+                [(set FloatWRegs:$dst, (load ADDRriw:$addr))],
+                0b0001,
+                itin>;
+    def v4 : LoadStore7<OpVal, (outs VFRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".xyzw $dst, $addr"),
+                [(set VFRegs:$dst, (load ADDRri:$addr))],
+                0b1111,
+                itin>;
+}
+multiclass VecStoreFloat7<string OpcStr, bits<7> OpVal, InstrItinClass itin> {
+    def x : LoadStore7<OpVal, (outs), (ins FloatXRegs:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".x $src, $addr"),
+                [(store FloatXRegs:$src, ADDRrix:$addr)],
+                0b1000,
+                itin>;
+    def y : LoadStore7<OpVal, (outs), (ins FloatYRegs:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".y $src, $addr"),
+                [(store FloatYRegs:$src, ADDRriy:$addr)], 
+                0b0100,
+                itin>;
+    def z : LoadStore7<OpVal, (outs), (ins FloatZRegs:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".z $src, $addr"),
+                [(store FloatZRegs:$src, ADDRriz:$addr)],
+                0b0010,
+                itin>;
+    def w : LoadStore7<OpVal, (outs), (ins FloatWRegs:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".w $src, $addr"),
+                [(store FloatWRegs:$src, ADDRriw:$addr)],
+                0b0001,
+                itin>;
+    def v4 : LoadStore7<OpVal, (outs), (ins VFRegs:$src, (MEMri $is, $simm13):$addr),
+                !strconcat(OpcStr, ".xyzw $src, $addr"),
+                [(store VFRegs:$src, ADDRri:$addr)],
+                0b1111,
+                itin>;
+}
 let isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in {
   def Jr : BranchInstr<0b0100100, (outs), (ins IntRegs:$r),
                     "JR $r", [(retflag i16:$r)], 0b0000, IIC_branch_instr>;
@@ -403,11 +504,9 @@ let isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
   def IBGEZ : BranchInstr<0b0101111, (outs), (ins IntRegs:$it, brtarget:$imm11),
                     "IBGEZ $it, $imm11", [(brcc SETGE, IntRegs:$it, 0, bb:$imm11)], 0b0000, IIC_branch_instr>;
 }
-def ILW : LoadStore7<0b0000100, (outs IntRegs:$dst), (ins (MEMri $is, $simm13):$addr),
-                    "ILW $dst, $addr", [(set IntRegs:$dst, (load ADDRri:$addr))], 0b0000, IIC_ldst_instr>;
 
-def ISW : LoadStore7<0b0000101, (outs), (ins IntRegs:$it, (MEMri $is, $simm13):$addr),
-                    "ISW $it, $addr", [(store IntRegs:$it, ADDRri:$addr)], 0b0000, IIC_ldst_instr>;
+defm ILW : VecLoad7<"ILW", 0b0000100, IntRegs, IIC_ldst_instr>;
+defm ISW : VecStore7<"ISW", 0b0000101, IntRegs, IIC_ldst_instr>;
 
 def IADDrr : Lower1InstPS2VPU<0b110000, (outs IntRegs:$id), (ins IntRegs:$is, IntRegs:$it),
                     "IADD $id, $is, $it", [(set IntRegs:$id, (add IntRegs:$is, IntRegs:$it))], 0b0000, IIC_ialu_instr>;
@@ -435,6 +534,20 @@ class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern, InstrItinClass
   let isCodeGenOnly = 1;
   let isPseudo = 1;
 }
+
+
+let isCodeGenOnly = 1, isPseudo = 1 in
+{
+def ILW_PSEUDO : Pseudo<(outs IntRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+        "ILW_PSEUDO $dst, $addr",
+        [(set IntRegs:$dst, (load ADDRri:$addr))],
+        IIC_ldst_instr>;
+def ISW_PSEUDO : Pseudo<(outs), (ins IntRegs:$src, (MEMri $is, $simm13):$addr),
+        "ISW_PSEUDO $src, $addr",
+        [(store IntRegs:$src, ADDRri:$addr)],
+        IIC_ldst_instr>;
+}
+
 let usesCustomInserter = 1, isCodeGenOnly = 1, isPseudo = 1, isBranch = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1 in
 {
   def BR_CC_PSEUDOrr
@@ -623,19 +736,20 @@ def SUBv4 : Upper1InstPS2VPU<0b101100, (outs VFRegs:$fd), (ins VFRegs:$fs, VFReg
 //                    "MADD $fd, $fs, $ft, $acc", [(set VFRegs:$fd, (fmad VFRegs:$fs, VFRegs:$ft, ACCRegs:$acc))], 0b0000, IIC_fmac_instr>;
 
 
-let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
-def LQx : LoadStore7<0b0000000, (outs FloatXRegs:$ft), (ins (MEMri $is, $simm11):$addr),
-                    "LQ.x $ft, $addr", [(set FloatXRegs:$ft, (load ADDRri:$addr))], 0b0000, IIC_ldst_instr>;
+let hasDelaySlot = 1, isBarrier = 1 in
+{
+defm LQ : VecLoadFloat7<"LQ", 0b0000000, IIC_ldst_instr>;
+defm SQ : VecStoreFloat7<"SQ", 0b0000001, IIC_ldst_instr>;
 
-def LQv4 : LoadStore7<0b0000000, (outs VFRegs:$ft), (ins (MEMri $is, $simm11):$addr),
-                    "LQ $ft, $addr", [(set VFRegs:$ft, (load ADDRri:$addr))], 0b0000, IIC_ldst_instr>;
-
-let hasDelaySlot = 1, isBarrier = 1, isCodeGenOnly = 1 in  
-def SQ : LoadStore7<0b0000001, (outs), (ins FloatRegs:$ft, (MEMri $is, $simm11):$addr),
-                    "SQ $ft, $addr", [(store FloatRegs:$ft, ADDRri:$addr)], 0b0000, IIC_ldst_instr>;
-                    
-def SQv4 : LoadStore7<0b0000001, (outs), (ins VFRegs:$ft, (MEMri $is, $simm11):$addr),
-                    "SQ $ft, $addr", [(store VFRegs:$ft, ADDRri:$addr)], 0b0000, IIC_ldst_instr>;
+def LQ_PSEUDO : Pseudo<(outs FloatRegs:$dst), (ins (MEMri $is, $simm13):$addr),
+        "LQ_PSEUDO $dst, $addr",
+        [(set FloatRegs:$dst, (load ADDRri:$addr))],
+        IIC_ldst_instr>;
+def SQ_PSEUDO : Pseudo<(outs), (ins FloatRegs:$src, (MEMri $is, $simm13):$addr),
+        "SQ_PSEUDO $src, $addr",
+        [(store FloatRegs:$src, ADDRri:$addr)],
+        IIC_ldst_instr>;
+}
 
 let isCodeGenOnly = 1 in
 {

@@ -50,6 +50,10 @@ public:
   // Complex Pattern Selectors.
   bool SelectADDRrr(SDValue N, SDValue &R1, SDValue &R2);
   bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRrix(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRriy(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRriz(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRriw(SDValue N, SDValue &Base, SDValue &Offset);
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
@@ -95,7 +99,7 @@ bool PS2VPUDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
 
   if (Addr.getOpcode() == ISD::ADD) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
-      if (isInt<13>(CN->getSExtValue())) {
+      if (isInt<11>(CN->getSExtValue())) {
         if (FrameIndexSDNode *FIN =
                 dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
           // Constant offset from frame ref.
@@ -109,22 +113,146 @@ bool PS2VPUDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
         return true;
       }
     }
-    /*if (Addr.getOperand(0).getOpcode() == SPISD::Lo) {
-      Base = Addr.getOperand(1);
-      Offset = Addr.getOperand(0).getOperand(0);
-      return true;
-    }
-    if (Addr.getOperand(1).getOpcode() == SPISD::Lo) {
-      Base = Addr.getOperand(0);
-      Offset = Addr.getOperand(1).getOperand(0);
-      return true;
-    }*/
   }
   Base = Addr;
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i16);
   return true;
 }
+bool PS2VPUDAGToDAGISel::SelectADDRrix(SDValue Addr, SDValue &Base,
+                                      SDValue &Offset) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
 
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)))
+      return false;
+      // do we care about 1st operand? it's gonna be an int register anyway
+    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+      if (isInt<11>(CN->getSExtValue())) {
+        int64_t ofs = CN->getSExtValue();
+        int component = std::div(ofs, 16ll).rem;
+        ofs = std::div(ofs, 16ll).quot;
+        if (component < 0) {
+          component += 16;
+          --ofs;
+        }
+        if (component == 0) {
+          Base = Addr.getOperand(0);
+          Offset = CurDAG->getTargetConstant(static_cast<uint64_t>(ofs),
+                                             SDLoc(Addr), MVT::i16);
+          return true;
+        }
+      }
+    }
+  }
+  Base = Addr;
+  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr),
+                                     MVT::i16);
+  return true;
+}
+bool PS2VPUDAGToDAGISel::SelectADDRriy(SDValue Addr, SDValue &Base,
+                                       SDValue &Offset) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
+
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)))
+      return false;
+    // do we care about 1st operand? it's gonna be an int register anyway
+    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+      if (isInt<11>(CN->getSExtValue())) {
+        int64_t ofs = CN->getSExtValue();
+        int component = std::div(ofs, 16ll).rem;
+        ofs = std::div(ofs, 16ll).quot;
+        if (component < 0) {
+          component += 16;
+          --ofs;
+        }
+        if (component == 4) {
+          Base = Addr.getOperand(0);
+          Offset = CurDAG->getTargetConstant(static_cast<uint64_t>(ofs),
+                                             SDLoc(Addr), MVT::i16);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+bool PS2VPUDAGToDAGISel::SelectADDRriz(SDValue Addr, SDValue &Base,
+                                       SDValue &Offset) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
+
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)))
+      return false;
+    // do we care about 1st operand? it's gonna be an int register anyway
+    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+      if (isInt<11>(CN->getSExtValue())) {
+        int64_t ofs = CN->getSExtValue();
+        int component = std::div(ofs, 16ll).rem;
+        ofs = std::div(ofs, 16ll).quot;
+        if (component < 0) {
+          component += 16;
+          --ofs;
+        }
+        if (component == 8) {
+          Base = Addr.getOperand(0);
+          Offset = CurDAG->getTargetConstant(static_cast<uint64_t>(ofs),
+                                             SDLoc(Addr), MVT::i16);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+bool PS2VPUDAGToDAGISel::SelectADDRriw(SDValue Addr, SDValue &Base,
+                                       SDValue &Offset) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
+
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (dyn_cast<FrameIndexSDNode>(Addr.getOperand(0)))
+      return false;
+    // do we care about 1st operand? it's gonna be an int register anyway
+    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+      if (isInt<11>(CN->getSExtValue())) {
+        int64_t ofs = CN->getSExtValue();
+        int component = std::div(ofs, 16ll).rem;
+        ofs = std::div(ofs, 16ll).quot;
+        if (component < 0) {
+          component += 16;
+          --ofs;
+        }
+        if (component == 12) {
+          Base = Addr.getOperand(0);
+          Offset = CurDAG->getTargetConstant(static_cast<uint64_t>(ofs),
+                                             SDLoc(Addr), MVT::i16);
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 bool PS2VPUDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
   if (Addr.getOpcode() == ISD::FrameIndex)
     return false;

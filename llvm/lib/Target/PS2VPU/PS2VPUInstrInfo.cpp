@@ -560,8 +560,308 @@ void PS2VPUInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
 //  return GlobalBaseReg;
 //}
 //
+
+bool PS2VPUInstrInfo::expandILW(MachineInstr &MI) const {
+    MachineBasicBlock *MBB = MI.getParent();
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    DebugLoc dl = MI.getDebugLoc();
+
+    llvm::Register dst = MI.getOperand(0).getReg();
+    llvm::Register base = MI.getOperand(1).getReg();
+    int64_t offset = MI.getOperand(2).getImm();
+
+    // only support stack pointer, and assume it is aligned on 16
+    if (base != PS2VPUNS::VI6)
+        return false;
+
+    int component = std::div(offset, 16ll).rem;
+    offset = std::div(offset, 16ll).quot;
+    if (component < 0) {
+        component += 16;
+        --offset;
+    }
+
+    switch (component) {
+    case 0:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ILWx), dst)
+            .addReg(base)
+            .addImm(offset);
+    break;
+    case 4:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ILWy), dst)
+            .addReg(base)
+            .addImm(offset);
+    break;
+    case 8:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ILWz), dst)
+            .addReg(base)
+            .addImm(offset);
+    break;
+    case 12:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ILWw), dst)
+            .addReg(base)
+            .addImm(offset);
+    break;
+    default:
+        return false;
+    }
+
+    MI.eraseFromParent();
+    return true;
+}
+bool PS2VPUInstrInfo::expandISW(MachineInstr &MI) const {
+    MachineBasicBlock *MBB = MI.getParent();
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    DebugLoc dl = MI.getDebugLoc();
+
+    llvm::Register src = MI.getOperand(0).getReg();
+    llvm::Register base = MI.getOperand(1).getReg();
+    int64_t offset = MI.getOperand(2).getImm();
+
+    // only support stack pointer, and assume it is aligned on 16
+    if (base != PS2VPUNS::VI6)
+        return false;
+
+    int component = std::div(offset, 16ll).rem;
+    offset = std::div(offset, 16ll).quot;
+    if (component < 0) {
+        component += 16;
+        --offset;
+    }
+
+    switch (component) {
+    case 0:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ISWx))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 4:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ISWy))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 8:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ISWz))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 12:
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::ISWw))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    default:
+        return false;
+    }
+
+    MI.eraseFromParent();
+    return true;
+}
+static unsigned findScratchNonCalleeSaveRegister(MachineBasicBlock *MBB, const TargetRegisterClass* RC) {
+    MachineFunction *MF = MBB->getParent();
+
+    const PS2VPUSubtarget &Subtarget = MF->getSubtarget<PS2VPUSubtarget>();
+    const PS2VPURegisterInfo &TRI = *Subtarget.getRegisterInfo();
+    LivePhysRegs LiveRegs(TRI);
+    LiveRegs.addLiveIns(*MBB);
+
+    // Mark callee saved registers as used so we will not choose them.
+    const MCPhysReg *CSRegs = MF->getRegInfo().getCalleeSavedRegs();
+    for (unsigned i = 0; CSRegs[i]; ++i)
+        LiveRegs.addReg(CSRegs[i]);
+
+    // Prefer X9 since it was historically used for the prologue scratch reg.
+    const MachineRegisterInfo &MRI = MF->getRegInfo();
+
+    for (unsigned Reg : *RC) {
+        if (LiveRegs.available(MRI, Reg))
+      return Reg;
+    }
+    return PS2VPUNS::NoRegister;
+}
+bool PS2VPUInstrInfo::expandSQ(MachineInstr &MI) const {
+    MachineBasicBlock *MBB = MI.getParent();
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    DebugLoc dl = MI.getDebugLoc();
+
+    llvm::Register src = MI.getOperand(0).getReg();
+    llvm::Register base = MI.getOperand(1).getReg();
+    int64_t offset = MI.getOperand(2).getImm();
+
+    // only support stack pointer, and assume it is aligned on 16
+    if (base != PS2VPUNS::VI6)
+        return false;
+
+    int component = std::div(offset, 16ll).rem;
+    offset = std::div(offset, 16ll).quot;
+    if (component < 0)
+    {
+        component += 16;
+        --offset;
+    }
+
+    switch (component) {
+    case 0:
+        if (!PS2VPUNS::FloatXRegsRegClass.contains(src)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(MBB, &PS2VPUNS::FloatXRegsRegClass);
+            copyPhysReg(*MBB, MI.getIterator(), dl, scratch, src, MI.getOperand(0).isKill());
+            src = scratch;
+        }
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::SQx))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 4:
+        if (!PS2VPUNS::FloatYRegsRegClass.contains(src)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatYRegsRegClass);
+            copyPhysReg(*MBB, MI.getIterator(), dl, scratch, src,
+                        MI.getOperand(0).isKill());
+            src = scratch;
+        }
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::SQy))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 8:
+        if (!PS2VPUNS::FloatZRegsRegClass.contains(src)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatZRegsRegClass);
+            copyPhysReg(*MBB, MI.getIterator(), dl, scratch, src,
+                        MI.getOperand(0).isKill());
+            src = scratch;
+        }
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::SQz))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    case 12:
+        if (!PS2VPUNS::FloatWRegsRegClass.contains(src)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatWRegsRegClass);
+            copyPhysReg(*MBB, MI.getIterator(), dl, scratch, src,
+                        MI.getOperand(0).isKill());
+            src = scratch;
+        }
+        BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::SQw))
+            .addReg(src)
+            .addReg(base)
+            .addImm(offset);
+        break;
+    default:
+        return false;
+    }
+
+    MI.eraseFromParent();
+    return true;
+}
+bool PS2VPUInstrInfo::expandLQ(MachineInstr &MI) const {
+    MachineBasicBlock *MBB = MI.getParent();
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    DebugLoc dl = MI.getDebugLoc();
+
+    llvm::Register dst = MI.getOperand(0).getReg();
+    llvm::Register base = MI.getOperand(1).getReg();
+    int64_t offset = MI.getOperand(2).getImm();
+
+    // only support stack pointer, and assume it is aligned on 16
+    if (base != PS2VPUNS::VI6)
+        return false;
+
+    int component = std::div(offset, 16ll).rem;
+    offset = std::div(offset, 16ll).quot;
+    if (component < 0) {
+        component += 16;
+        --offset;
+    }
+
+    switch (component) {
+    case 0: {
+        if (!PS2VPUNS::FloatXRegsRegClass.contains(dst)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatXRegsRegClass);
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQx), scratch)
+                .addReg(base)
+                .addImm(offset);
+            copyPhysReg(*MBB, ++MI.getIterator(), dl, dst, scratch,
+                        MI.getOperand(0).isKill());
+        } else {
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQx), dst)
+                .addReg(base)
+                .addImm(offset);
+        }
+        break;
+    }
+    case 4:
+        if (!PS2VPUNS::FloatYRegsRegClass.contains(dst)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatYRegsRegClass);
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQy), scratch)
+                .addReg(base)
+                .addImm(offset);
+            copyPhysReg(*MBB, ++MI.getIterator(), dl, dst, scratch,
+                        MI.getOperand(0).isKill());
+        } else {
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQy), dst)
+                .addReg(base)
+                .addImm(offset);
+        }
+        break;
+    case 8:
+        if (!PS2VPUNS::FloatZRegsRegClass.contains(dst)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatZRegsRegClass);
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQz), scratch)
+                .addReg(base)
+                .addImm(offset);
+            copyPhysReg(*MBB, ++MI.getIterator(), dl, dst, scratch,
+                        MI.getOperand(0).isKill());
+        } else {
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQz), dst)
+                .addReg(base)
+                .addImm(offset);
+        }
+        break;
+    case 12:
+        if (!PS2VPUNS::FloatWRegsRegClass.contains(dst)) {
+            unsigned scratch = findScratchNonCalleeSaveRegister(
+                MBB, &PS2VPUNS::FloatWRegsRegClass);
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQw), scratch)
+                .addReg(base)
+                .addImm(offset);
+            copyPhysReg(*MBB, ++MI.getIterator(), dl, dst, scratch,
+                        MI.getOperand(0).isKill());
+        } else {
+            BuildMI(*MBB, MI.getIterator(), dl, TII.get(PS2VPUNS::LQw), dst)
+                .addReg(base)
+                .addImm(offset);
+        }
+        break;
+    default:
+        return false;
+    }
+
+    MI.eraseFromParent();
+    return true;
+}
+
 bool PS2VPUInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
-  //switch (MI.getOpcode()) {
+    switch (MI.getOpcode()) {
+    case PS2VPUNS::ILW_PSEUDO:
+        return expandILW(MI);
+    case PS2VPUNS::ISW_PSEUDO:
+        return expandISW(MI);
+    case PS2VPUNS::LQ_PSEUDO:
+        return expandLQ(MI);
+    case PS2VPUNS::SQ_PSEUDO:
+        return expandSQ(MI);
   //case TargetOpcode::LOAD_STACK_GUARD: {
   //  assert(Subtarget.isTargetLinux() &&
   //         "Only Linux target is expected to contain LOAD_STACK_GUARD");
@@ -573,7 +873,7 @@ bool PS2VPUInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   //      .addImm(Offset);
   //  return true;
   //}
-  //}
+  }
   return false;
 }
 DFAPacketizer *PS2VPUInstrInfo::CreateTargetScheduleState(

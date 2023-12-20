@@ -92,6 +92,11 @@ public:
   //// Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
+  bool expandILW(MachineInstr &MI) const;
+  bool expandISW(MachineInstr &MI) const;
+  bool expandLQ(MachineInstr &MI) const;
+  bool expandSQ(MachineInstr &MI) const;
+
   DFAPacketizer *
   CreateTargetScheduleState(const TargetSubtargetInfo &STI) const override;
 };

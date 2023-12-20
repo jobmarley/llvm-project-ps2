@@ -453,7 +453,8 @@ void PS2VPUPacketizerList::endPacket(MachineBasicBlock *MBB,
 }
 
 bool PS2VPUPacketizerList::shouldAddToPacket(const MachineInstr &MI) {
-
+  if (Minimal)
+    return false;
   return true;
 }
 
