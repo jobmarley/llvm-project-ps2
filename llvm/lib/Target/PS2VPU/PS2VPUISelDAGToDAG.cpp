@@ -145,8 +145,10 @@ bool PS2VPUDAGToDAGISel::SelectADDRrix(SDValue Addr, SDValue &Base,
           Offset = CurDAG->getTargetConstant(static_cast<uint64_t>(ofs),
                                              SDLoc(Addr), MVT::i16);
           return true;
-        }
-      }
+        } else
+          return false;
+      } else
+        return false;
     }
   }
   Base = Addr;
