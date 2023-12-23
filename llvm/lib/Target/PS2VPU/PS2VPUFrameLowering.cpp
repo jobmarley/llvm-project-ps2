@@ -47,7 +47,7 @@ void PS2VPUFrameLowering::emitSPAdjustment(MachineFunction &MF,
 
   assert((NumBytes % 16 == 0) && "Stack pointer must be 16 bytes aligned");
   
-  if (NumBytes >= 0 && NumBytes < 0x10000) {
+  if (NumBytes > 0 && NumBytes < 0x10000) {
     BuildMI(MBB, MBBI, dl, TII.get(PS2VPUNS::IADDUri), PS2VPUNS::VI6)
         .addReg(PS2VPUNS::VI6)
         .addImm(NumBytes / 16);
@@ -59,33 +59,6 @@ void PS2VPUFrameLowering::emitSPAdjustment(MachineFunction &MF,
         .addImm(-(NumBytes / 16));
     return;
   }
-  llvm_unreachable("PS2VPUFrameLowering::emitSPAdjustment non immediate not supported");
-  // Emit this the hard way.  This clobbers G1 which we always know is
-  // available here.
-  //if (NumBytes >= 0) {
-  //  // Emit nonnegative numbers with sethi + or.
-  //  // sethi %hi(NumBytes), %g1
-  //  // or %g1, %lo(NumBytes), %g1
-  //  // add %sp, %g1, %sp
-  //  BuildMI(MBB, MBBI, dl, TII.get(SP::SETHIi), SP::G1).addImm(HI22(NumBytes));
-  //  BuildMI(MBB, MBBI, dl, TII.get(SP::ORri), SP::G1)
-  //      .addReg(SP::G1)
-  //      .addImm(LO10(NumBytes));
-  //  BuildMI(MBB, MBBI, dl, TII.get(ADDrr), SP::O6)
-  //      .addReg(SP::O6)
-  //      .addReg(SP::G1);
-  //  return;
-  //}
-
-  // Emit negative numbers with sethi + xor.
-  // sethi %hix(NumBytes), %g1
-  // xor %g1, %lox(NumBytes), %g1
-  // add %sp, %g1, %sp
-  /*BuildMI(MBB, MBBI, dl, TII.get(SP::SETHIi), SP::G1).addImm(HIX22(NumBytes));
-  BuildMI(MBB, MBBI, dl, TII.get(SP::XORri), SP::G1)
-      .addReg(SP::G1)
-      .addImm(LOX10(NumBytes));
-  BuildMI(MBB, MBBI, dl, TII.get(ADDrr), SP::O6).addReg(SP::O6).addReg(SP::G1);*/
 }
 
 void PS2VPUFrameLowering::emitPrologue(MachineFunction &MF,

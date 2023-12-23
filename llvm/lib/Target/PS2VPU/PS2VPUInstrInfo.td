@@ -780,6 +780,23 @@ def NOP  : Upper3InstPS2VPU<0b01011111111, (outs), (ins),
 
 
 
+//def VSLDOI_get_imm : SDNodeXForm<vector_shuffle, [{
+//  return getI32Imm(PPC::isVSLDOIShuffleMask(N, 0, *CurDAG), SDLoc(N));
+//}]>;
+//def vsldoi_shuffle : PatFrag<(ops node:$lhs, node:$rhs),
+//                             (vector_shuffle node:$lhs, node:$rhs), [{
+//  return PPC::isVSLDOIShuffleMask(N, 0, *CurDAG) != -1;
+//}], VSLDOI_get_imm>;
+
+//def get_floatX :
+//  PatFrag<(ops node:$src),
+//          (VFRegs:$src), [{}], [{ return  }]>;
+
+def : Pat<(vector_extract (v4f32 VFRegs:$fs), 0), (f32 (EXTRACT_SUBREG VFRegs:$fs, sub_x))>;
+def : Pat<(vector_extract (v4f32 VFRegs:$fs), 1), (f32 (EXTRACT_SUBREG VFRegs:$fs, sub_y))>;
+def : Pat<(vector_extract (v4f32 VFRegs:$fs), 2), (f32 (EXTRACT_SUBREG VFRegs:$fs, sub_z))>;
+def : Pat<(vector_extract (v4f32 VFRegs:$fs), 3), (f32 (EXTRACT_SUBREG VFRegs:$fs, sub_w))>;
+
 def : Pat<(f32 fpimm:$val), (LOIv1 fpimm:$val)>;
 def : Pat<(v4f32 immAllZerosV), // FIXME: that's wrong, VF0 is (0, 0, 0, 1)
           (v4f32 VF0)>;

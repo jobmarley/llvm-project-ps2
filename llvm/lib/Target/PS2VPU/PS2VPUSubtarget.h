@@ -22,13 +22,25 @@
 namespace llvm {
 class StringRef;
 
+class PS2VPUSelectionDAGTargetInfo 
+    : public SelectionDAGTargetInfo
+{
+public:
+  PS2VPUSelectionDAGTargetInfo() {}
+
+  bool disableGenericCombines(CodeGenOptLevel OptLevel) const override {
+    return OptLevel == CodeGenOptLevel::None;
+  }
+};
+
+
 class PS2VPUSubtarget : public PS2VPUGenSubtargetInfo {
   Triple TargetTriple;
   virtual void anchor();
 
   PS2VPUInstrInfo InstrInfo;
   PS2VPUTargetLowering TLInfo;
-  SelectionDAGTargetInfo TSInfo;
+  PS2VPUSelectionDAGTargetInfo TSInfo;
   PS2VPUFrameLowering FrameLowering;
   InstrItineraryData InstrItins;
 
