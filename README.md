@@ -14,10 +14,12 @@ Here are the basic caracteristics of the VU:
 - Not fully IEEE 754 compatible but close enough
 
 The VU can work in micro mode, completely asynchronously from the main CPU, or as a MIPS coprocessor (macro mode), where the instructions are issued by the main CPU.
-The PS2 has 2 VU.
+The PS2 has 2 VU.  
+
 VU0:
 - micro or macro mode
 - 4KB data & 4KB instruction ram
+
 VU1:
 - micro only
 - 16KB data & 16KB instruction ram
