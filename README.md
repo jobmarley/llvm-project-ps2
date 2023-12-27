@@ -26,7 +26,7 @@ VU1:
 
 ## Features
 - Integer computation : **supported** (int and shorts are defined as 16 bits with 32 bits alignment)
-- Stack handling : **partially supported**
+- Stack handling : **supported**
 - Pointers : **not supported** (need a custom pass to handle GetElementPtr lowering)
 - If/else/loops/branches/return : **supported**
 - Floating point calculation : **partially supported** (not all operations)
