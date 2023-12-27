@@ -12,6 +12,7 @@ Here are the basic caracteristics of the VU:
 - Int16 registers VI0 to VI15
 - Additionnal registers ACC(v4f32), I(f32), P(f32), Q(f32), R(i23)
 - Not fully IEEE 754 compatible but close enough
+
 The VU can work in micro mode, completely asynchronously from the main CPU, or as a MIPS coprocessor (macro mode), where the instructions are issued by the main CPU.
 The PS2 has 2 VU.
 VU0:
