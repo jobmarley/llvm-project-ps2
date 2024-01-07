@@ -1,11 +1,14 @@
 # PS2 Vector Unit LLVM Target 
+_This is not a full description of the PS2 Vector Unit. For more detailed informations you can refer to the official PS2 SDK_  
+
 I thought it'd be fun to make an FPGA implementation of the PS2 VU, but then realized I needed compiler support, so here we go.
 As far as I know there was no compiler support for it, neither in the official SDK nor in the homebrew one. 
-So the goal was to make a llvm target to have modern c++ support and use it use it to do some 2d/3d calculation.  
+So the goal was to make a llvm target to have modern c++ support and use it to do some 2d/3d calculation.  
+The VU has two modes of operation, **micro mode** (fully asynchronous, with VLIW instructions) and **macro mode** (as a MIPS coprocessor 2, with 32bits MIPS compatible instructions).  
 I focused on micro mode, so macro is just not supported.
 
 ## VU Architecture
-The VU uses a 64bits VLIW architecture with 1 upper and 1 lower instruction.
+The VU in micro mode uses a VLIW architecture with 1 upper and 1 lower instruction (32bits each).
 The upper instruction is used for SIMD floating point vector operations. The lower for int16, branches, memory operations, random numbers and math functions like exponential, arctan, etc...
 Here are the basic caracteristics of the VU:
 - Vector floating point registers VF0 to VF31
@@ -39,16 +42,17 @@ As of now it's still too early, and there is a ton of bugs everywhere. Simple fu
 ## Issues & difficulties
 ### Pointers & memory operations
 Sony decided to make the pointers 16 bytes aligned (discarding the lower bits), and all memory operations aligned on 16bytes as well.
-The result is all memory instructions are vectorized. There is a component field in the instructions to select the component in memory.
+The result is all memory instructions are vectorized. That is, there is a component field in the instructions to select the component in memory.
 ```
 LQ.xz VF1xz, 4(VI1)  ; loads MEM[(VI1+4)*16] into VF1x, and MEM[(VI1+4)*16 + 8] into VF1z
 ILW.w VI2, 4(VI1)  ; loads MEM[(VI1+4)*16 + 12] into VI1
 ```
-For integer load/store the operation is undefined is more than 1 component is selected.
-As a consequence, in c++, most pointer are not representable (any type not aligned on 16 bytes, char* or wchar_t* for example).
+For integer load/store the operation is undefined if more than 1 component is selected.
+As a consequence, in c++, pointers to non 16-bytes aligned types cannot be represented, because the lower bits are just not there (char* or wchar_t* for example).
 Even if it was, loop vectorization would be mandatory (imagine you iterate over a int16 array).
   
-For stack operations, instructions are selected postRA, after stack lowering, which means it might no be the most optimized, and cannot be used to guide the selection of other instructions.
+For stack operations, instructions are selected postRA, after stack lowering, because we need the exact address (modulo 16) to select the right instruction.
+Since this happens pretty late in the compilation, it means it might no be the most optimized, and cannot be used to guide the selection of other instructions.
 
 ### Integers
 The VU only has int16 support, with very limited instructions (add/sub/and/or).  
@@ -57,8 +61,8 @@ That means the upper 16 bits cannot be accessed and are effectively wasted.
 Since there is no support for shift or mul, this cause an issue for memory operations as well.
 
 Let's take the simple example of a vertex/index buffer. You have an array of vertex (v4f32 position + v4f32 color), and an array of integers (lets ignore the vectorization issue).  
-When indexing into the vertex array, you need to compute `Index*64/16`, which is not possible because we have neither shift or multiplications.  
-There is floating point to fixed point convertion available though, so such a computation could look like this.
+When indexing into the vertex array, you need to compute `Index*32/16`, which is not possible because we have neither shift or multiplications.  
+There is floating point to fixed point convertion available though, but such computation would be pretty expensive.
 ```
 MFIR.x VF1x, VI1          ; move index to fp reg
 MFIR.y VF1y, VI2          ; move structure size to fp reg
@@ -71,7 +75,7 @@ With a latency of 18.
 
 ### Immediate constants
 There are several ways to load immediates.
-- VF0 is a constant register (0, 0, 0, 1) with broadcast instructions (0 latency)
+- VF0 is a constant register (0, 0, 0, 1), can be used with broadcast instructions (0 latency)
 - I register + I instructions, takes 1 lower instruction in a previous slot (1 cycle)
 - Save constant vector in data memory, and load it with LQ (4 cycles latency)
 But the situation becomes a bit complicated when you try to optimize it, as 1 variation might be better than an other one depending on register pressure or scheduling.
