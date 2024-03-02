@@ -75,6 +75,14 @@ iterator_range<MCInst::const_iterator> bundleInstructions(MCInst const &MCI);
 // Returns the number of instructions in the bundle
 size_t bundleSize(MCInst const &MCI);
 
+// Return instruction name
+StringRef getName(MCInstrInfo const &MCII, MCInst const &MCI);
+
+MCInstrDesc const &getDesc(MCInstrInfo const &MCII, MCInst const &MCI);
+
+bool isUpperInstruction(MCInstrInfo const &MCII, const MCInst &MCI);
+bool isLowerInstruction(MCInstrInfo const &MCII, const MCInst &MCI);
+
 } // end namespace PS2VPUMCInstrInfo
 
 } // end namespace llvm

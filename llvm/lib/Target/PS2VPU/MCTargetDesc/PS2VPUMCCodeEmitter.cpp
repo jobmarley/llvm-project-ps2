@@ -13,6 +13,7 @@
 #include "MCTargetDesc/PS2VPUFixupKinds.h"
 #include "PS2VPUMCExpr.h"
 #include "PS2VPUMCTargetDesc.h"
+#include "PS2VPUMCInstrInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/MC/MCAsmInfo.h"
@@ -45,9 +46,11 @@ namespace {
 
 class PS2VPUMCCodeEmitter : public MCCodeEmitter {
   MCContext &Ctx;
+  MCInstrInfo const &MCII;
 
 public:
-  PS2VPUMCCodeEmitter(const MCInstrInfo &, MCContext &ctx) : Ctx(ctx) {}
+  PS2VPUMCCodeEmitter(const MCInstrInfo &MII, MCContext &ctx)
+      : Ctx(ctx), MCII(MII) {}
   PS2VPUMCCodeEmitter(const PS2VPUMCCodeEmitter &) = delete;
   PS2VPUMCCodeEmitter &operator=(const PS2VPUMCCodeEmitter &) = delete;
   ~PS2VPUMCCodeEmitter() override = default;
@@ -55,6 +58,9 @@ public:
   void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
+  void encodeSingleInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
+                               SmallVectorImpl<MCFixup> &Fixups,
+                               const MCSubtargetInfo &STI) const;
 
   // getBinaryCodeForInstr - TableGen'erated function for getting the
   // binary encoding for an instruction.
@@ -90,36 +96,45 @@ void PS2VPUMCCodeEmitter::encodeInstruction(const MCInst &MI,
                                             SmallVectorImpl<char> &CB,
                                             SmallVectorImpl<MCFixup> &Fixups,
                                             const MCSubtargetInfo &STI) const {
-  unsigned Bits = getBinaryCodeForInstr(MI, Fixups, STI);
-  support::endian::write(CB, Bits,
-                         Ctx.getAsmInfo()->isLittleEndian() ? llvm::endianness::little
-                             : llvm::endianness::big);
+  MCInst &HMB = const_cast<MCInst &>(MI);
+  assert(PS2VPUMCInstrInfo::isBundle(HMB));
+  assert(PS2VPUMCInstrInfo::bundleSize(HMB) == 2);
+  LLVM_DEBUG(dbgs() << "Encoding bundle\n";);
 
-  // Some instructions have phantom operands that only contribute a fixup entry.
-  unsigned SymOpNo = 0;
-  /*switch (MI.getOpcode()) {
-  default:
-    break;
-  case SP::TLS_CALL:
-    SymOpNo = 1;
-    break;
-  case SP::GDOP_LDrr:
-  case SP::GDOP_LDXrr:
-  case SP::TLS_ADDrr:
-  case SP::TLS_ADDXrr:
-  case SP::TLS_LDrr:
-  case SP::TLS_LDXrr:
-    SymOpNo = 3;
-    break;
-  }*/
-  if (SymOpNo != 0) {
-    const MCOperand &MO = MI.getOperand(SymOpNo);
-    uint64_t op = getMachineOpValue(MI, MO, Fixups, STI);
-    assert(op == 0 && "Unexpected operand value!");
-    (void)op; // suppress warning.
+  // We need special handling here because some lower instructions (eg. LOI)
+  // affect upper instruction encoding
+  auto LowerInstr = PS2VPUMCInstrInfo::instruction(HMB, 0);
+  auto UpperInstr = PS2VPUMCInstrInfo::instruction(HMB, 1);
+
+  assert(PS2VPUMCInstrInfo::isLowerInstruction(MCII, LowerInstr));
+  assert(PS2VPUMCInstrInfo::isUpperInstruction(MCII, UpperInstr));
+
+  LLVM_DEBUG(dbgs() << "Encoding insn `"
+                    << PS2VPUMCInstrInfo::getName(MCII, UpperInstr) << "'\n");
+  LLVM_DEBUG(dbgs() << "Encoding insn `"
+                    << PS2VPUMCInstrInfo::getName(MCII, LowerInstr) << "'\n");
+
+  unsigned UpperBits = getBinaryCodeForInstr(UpperInstr, Fixups, STI);
+  unsigned LowerBits = 0;
+  if (LowerInstr.getOpcode() == PS2VPUNS::LOIv1)
+  {
+    UpperBits |= 0x80000000;
+    LowerBits = LowerInstr.getOperand(1).getSFPImm();
+  }
+  else {
+    LowerBits = getBinaryCodeForInstr(LowerInstr, Fixups, STI);
   }
 
-  ++MCNumEmitted; // Keep track of the # of mi's emitted.
+  support::endian::write(CB, LowerBits,
+                         Ctx.getAsmInfo()->isLittleEndian()
+                             ? llvm::endianness::little
+                             : llvm::endianness::big);
+  support::endian::write(CB, UpperBits,
+                         Ctx.getAsmInfo()->isLittleEndian()
+                             ? llvm::endianness::little
+                             : llvm::endianness::big);
+
+  MCNumEmitted += 2; // Keep track of the # of mi's emitted.
 }
 
 unsigned

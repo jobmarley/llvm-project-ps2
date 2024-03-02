@@ -72,6 +72,14 @@ size_t PS2VPUMCInstrInfo::bundleSize(MCInst const &MCI) {
   else
     return (1);
 }
+StringRef PS2VPUMCInstrInfo::getName(MCInstrInfo const &MCII,
+                                      MCInst const &MCI) {
+  return MCII.getName(MCI.getOpcode());
+}
+MCInstrDesc const &PS2VPUMCInstrInfo::getDesc(MCInstrInfo const &MCII,
+                                               MCInst const &MCI) {
+  return MCII.get(MCI.getOpcode());
+}
 //
 //namespace {
 //bool canonicalizePacketImpl(MCInstrInfo const &MCII, MCSubtargetInfo const &STI,
@@ -151,4 +159,13 @@ bool PS2VPUMCInstrInfo::isBundle(MCInst const &MCI) {
   auto Result = PS2VPUNS::BUNDLE == MCI.getOpcode();
   assert(!Result || (MCI.size() > 0 && MCI.getOperand(0).isImm()));
   return Result;
+}
+
+bool PS2VPUMCInstrInfo::isUpperInstruction(MCInstrInfo const &MCII,
+                                           const MCInst &MCI) {
+  return MCII.get(MCI.getOpcode()).TSFlags & (((uint64_t)1) << 63);
+}
+bool PS2VPUMCInstrInfo::isLowerInstruction(MCInstrInfo const &MCII,
+                                           const MCInst &MCI) {
+  return !isUpperInstruction(MCII, MCI);
 }

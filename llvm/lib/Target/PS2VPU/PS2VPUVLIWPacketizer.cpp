@@ -434,7 +434,7 @@ void PS2VPUPacketizerList::endPacket(MachineBasicBlock *MBB,
 
   // Reorder if in wrong order
   if (CurrentPacketMIs.size() == 2) {
-    if (isLowerInstruction(*CurrentPacketMIs[0])) {
+    if (isUpperInstruction(*CurrentPacketMIs[0])) {
       MBB->splice(CurrentPacketMIs[0]->getIterator(), MBB,
                   CurrentPacketMIs[1]->getIterator());
       std::swap(CurrentPacketMIs[0], CurrentPacketMIs[1]);
